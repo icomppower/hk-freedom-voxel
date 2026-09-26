@@ -148,7 +148,7 @@ let acc = 0, last = performance.now();
 const frame = (now) => {
   requestAnimationFrame(frame);
   // clamp at 0 too: the first rAF timestamp can precede the performance.now() taken at module init
-  acc += Math.min(0.1, Math.max(0, (now - last) / 1000));
+  acc += Math.min(0.1, Math.max(0, (now - last) / 1000)) * (game.timeScale ?? 1);   // story: victory slow-mo
   last = now;
   if (paused) { acc = 0; input.sample(); return; }
   if (state !== 'battle') { acc = 0; input.sample(); render(); return; }      // screens: the field idles behind them
