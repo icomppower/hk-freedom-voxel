@@ -1,9 +1,13 @@
 // Boot, flow and the fixed 60 Hz loop. Sim modules (hero, combat, crowd, musou, story, camera control yaw) advance only
 // in step(); render-side modules read sim state in render() and never write it.
-// Flow: title → select → (story: prologue →) battle → result → title. Each non-battle state is a DOM screen (index.html
-// #title #select #prologue #result, modules below: createX(el, flow) → { enter(ctx), exit(), view? }; view(scene, camera,
+// Flow: title → select → loading → (story: prologue →) battle → result → title. Each non-battle state is a DOM screen (index.html
+// #title #select #loading #prologue #result, modules below: createX(el, flow) → { enter(ctx), exit(), view? }; view(scene, camera,
 // focus, dt) = optional render-only camera/stage hook run after the gameplay rig while that screen is up); the sim only steps in
 // 'battle' and not paused (Esc: pause menu #menu). startBattle() resets the sim for a character / mode / chapter.
+// flow.go() returns a promise that settles once the new state's materials are compiled and two frames have presented
+// (menu.js inkWipe holds the ink until then). 'loading' (after 出陣) runs deploy(): startBattle for the chosen officer
+// under the card, compile, warm frames, then ink on into the prologue / battle — the officer on the field is the chosen
+// one before anything of the field is seen again, and his kit's first draws never stall on screen.
 // Dev shortcut: ?go=free|story[&char=id] skips the screens straight into a battle.
 import * as THREE from 'three';
 import { vrng, rng } from './core/rng.js';
@@ -24,6 +28,8 @@ import { spawnPoint } from './world/map.js';
 import { createStory } from './story/index.js';
 import { createTitle, CONTROLS } from './ui/title.js';
 import { createSelect } from './ui/select.js';
+import { createLoading } from './ui/loading.js';
+import { inkWipe, wiping } from './ui/menu.js';
 import { createPrologue } from './story/prologue.js';
 import { createResult } from './story/result.js';
 
@@ -80,6 +86,7 @@ let lastRenderFrame = 0;
 function render(real) {
   const dt = real ?? Math.min(10, Math.max(0, (game.frame - lastRenderFrame) / 60));
   lastRenderFrame = game.frame;
+  heroView.root.visible = state !== 'title' && state !== 'select';   // no officer chosen yet: the field stands empty
   heroView.update(Math.min(dt, 0.1));
   crowdView.update(dt);
   vfx.update(dt);
@@ -121,7 +128,7 @@ const $ = (id) => document.getElementById(id);
 const menu = $('menu'), hudEl = $('hud');
 // the bindings mid-battle too (critic: checking aim meant quitting the chapter)
 menu.querySelector('.hint').insertAdjacentHTML('beforebegin', `<table>${CONTROLS.map(([zh, en, kb]) => `<tr><td>${zh}<small>${en}</small></td><td>${kb}</td></tr>`).join('')}</table>`);
-let paused = false, state = null, ctx = {};
+let paused = false, state = null, ctx = {}, hold = false;   // hold: loading, no renders until the new kit is compiled
 const setPaused = (v) => { paused = v; menu.hidden = !v; hudEl.hidden = v; input.sample(); };   // sample(): drop keys pressed on the menu
 const flow = {
   get state() { return state; },
@@ -132,10 +139,36 @@ const flow = {
     if (s === 'battle') { startBattle(c); setPaused(false); }
     else { setPaused(false); hudEl.hidden = true; $(s).hidden = false; screens[s].enter(c); }
     emit('flow', { state: s, ctx: c });
+    if (s === 'loading') { deploy(c); return nextFrame(); }
+    return warm();
   },
 };
+const nextFrame = () => new Promise((r) => requestAnimationFrame(r));
+/** Compile every material in the scene (hidden pools included) for this camera, in parallel where the GPU has
+ *  KHR_parallel_shader_compile, then let two frames present: the screen's first draws don't stall. */
+async function warm() {
+  screens[state]?.view?.(scene, camRig.camera, camRig.focus, 0);   // a screen's stage (select: every officer's model) exists now
+  await post.renderer.compileAsync(scene, camRig.camera);
+  await nextFrame(); await nextFrame();
+}
+/** Under the loading card: the chosen officer's battle, compiled and rendered a few frames, then ink on into it. */
+async function deploy(c) {
+  const L = screens.loading, t0 = performance.now();
+  hold = true;
+  await nextFrame();                               // the card is on screen before the synchronous kit build
+  startBattle(c); L.progress(0.45);
+  await post.renderer.compileAsync(scene, camRig.camera); L.progress(0.8);
+  hold = false;                                    // the loop renders the field behind the card: shadow / first-draw variants
+  for (let i = 0; i < 4; i++) await nextFrame();
+  L.progress(1);
+  await new Promise((r) => setTimeout(r, Math.max(0, 1400 - (performance.now() - t0))));   // long enough to read the card
+  while (wiping()) await nextFrame();             // the wipe that brought the card up is still uncovering (slow machine)
+  if (state !== 'loading') return;
+  L.ready();
+  inkWipe(() => flow.go(c.mode === 'story' ? 'prologue' : 'battle', c));
+}
 const screens = {
-  title: createTitle($('title'), flow), select: createSelect($('select'), flow),
+  title: createTitle($('title'), flow), select: createSelect($('select'), flow), loading: createLoading($('loading')),
   prologue: createPrologue($('prologue'), flow), result: createResult($('result'), flow),
 };
 on('story:end', (e) => flow.go('result', { ...ctx, win: e.win, stats: e.stats }));
@@ -156,7 +189,7 @@ const frame = (now) => {
   const d = Math.min(0.1, Math.max(0, (now - last) / 1000));
   acc += d * (game.timeScale ?? 1); last = now;                                  // story: victory slow-mo
   if (paused) { acc = 0; input.sample(); return; }
-  if (state !== 'battle') { acc = 0; input.sample(); render(d); return; }     // screens: the field idles behind them
+  if (state !== 'battle') { acc = 0; input.sample(); if (!hold) render(d); return; }     // screens: the field idles behind them
   let n = 0;
   while (acc >= 1 / 60 && n < 4 && state === 'battle') { step(); acc -= 1 / 60; n++; }
   if (n === 4) acc = 0;

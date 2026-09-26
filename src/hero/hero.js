@@ -148,6 +148,7 @@ export function createHeroView(scene, hero) {
       ghosts.update(hero, rig, dt);
       secondary.update(dt);
     },
+    root,                                        // main.js hides it while no officer is chosen (title / select)
     reset() { secondary.reset(); },
     dispose() {
       scene.remove(root);

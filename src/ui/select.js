@@ -4,7 +4,9 @@
 // every focus change and warm dust motes drifting through the light. Left: 蜀 banner + officer cards (pixel portraits),
 // the info panel (brush name, courtesy name, epithet, weapon, bio, 攻/防/速/射程 bars, Musou name) and the intro line as
 // vertical calligraphy beside the model. All data comes from CHARS / CHAR_ORDER (src/chars/index.js), nothing per-hero.
-// ctx in: { mode }. Pick → flow.go(mode === 'story' ? 'prologue' : 'battle', { mode, char, chapter: 'ch1' }); back → title.
+// Input: hover only highlights a card; a click (tap) on a card focuses that officer (spin-in, info panel swaps), ↑/↓ /
+// d-pad too. Deploy = 出陣 button, Enter / A, or a double-click on the card that was already focused.
+// ctx in: { mode }. Deploy → ink wipe → flow.go('loading', { mode, char, chapter: 'ch1' }) (loading.js); back → title.
 // 3D is render-only: view(scene, camera, focus, dt) runs after the gameplay camera rig while this screen is up.
 import * as THREE from 'three';
 import { CHARS, CHAR_ORDER, paintPortrait } from '../chars/index.js';
@@ -12,9 +14,9 @@ import { createRig, sampleClip, POSE_SIZE, HERO_SCALE } from '../hero/rig.js';
 import { ground, zone } from '../world/map.js';
 import { createNav, sfx, inkWipe, wiping, stamp, clearStamp, replay } from './menu.js';
 import { SWASH } from './title.js';
+import { MODE } from './loading.js';
 
 const STATS = [['atk', '攻', 'Attack'], ['def', '防', 'Defence'], ['speed', '速', 'Speed'], ['range', '射程', 'Reach']];
-const MODE = { story: ['第一章「定軍山」', 'Story · Chapter I'], free: ['自由演武', 'Free battle'] };
 // stage framing: officer ≈ 6.3 m from the lens, 30° vFOV (full body + headroom), aim shifted so he stands at x ≈ 72 %
 const STAGE = { dist: 6.3, eye: 1.2, aim: 1.05, fov: 30, screenX: 0.44, face: Math.PI - 0.38, sway: 0.28, spin: 1.35, motes: 110 };
 
@@ -23,8 +25,8 @@ export function createSelect(el, flow) {
     <div class="s-veil"></div>
     <header class="s-head"><h2>選擇武將</h2><small>Choose your officer</small><span class="s-mode"><b></b><small></small></span></header>
     <aside class="s-roster"><div class="s-fac"><i>蜀</i><small>Shu Han</small></div>
-      ${CHAR_ORDER.map((id, i) => { const c = CHARS[id]; return `<button class="s-card" data-i="${i}" style="--acc:${c.accent}">
-        <canvas width="20" height="20"></canvas><b>${c.name.zh}</b><small>${c.name.en}</small>${c.ready ? '' : '<em>試作</em>'}</button>`; }).join('')}
+      ${CHAR_ORDER.map((id, i) => { const c = CHARS[id]; return `<button class="s-card" data-i="${i}" style="--acc:${c.accent}" title="${c.name.en} — double-click to deploy">
+        <canvas width="20" height="20"></canvas><b>${c.name.zh}</b><small>${c.name.en}</small><i>${c.seal}</i>${c.ready ? '' : '<em>試作</em>'}</button>`; }).join('')}
     </aside>
     <article class="s-info">
       <div class="s-name"><h1></h1><div><i class="s-seal"></i><p class="s-court"></p></div></div>
@@ -37,7 +39,7 @@ export function createSelect(el, flow) {
     </article>
     <div class="s-line"><p></p><small></small></div>
     <div class="s-act"><button class="s-back"><b>返回</b><small>Back</small></button><button class="s-go"><b>出陣</b><small>To battle</small></button></div>
-    <footer class="ui-foot"><span><kbd>↑</kbd><kbd>↓</kbd>選擇武將<small>Officer</small></span>
+    <footer class="ui-foot"><span><kbd>↑</kbd><kbd>↓</kbd>切換武將<small>Officer</small></span><span><kbd>Click</kbd>選擇<small>Select</small></span>
       <span><kbd>Enter</kbd><kbd class="pad">A</kbd>出陣<small>Deploy</small></span><span><kbd>Esc</kbd><kbd class="pad">B</kbd>返回<small>Back</small></span>
       <span><kbd>Drag</kbd>旋轉<small>Turn</small></span></footer>`;
   const $ = (s) => el.querySelector(s), cards = [...el.querySelectorAll('.s-card')];
@@ -49,6 +51,7 @@ export function createSelect(el, flow) {
     i = (i + cards.length) % cards.length;
     if (i === cur && !quiet) return;
     cards[cur].classList.remove('on'); cur = i; cards[cur].classList.add('on');
+    replay(cards[cur], 'pick');                           // the chosen card flashes in
     const c = CHARS[CHAR_ORDER[i]];
     el.style.setProperty('--acc', c.accent);
     $('.s-name h1').textContent = c.name.zh;
@@ -74,7 +77,7 @@ export function createSelect(el, flow) {
     busy = true;
     stamp($('.s-act'), '出陣');
     const id = CHAR_ORDER[cur];
-    setTimeout(() => inkWipe(() => flow.go(ctx.mode === 'story' ? 'prologue' : 'battle', { mode: ctx.mode, char: id, chapter: 'ch1' })), 520);
+    setTimeout(() => inkWipe(() => flow.go('loading', { mode: ctx.mode, char: id, chapter: 'ch1' })), 520);
   };
   const back = () => {
     if (busy || wiping()) return;
@@ -83,11 +86,17 @@ export function createSelect(el, flow) {
   };
   const nav = createNav({ move: (d) => { if (!busy) show(cur + d); }, ok: go, back });
 
-  el.addEventListener('pointerover', (e) => { const b = e.target.closest('.s-card'); if (b && !busy) show(+b.dataset.i); });
+  // click a card = focus it; a double-click deploys only if the first click landed on the already-focused card
+  let armed = false;
   el.addEventListener('click', (e) => {
     const card = e.target.closest('.s-card');
-    if (card) show(+card.dataset.i);                       // touch: no hover before the tap
-    if (card || e.target.closest('.s-go')) go();
+    if (card) {
+      if (busy) return;
+      const i = +card.dataset.i;
+      if (i !== cur) { show(i); armed = false; }
+      else if (e.detail >= 2 && armed) go();
+      else armed = true;
+    } else if (e.target.closest('.s-go')) go();
     else if (e.target.closest('.s-back')) back();
   });
   // drag anywhere off the panels turns the officer (eased back to the pose when let go)
@@ -166,7 +175,7 @@ export function createSelect(el, flow) {
   return {
     view,
     enter(c) {
-      ctx = c; busy = false; clearStamp($('.s-act'));
+      ctx = c; busy = false; armed = false; clearStamp($('.s-act'));
       const [zh, en] = MODE[c.mode] || MODE.free;
       $('.s-mode b').textContent = zh; $('.s-mode small').textContent = en;
       show(cur, true);

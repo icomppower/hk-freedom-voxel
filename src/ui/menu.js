@@ -102,7 +102,8 @@ const RAG = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 100' pres
 <rect x='60' y='22' width='80' height='5'/><rect x='80' y='61' width='60' height='3'/><rect x='860' y='38' width='90' height='4'/><rect x='870' y='79' width='50' height='6'/></g></svg>`;
 let ink = null, busy = false;
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-/** Cover the screen with ink, run mid() (screen swap), uncover. Ignored while a wipe is running. */
+/** Cover the screen with ink, run mid() (screen swap), uncover once the promise mid() returns (flow.go: the new screen
+ *  compiled and presented) settles. Ignored while a wipe is running. */
 export function inkWipe(mid) {
   if (busy) return;
   busy = true;
@@ -117,8 +118,7 @@ export function inkWipe(mid) {
   ink.hidden = false;
   sfx('swish');
   ink.animate([{ transform: 'translateX(100vw)' }, { transform: 'translateX(-60vw)' }],
-    { duration: r ? 1 : 420, easing: ease, fill: 'forwards' }).finished.then(() => {
-    mid();
+    { duration: r ? 1 : 420, easing: ease, fill: 'forwards' }).finished.then(mid).catch((e) => console.error(e)).then(() => {
     // two frames under full ink: the swapped screen lays out and the 3D view re-frames before the reveal
     requestAnimationFrame(() => requestAnimationFrame(() => {
       ink.animate([{ transform: 'translateX(-60vw)' }, { transform: 'translateX(-230vw)' }],
