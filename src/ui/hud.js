@@ -10,8 +10,8 @@
 import { Vector3 } from 'three';
 import { on } from '../core/events.js';
 import { ST } from '../crowd/crowd.js';
-import { ARENA_RADIUS, WALL_Z, GATE_X } from '../world/world.js';
-import { ground } from '../world/map.js';
+import { ground, zoneAt, GATES, MAP } from '../world/map.js';
+import { minimapLayer } from '../world/minimap.js';
 import { CHARS, paintPortrait } from '../chars/index.js';
 
 // render-only seam: crowd view skips its 3D officer ▼ where the floating tags below take over
@@ -26,7 +26,7 @@ export function createHud(root, game, camera) {
       <div class="keys"><kbd>WASD</kbd> 移動 move · <kbd>J</kbd> 攻擊 attack · <kbd>K</kbd> 蓄力 charge<br>
         <kbd>Space</kbd> 跳躍 jump · <kbd>L</kbd> 閃避 dodge · <kbd>I</kbd> 無雙 musou · <kbd>Q</kbd><kbd>E</kbd> 視角 · <kbd>H</kbd> 說明</div></div>
     <div class="h-target"><i class="seal">將</i><b></b><span></span><div class="bar"><em></em><i></i></div><strong>擊破</strong></div>
-    <div class="h-map"><div class="morale"><i></i><span>蜀</span><span>魏</span></div><canvas width="200" height="200"></canvas><i class="seal">長坂</i></div>
+    <div class="h-map"><div class="morale"><i></i><span>蜀</span><span>魏</span></div><canvas width="200" height="200"></canvas><i class="seal">${MAP.name.zh}</i></div>
     <div class="h-offs">${'<div class="off"><i class="ld"></i><div class="mk">▼▼</div><div class="bd"><b></b><span></span><div class="bar"><em></em><i></i></div></div></div>'.repeat(nOff)}</div>
     <div class="h-chain"><div class="num"><b class="dig" data-t="0"><span>0</span></b><u></u><u></u><u></u></div><small><em>連擊</em>CHAIN</small></div>
     <div class="h-mile"><b class="dig" data-t="50"><span>50</span></b><i class="seal">擊破</i></div>
@@ -346,30 +346,43 @@ export function createHud(root, game, camera) {
       for (let i = 0; i < c.N; i++) if (c.st[i] !== ST.OFF && c.st[i] !== ST.DEAD) alive++;
       set(moraleI, 'transform', `scaleX(${(0.3 + 0.65 * h.kos / (h.kos + alive + 1)).toFixed(4)})`);
 
-      // minimap: 30 m around the hero, wall/gate up (camera yaw 0 looks at the wall, so map right = -X), 10 m grid,
+      // minimap: 30 m around the hero, north = up the valley (camera yaw 0; map right = -X), the whole 定軍山 field
+      // (world/minimap.js layer: walkable ground, cliffs, river, castle wall, road), 10 m grid, closed gates in red, the
+      // enemy HQ on the summit pinned to the rim while it is off the map, the current zone's name along the bottom;
       // units, view cone, reinforcement pings; officers off the map are pinned to its edge
       const R = 30, s = 100 / R, X = (x) => 100 - (x - h.x) * s, Y = (z) => 100 - (z - h.z) * s;
       map.clearRect(0, 0, 200, 200);
       map.fillStyle = 'rgba(18,12,9,0.66)'; map.fillRect(0, 0, 200, 200);
-      map.fillStyle = 'rgba(214,184,130,0.08)';
-      map.beginPath(); map.arc(X(0), Y(0), ARENA_RADIUS * s, 0, 7); map.fill();
+      const L = minimapLayer();
+      map.drawImage(L.canvas, (L.x1 - h.x - R) * L.ppm, (L.z1 - h.z - R) * L.ppm, 2 * R * L.ppm, 2 * R * L.ppm, 0, 0, 200, 200);
       map.strokeStyle = 'rgba(214,184,130,0.12)'; map.lineWidth = 1; map.beginPath();
       for (let g = Math.ceil((h.x - R) / 10) * 10; g <= h.x + R; g += 10) { map.moveTo(X(g) + 0.5, 0); map.lineTo(X(g) + 0.5, 200); }
       for (let g = Math.ceil((h.z - R) / 10) * 10; g <= h.z + R; g += 10) { map.moveTo(0, Y(g) + 0.5); map.lineTo(200, Y(g) + 0.5); }
       map.stroke();
-      map.strokeStyle = 'rgba(214,184,130,0.45)'; map.lineWidth = 1.5;
-      map.beginPath(); map.arc(X(0), Y(0), ARENA_RADIUS * s, 0, 7); map.stroke();
-      const wy = Y(WALL_Z);
-      if (wy > 0) {
-        map.fillStyle = 'rgba(236,214,172,0.8)'; map.fillRect(0, wy - 7 * s, 200, 7 * s);          // castle wall (7 m deep)
-        map.fillStyle = 'rgba(18,12,9,0.8)'; map.fillRect(X(GATE_X + 4.5), wy - 7 * s, 9 * s, 7 * s);      // gate passage
-        map.fillStyle = '#d0a040'; map.fillRect(X(GATE_X + 4.5), wy - 2, 9 * s, 2);
-      } else {                                                        // castle gate beyond the map: pin it to the top edge
-        const gx = Math.max(16, Math.min(184, X(GATE_X)));
-        map.fillStyle = '#d0a040';
-        map.beginPath(); map.moveTo(gx, 3); map.lineTo(gx - 5, 10); map.lineTo(gx + 5, 10); map.fill();
-        map.font = '700 15px "Xingkai SC", "Kaiti SC", "HudBrush", serif'; map.textAlign = 'center'; map.fillStyle = 'rgba(236,214,172,0.9)';
-        map.fillText('城門', gx, 26);
+      map.fillStyle = '#e0412c';
+      for (const id in GATES) {
+        const g = GATES[id].rect;
+        if (!GATES[id].open) map.fillRect(X(g[2]), Y(g[3]), (g[2] - g[0]) * s, Math.max(3, (g[3] - g[1]) * s));
+      }
+      const hqX = X(4), hqY = Y(208);
+      map.font = '700 15px "Xingkai SC", "Kaiti SC", "HudBrush", serif'; map.textAlign = 'center';
+      if (hqX < 8 || hqX > 192 || hqY < 8 || hqY > 192) {           // enemy HQ beyond the map: pin it to the rim
+        const dx = hqX - 100, dy = hqY - 100, k = 90 / Math.max(Math.abs(dx), Math.abs(dy)), px = 100 + dx * k, py = 100 + dy * k, a = Math.atan2(dx, -dy);
+        map.save(); map.translate(px, py); map.rotate(a);
+        map.fillStyle = '#d0a040'; map.beginPath(); map.moveTo(0, -7); map.lineTo(-5, 1); map.lineTo(5, 1); map.fill();
+        map.restore();
+        map.fillStyle = 'rgba(236,214,172,0.9)';
+        map.fillText('本陣', Math.max(18, Math.min(182, px - dx * 0.16)), Math.max(18, Math.min(186, py - dy * 0.16 + 5)));
+      } else {
+        map.fillStyle = '#d0a040'; map.fillRect(hqX - 4, hqY - 4, 8, 8);
+        map.fillStyle = 'rgba(236,214,172,0.9)'; map.fillText('本陣', hqX, hqY - 8);
+      }
+      const zn = zoneAt(h.x, h.z);
+      if (zn) S.zone = zn;
+      if (S.zone) {
+        map.fillStyle = 'rgba(12,8,6,0.55)'; map.fillRect(0, 176, 200, 24);
+        map.font = '700 16px "Xingkai SC", "Kaiti SC", "HudBrush", serif'; map.fillStyle = 'rgba(236,214,172,0.95)';
+        map.fillText(S.zone.name.zh, 100, 194);
       }
       S.waves = S.waves.filter((w) => f - w.f < 120);
       for (const w of S.waves) {
