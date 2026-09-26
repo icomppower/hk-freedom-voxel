@@ -30,13 +30,15 @@
 //  musou:burst   musou    {count, x,z}                                  finisher: the ring wave starts at Zhao Yun
 //  musou:end     musou    {}
 //  crowd:wave    crowd    {x,z}                                         reinforcements spawned
-//  story:say     story    {speaker, zh, en, dur, portrait}              dialogue line (HUD, top left). speaker: {zh, en} name
+//  story:say     story    {speaker, zh, en, dur, portrait, side}        dialogue line (HUD, top left). speaker: {zh, en} name
 //                                                                       (omitted = the hero); portrait: CHARS id | {face, pal} |
-//                                                                       null (omitted = the hero's if the hero speaks); dur: sim frames
-//  story:banner  story    {html, en, dur}                               system banner (HUD band; html may use <em>)
+//                                                                       {seal: glyph, side} | null (omitted = the hero's if the
+//                                                                       hero speaks); side 'shu' (default) | 'wei'; dur: sim frames
+//  story:banner  story    {html, en, dur, big?}                         system banner (HUD band; html may use <em>; big: slain/boss)
 //  story:objective story  {zh, en}                                      current objective (HUD, top left; empty zh clears it)
+//  story:gate    story    {open}                                        the 魏軍營寨 gate opens (張郃 defeated); game.story.gateOpen
 //  story:end     story    {win, stats}                                  battle over → flow goes to the result screen.
-//                                                                       stats: {kos, time (s), hp, maxChain, rank?, ...}
+//                                                                       stats: {kos, time (s), hp, hpMax, maxChain, dmg, char, rank?}
 //  arrow:fire    projectiles {x,y,z, yaw, n, heavy, fire, big, sky, move}  a shot leaves the bow (n arrows; big 1 heavy, 2 Musou giant)
 //  arrow:burst   projectiles {x,z, r, fire, heavy, big, count}           a burst arrow explodes (fire arrow, jump shots, Musou giant)
 //  arrow:headshot projectiles {i, x,y,z}                                 an aim-mode arrow takes a standing officer in the head

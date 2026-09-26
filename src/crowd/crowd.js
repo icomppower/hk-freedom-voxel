@@ -16,7 +16,7 @@
 //  · Reinforcements: while the ring is under strength and no block waits nearer, a column of 8-15 (with its bearer)
 //    spawns 16-26 m out in front of the camera and runs in; `crowd:wave` announces it. Waves only run once a scenario
 //    spawned an army or a ring (setWaves).
-//  · Story API (src/story drives it): spawnSquad, spawnOfficer, clearAll, setWaves — see below. Officers carry a
+//  · Story API (src/story drives it): spawnSquad, spawnOfficer, clearAll, setWaves, retire — see below. Officers carry a
 //    name (c.offName[i - grunts] = {zh, en}, shown by the HUD tags) and a boss flag (c.boss[i]).
 // Reaction states (HURT..GETUP) are driven by src/combat; this module owns the rest.
 import { rng } from '../core/rng.js';
@@ -182,6 +182,9 @@ export function createCrowd(game, grunts) {
   c.clearAll = () => c.reset();
   /** Reinforcement columns on/off (they run while the ring is under strength, see waves()). */
   c.setWaves = (on) => { c.wavesOn = !!on; };
+  /** Stage change: grunts still standing idle (holding blocks never sent) south of z are removed, freeing their slots
+   *  for the next area; soldiers already on the move keep coming. A squad left empty is freed by squads(). */
+  c.retire = (z) => { for (let i = 0; i < grunts; i++) if (c.st[i] === ST.IDLE && c.z[i] < z) c.st[i] = ST.OFF; };
 
   /** Nearest alive enemy within maxR whose bearing is within `cone` radians of `yaw`. */
   c.nearest = (x, z, maxR, yaw, cone) => {

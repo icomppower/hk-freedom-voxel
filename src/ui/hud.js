@@ -20,7 +20,7 @@ export const HUD_TAG_R = 44.7;
 export function createHud(root, game, camera) {
   const nOff = game.crowd.N - game.crowd.grunts;                     // officer slots (crowd CROWD.officerSlots)
   root.innerHTML = `
-    <div class="h-obj"><i>◆</i><b></b><small></small></div>
+    <div class="h-obj"><i>◆</i><b></b><small></small><span class="go"><i class="ar"></i><em></em></span></div>
     <div class="h-intro"><div class="zh"></div><i class="seal"></i><div class="en"></div>
       <div class="sub"></div>
       <div class="keys"><kbd>WASD</kbd> 移動 move · <kbd>J</kbd> 攻擊 attack · <kbd>K</kbd> 蓄力 charge<br>
@@ -31,7 +31,7 @@ export function createHud(root, game, camera) {
     <div class="h-chain"><div class="num"><b class="dig" data-t="0"><span>0</span></b><u></u><u></u><u></u></div><small><em>連擊</em>CHAIN</small></div>
     <div class="h-mile"><b class="dig" data-t="50"><span>50</span></b><i class="seal">擊破</i></div>
     <div class="h-band"><p></p><small></small></div>
-    <div class="h-dlg"><canvas width="20" height="20"></canvas><div><b><i></i> <span></span></b><p></p><small></small></div></div>
+    <div class="h-dlg"><canvas width="20" height="20"></canvas><i class="dseal"></i><div><b><i></i> <span></span></b><p></p><small></small></div></div>
     <div class="h-copy"></div>
     <div class="h-player"><div class="badge"><canvas width="20" height="20"></canvas></div><div class="name"></div>
       <div class="bar hp"><em></em><i></i></div>
@@ -48,6 +48,7 @@ export function createHud(root, game, camera) {
   const offs = $$('.off').map((el) => ({ el, bd: el.querySelector('.bd'), mk: el.querySelector('.mk'), ld: el.querySelector('.ld'),
     nm: el.querySelector('b'), en: el.querySelector('span'), bar: el.querySelector('.bar i'), lagEl: el.querySelector('.bar em'), lag: 1 }));
   const obj = $('.h-obj'), objB = $('.h-obj b'), objS = $('.h-obj small'), dlgCv = $('.h-dlg canvas'), dlgN = $('.h-dlg b i'), dlgE = $('.h-dlg b span');
+  const objGo = $('.h-obj .go'), objAr = $('.h-obj .ar'), objD = $('.h-obj .go em'), dlgSeal = $('.h-dlg .dseal');
   const moraleI = $('.morale i'), mapEl = $('.h-map');
   const mapCv = $('.h-map canvas'), map = mapCv.getContext('2d');
   const offName = (i) => game.crowd.offName[i - game.crowd.grunts] || { zh: '敵將', en: 'OFFICER' };
@@ -75,18 +76,23 @@ export function createHud(root, game, camera) {
   let showKeys = null;
   // system banners queue (one at a time, held back while the Musou plays); dialogue (top left) and the banner band
   // (y 64-70 %) sit apart, so neither cancels the other. Dialogue holds 5 s like DW8.
-  const banner = (html, en, dur = 150) => { if (S.bandQ.length < 3) S.bandQ.push({ html, en, dur }); };
+  // big: the DW8 officer-slain / commander banners (larger gold brush type in the same band)
+  const banner = (html, en, dur = 150, big = false) => { if (S.bandQ.length < 3) S.bandQ.push({ html, en, dur, big }); };
   // dialogue: speaker {zh, en} (default: the hero); portrait = CHARS id or a {face, pal} 20×20 portrait (chars/index.js),
-  // null = no badge; default: the hero's when the hero speaks, none for anyone else
-  const say = (zh, en, dur = 300, speaker = game.hero.char.name, portrait = game.hero.char.id) => {
+  // or {seal: glyph} (story NPCs: a carved name seal instead of a face), null = no badge; default: the hero's when the
+  // hero speaks, none for anyone else. side 'wei' turns the panel's rule and name vermilion (enemy speaking).
+  const say = (zh, en, dur = 300, speaker = game.hero.char.name, portrait = game.hero.char.id, side = 'shu') => {
     S.dlg = { zh, en, f: game.frame, dur };
     text(dlgN, speaker.zh); text(dlgE, speaker.en.toUpperCase());
-    const ch = typeof portrait === 'string' ? CHARS[portrait] : portrait ? { portrait } : null;
+    const seal = portrait && portrait.seal;
+    const ch = seal ? null : typeof portrait === 'string' ? CHARS[portrait] : portrait ? { portrait } : null;
     if (ch) paintPortrait(dlgCv, ch); else dlgCv.getContext('2d').clearRect(0, 0, 20, 20);
-    set(dlgCv, 'visibility', ch ? 'visible' : 'hidden');
+    set(dlgCv, 'display', seal ? 'none' : ''); set(dlgCv, 'visibility', ch ? 'visible' : 'hidden');
+    set(dlgSeal, 'display', seal ? 'block' : 'none'); if (seal) text(dlgSeal, seal);
+    dlg.classList.toggle('wei', side === 'wei');
   };
-  on('story:say', (e) => say(e.zh, e.en, e.dur ?? 300, e.speaker || undefined, e.portrait !== undefined ? e.portrait : e.speaker ? null : undefined));
-  on('story:banner', (e) => banner(e.html, e.en, e.dur ?? 150));
+  on('story:say', (e) => say(e.zh, e.en, e.dur ?? 300, e.speaker || undefined, e.portrait !== undefined ? e.portrait : e.speaker ? null : undefined, e.side));
+  on('story:banner', (e) => banner(e.html, e.en, e.dur ?? 150, !!e.big));
   on('story:objective', (e) => { S.obj = e.zh ? { zh: e.zh, en: e.en || '', f: game.frame } : null; if (S.obj) { text(objB, e.zh); text(objS, e.en || ''); } });
   on('crowd:wave', (e) => {
     if (game.frame - S.waveF > 600) { S.waveF = game.frame; banner('<em>魏軍</em>援兵 到着', 'Wei reinforcements have arrived!', 130); }
@@ -95,7 +101,7 @@ export function createHud(root, game, camera) {
   on('hit', (e) => { S.actF = game.frame; if (e.officer) { S.tgt = e.i; S.tgtF = game.frame; } });
   on('attack:start', () => { S.actF = game.frame; });
   on('ko', (e) => {
-    if (!e.officer) return;
+    if (!e.officer || game.crowd.boss[e.i]) return;                   // the story announces the commander itself (big banner)
     const { zh, en } = offName(e.i);
     banner(`敵將 <em>${zh}</em> 擊破！`, `Enemy officer ${cap(en)} defeated!`, 150);
     S.tgt = e.i; S.tgtKoF = game.frame;
@@ -227,7 +233,7 @@ export function createHud(root, game, camera) {
       if ((!S.band || f - S.band.f >= S.band.dur) && S.bandQ.length && !inMusou) S.band = { ...S.bandQ.shift(), f };
       const b = S.band, bt = b ? f - b.f : 1e9;
       if (b && bt < b.dur) {
-        if (bandP.innerHTML !== b.html) { bandP.innerHTML = b.html; text(bandS, b.en); }
+        if (bandP.innerHTML !== b.html) { bandP.innerHTML = b.html; text(bandS, b.en); band.classList.toggle('big', b.big); }
         set(band, 'opacity', Math.min(1, bt / 6, (b.dur - bt) / 18).toFixed(2));
         set(band, 'transform', `scaleY(${Math.min(1, 0.3 + bt / 6).toFixed(3)})`);
       } else set(band, 'opacity', '0');
@@ -237,8 +243,17 @@ export function createHud(root, game, camera) {
         set(dlg, 'opacity', dlgA.toFixed(2));
         set(dlg, 'transform', `translateX(${(-Math.max(0, 1 - dt / 8) * 2).toFixed(2)}rem)`);
       } else set(dlg, 'opacity', '0');
-      // objective (top left, above the target bar): fades in over 12 f, hidden while the intro card or a Musou is up
+      // objective (top left, above the target bar): fades in over 12 f, hidden while the intro card or a Musou is up; a new
+      // one flares gold for 1.5 s. The arrow after it points (camera-relative: up = where the camera looks, screen right
+      // = -X) at game.story.target with the distance, and hides within 8 m.
       set(obj, 'opacity', S.obj && !inMusou ? (Math.min(1, (f - S.obj.f) / 12) * (1 - introA)).toFixed(2) : '0');
+      obj.classList.toggle('new', !!S.obj && f - S.obj.f < 90);
+      const goT = S.obj && game.story.target, goD = goT ? Math.hypot(goT.x - h.x, goT.z - h.z) : 0;
+      set(objGo, 'opacity', goT && goD > 8 ? '1' : '0');
+      if (goT && goD > 8) {
+        set(objAr, 'transform', `rotate(${(game.cam.yaw - Math.atan2(goT.x - h.x, goT.z - h.z)).toFixed(3)}rad)`);
+        text(objD, `${Math.round(goD)}m`);
+      }
 
       // musou: vertical calligraphy copy on the right (concept) while the musou runs
       const mf = f - S.musouF, me = f - S.musouEnd;
@@ -344,7 +359,8 @@ export function createHud(root, game, camera) {
       // morale (蜀 blue vs 魏 red) from KOs against the enemies still standing
       let alive = 0;
       for (let i = 0; i < c.N; i++) if (c.st[i] !== ST.OFF && c.st[i] !== ST.DEAD) alive++;
-      set(moraleI, 'transform', `scaleX(${(0.3 + 0.65 * h.kos / (h.kos + alive + 1)).toFixed(4)})`);
+      // story mode: the director's morale (stage clears raise it, the ambush / drums drop it)
+      set(moraleI, 'transform', `scaleX(${(game.story.morale ?? 0.3 + 0.65 * h.kos / (h.kos + alive + 1)).toFixed(4)})`);
 
       // minimap: 30 m around the hero, north = up the valley (camera yaw 0; map right = -X), the whole 定軍山 field
       // (world/minimap.js layer: walkable ground, cliffs, river, castle wall, road), 10 m grid, closed gates in red, the

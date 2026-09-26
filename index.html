@@ -124,6 +124,19 @@
   #hud .h-dlg b span { font: 600 .95rem/1 var(--sans); letter-spacing: .3em; color: #9fe6de; opacity: .8; margin-left: .5rem; }
   #hud .h-dlg p { margin: .4rem 0 .35rem; font: 700 2.3rem/1.1 var(--kai); letter-spacing: .12rem; white-space: nowrap; }
   #hud .h-dlg small { font-weight: 600; letter-spacing: .06em; font-size: 1.6rem; white-space: nowrap; color: #f4ead8; }
+  /* story NPCs speak under a carved name seal (Shu: jade ink, Wei: vermilion); an enemy line turns the rule and name red */
+  #hud .h-dlg .dseal { display: none; width: 5.6rem; height: 5.6rem; flex: none; box-sizing: border-box; font: 700 3.9rem/5.1rem var(--brush);
+    font-style: normal; text-align: center; color: #f3e6cf; background: #1f5a52; border-radius: .35rem; text-shadow: none;
+    box-shadow: inset 0 0 0 .22rem #1f5a52, inset 0 0 0 .38rem rgba(243,230,207,.8), 0 0 0 .15rem #d9d2c6, 0 .3rem .6rem rgba(0,0,0,.5); }
+  #hud .h-dlg.wei { border-left-color: #d4412c; }
+  #hud .h-dlg.wei b, #hud .h-dlg.wei b span { color: #ffb09a; }
+  #hud .h-dlg.wei .dseal { background: var(--seal); box-shadow: inset 0 0 0 .22rem var(--seal), inset 0 0 0 .38rem rgba(248,230,210,.8),
+    0 0 0 .15rem #d9d2c6, 0 .3rem .6rem rgba(0,0,0,.5); }
+  /* big band: commander intro / 討取 banner, DW8's slain-officer weight */
+  #hud .h-band.big { padding: 1rem 0 1.1rem; }
+  #hud .h-band.big p { font: 700 5.2rem/1.1 var(--brush); letter-spacing: .6rem; color: #ffe3a0;
+    text-shadow: 0 0 .1rem #000, .25rem .35rem 0 rgba(0,0,0,.6), 0 0 2rem rgba(255,170,60,.45); }
+  #hud .h-band.big small { font-size: 1.4rem; letter-spacing: .4em; }
 
   /* musou: concept's vertical copy on the right */
   #hud .h-copy { right: 3.2%; top: 44%; writing-mode: vertical-rl; font: 700 3.4rem/1.3 var(--brush); letter-spacing: .5rem; opacity: 0;
@@ -136,6 +149,12 @@
   #hud .h-obj { left: 2.6rem; top: .5rem; opacity: 0; font: 700 1.5rem/1 var(--kai); color: #f4ead8; white-space: nowrap; }
   #hud .h-obj i { font-style: normal; color: var(--gold); margin-right: .5rem; }
   #hud .h-obj small { font: 600 1rem/1 var(--sans); letter-spacing: .15em; margin-left: .8rem; opacity: .75; }
+  #hud .h-obj small, #hud .h-obj .go { display: inline-block; }
+  #hud .h-obj b { transition: color .6s; }
+  #hud .h-obj.new b { color: #ffe08a; text-shadow: 0 0 1rem rgba(255,190,60,.8), 0 .2rem .3rem rgba(0,0,0,.7); }
+  #hud .h-obj .go { margin-left: 1.2rem; font: 700 1.1rem/1 var(--sans); letter-spacing: .1em; color: var(--gold); vertical-align: .1rem; }
+  #hud .h-obj .ar { display: inline-block; width: 0; height: 0; margin: 0 .5rem -.1rem 0; border: .55rem solid transparent;
+    border-bottom: 1.1rem solid var(--gold); border-top-width: 0; transform-origin: 50% 60%; filter: drop-shadow(0 0 .2rem #000); }
   #hud .h-target .seal { font-size: 1.6rem; vertical-align: .6rem; margin-right: .6rem; writing-mode: horizontal-tb; padding: .25rem .3rem; }
   #hud .h-target b { font: 700 2.8rem/1 var(--brush); color: #ffe3b0; }
   #hud .h-target span { font: 600 1rem/1 var(--sans); letter-spacing: .35em; margin-left: .8rem; opacity: .85; }
@@ -408,6 +427,136 @@
 
   @media (prefers-reduced-motion: reduce) { #title *, #select * { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
   /* story lane: #prologue / #result styles */
+  /* prologue: a handscroll on dark brocade. The paper unrolls from the centre (clip-path) as the two rods slide out; the
+     map (SVG) drifts per card; columns are written by a ragged brush-tip mask sweeping down each one. */
+  #prologue { display: block; overflow: hidden; --ink: #1b120c; --shu: #1d5560; --wei: #a8281d;
+    --brushmask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 300' preserveAspectRatio='none'><path d='M0 0H100V146L94 151 87 147 80 156 71 149 63 160 55 150 47 162 38 151 30 158 22 149 14 155 7 148 0 153Z' fill='black'/><path d='M0 150L9 156 18 152 27 161 39 155 50 166 60 156 70 163 81 154 91 160 100 152V144H0Z' fill='black' opacity='.45'/></svg>");
+    background: radial-gradient(ellipse at 50% 50%, rgba(40,30,22,0) 40%, rgba(0,0,0,.6)),
+      repeating-linear-gradient(45deg, rgba(214,170,90,.06) 0 .15rem, transparent .15rem 1.4rem),
+      repeating-linear-gradient(-45deg, rgba(214,170,90,.06) 0 .15rem, transparent .15rem 1.4rem), #16211f; }
+  #prologue[hidden] { display: none; }
+  #prologue.out { opacity: 0; transition: opacity .45s; }
+  #prologue .pl-paper { position: absolute; inset: 4.4vh 4.6vw; overflow: hidden; background: #d8c197; clip-path: inset(0 50% 0 50%);
+    box-shadow: 0 0 0 .25rem #b8893a, 0 0 0 .6rem #2a1c10, 0 1.2rem 3rem rgba(0,0,0,.7); }
+  #prologue.open .pl-paper { clip-path: inset(0 0 0 0); transition: clip-path 1.15s cubic-bezier(.6,.05,.25,1); }
+  #prologue .pl-rod { position: absolute; top: 2.2vh; bottom: 2.2vh; width: 1.9vw; left: calc(50% - .95vw); border-radius: .5rem;
+    background: linear-gradient(90deg, #2a160a, #6b3f1e 35%, #8a5a2c 50%, #4a2a12 75%, #1e1006);
+    box-shadow: 0 -.9rem 0 -.2rem #c79a3e, 0 .9rem 0 -.2rem #c79a3e, 0 .6rem 1.4rem rgba(0,0,0,.6); }
+  #prologue.open .pl-rod { transition: left 1.15s cubic-bezier(.6,.05,.25,1); }
+  #prologue.open .pl-rod.l { left: 2.7vw; }
+  #prologue.open .pl-rod.r { left: calc(100% - 4.6vw); }
+  #prologue .pl-map { position: absolute; inset: 0; width: 100%; height: 100%; transition: transform 2.8s cubic-bezier(.4,0,.2,1); }
+  #prologue .pl-mark { opacity: .42; transition: opacity 1s; }
+  #prologue .pl-mark.on { opacity: .8; }
+  #prologue .pl-mark.hot { opacity: 1; }
+  #prologue .pl-labels text { font: 700 46px var(--brush); fill: #24160b; stroke: rgba(232,214,178,.75); stroke-width: 7px; paint-order: stroke; }
+  #prologue .pl-labels text.sm { font-size: 32px; }
+  #prologue .pl-labels text.river { fill: #3d4b48; letter-spacing: 14px; }
+  #prologue .pl-labels .wei text { fill: #8e2016; }
+  #prologue .pl-labels rect { fill: rgba(232,214,178,.6); stroke: #24160b; stroke-width: 4px; }
+  #prologue .pl-arw { opacity: .4; transition: opacity 1s; }
+  #prologue .pl-arw.hot { opacity: 1; }
+  #prologue .pl-arw > path { fill: none; stroke-linecap: round; stroke-dasharray: 1.01 1.01; stroke-dashoffset: 1.01; }
+  #prologue .pl-arw .u { stroke-width: 28px; opacity: .2; }
+  #prologue .pl-arw .s { stroke-width: 11px; }
+  #prologue .pl-arw.shu > path { stroke: var(--shu); }
+  #prologue .pl-arw.wei > path { stroke: var(--wei); }
+  #prologue .pl-arw.shu .hd { fill: var(--shu); }
+  #prologue .pl-arw.wei .hd { fill: var(--wei); }
+  #prologue .pl-arw .hd { opacity: 0; }
+  #prologue .pl-arw.on > path { stroke-dashoffset: 0; transition: stroke-dashoffset 1.7s cubic-bezier(.5,0,.3,1) .5s; }
+  #prologue .pl-arw.on .hd { opacity: 1; transition: opacity .25s 2s; }
+  #prologue .pl-card { position: absolute; right: 7vw; top: 6vh; bottom: 19vh; opacity: 0; transition: opacity .35s; }
+  #prologue .pl-card.on { opacity: 1; }
+  /* the inscription panel: paper washed pale behind the columns, so the map never fights the calligraphy */
+  #prologue .pl-card::before { content: ""; position: absolute; top: -10vh; bottom: -30vh; left: -9rem; right: -8vw; z-index: -1;
+    background: linear-gradient(90deg, rgba(226,206,166,0), rgba(226,206,166,.86) 8rem); }
+  #prologue .pl-cols { writing-mode: vertical-rl; height: 100%; font: 700 5rem/1.3 var(--brush); letter-spacing: .6rem; color: var(--ink);
+    text-shadow: .1rem .15rem .2rem rgba(60,30,10,.25); }
+  #prologue .pl-cols span { display: block; margin-left: 1.2rem;
+    -webkit-mask: var(--brushmask) 0 100% / 100% 300% no-repeat; mask: var(--brushmask) 0 100% / 100% 300% no-repeat; }
+  #prologue .pl-cols span:first-child { color: #6e1a12; }
+  #prologue .pl-card.on .pl-cols span { -webkit-mask-position: 0 0; mask-position: 0 0;
+    transition: -webkit-mask-position 1.05s cubic-bezier(.55,.1,.35,1) calc(var(--i) * .55s + .2s), mask-position 1.05s cubic-bezier(.55,.1,.35,1) calc(var(--i) * .55s + .2s); }
+  #prologue .pl-en { position: absolute; right: 7vw; bottom: 10.5vh; margin: 0; max-width: 56rem; text-align: right; text-wrap: balance; opacity: 0;
+    font: italic 500 1.75rem/1.45 var(--sans); letter-spacing: .04em; color: #3b2a1a; transition: opacity .3s; }
+  #prologue .pl-card.on + .pl-en, #prologue .pl-en.on { opacity: .9; transition: opacity .8s 1.9s; }
+  #prologue .pl-pips { position: absolute; left: 4vw; bottom: 5vh; display: flex; gap: 1.1rem; font: 700 2.2rem/1 var(--brush); color: rgba(42,26,14,.3); }
+  #prologue .pl-pips b { transition: color .4s; }
+  #prologue .pl-pips b.past { color: rgba(42,26,14,.6); }
+  #prologue .pl-pips b.on { color: var(--wei); }
+  #prologue .pl-skip { position: absolute; right: 5.5vw; bottom: .6vh; display: flex; align-items: center; gap: .9rem; opacity: .8;
+    font: 700 1.5rem/1 var(--kai); color: #efe3cf; text-shadow: 0 .1rem .3rem #000; }
+  #prologue .pl-skip small { display: inline; margin-left: 1rem; font: 600 .95rem/1 var(--sans); letter-spacing: .25em; opacity: .8; }
+  #prologue .pl-skip svg { width: 2.4rem; height: 2.4rem; transform: rotate(-90deg); }
+  #prologue .pl-skip circle { fill: none; stroke: rgba(239,227,207,.35); stroke-width: 3; }
+  #prologue .pl-skip circle.p { stroke: #f2c14e; stroke-dasharray: 1 1; stroke-dashoffset: 1; }
+  #prologue.stamped .pl-card, #prologue.stamped .pl-en, #prologue.stamped .pl-pips, #prologue.stamped .pl-skip { opacity: 0; transition: opacity .4s; }
+  #prologue .pl-stamp { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; }
+  #prologue .pl-stamp::before { content: ""; position: absolute; inset: 0; z-index: -1;
+    background: radial-gradient(ellipse at center, rgba(226,206,166,.94) 0 32%, rgba(226,206,166,.5) 65%, rgba(226,206,166,0)); }
+  #prologue.stamped .pl-stamp { opacity: 1; transition: opacity .6s; }
+  #prologue .pl-stamp small { font: 700 3.4rem/1 var(--kai); letter-spacing: 1.8rem; margin-right: -1.8rem; color: #4a3020; }
+  #prologue .pl-stamp b { position: relative; margin: 1.4rem -2.2rem 1.8rem 0; font: 700 19rem/1 var(--brush); letter-spacing: 2.2rem; color: #140c07;
+    opacity: 0; transform: scale(1.3); filter: blur(1.2rem); text-shadow: .3rem .4rem .6rem rgba(60,30,10,.3); }
+  #prologue.stamped .pl-stamp b { opacity: 1; transform: none; filter: none; transition: opacity .7s .15s, transform 1s cubic-bezier(.2,.7,.2,1) .15s, filter 1s .15s; }
+  #prologue .pl-stamp i { position: absolute; left: calc(50% + 32rem); top: calc(50% - 1rem); padding: .6rem .7rem; border-radius: .45rem;
+    font: 700 3.2rem/1.05 var(--brush); font-style: normal; writing-mode: vertical-rl; height: 2.1em;
+    color: #f8e6d2; background: #b3261e; opacity: 0; transform: rotate(-8deg) scale(2.4);
+    box-shadow: inset 0 0 0 .22rem #b3261e, inset 0 0 0 .4rem rgba(248,230,210,.8), 0 .3rem .8rem rgba(60,10,5,.35); }
+  #prologue.stamped .pl-stamp i { opacity: .95; transform: rotate(-8deg); transition: transform .26s cubic-bezier(.3,1.5,.5,1) 1.05s, opacity .08s 1.05s; }
+  #prologue .pl-stamp em { font: 600 1.6rem/1 var(--sans); font-style: normal; letter-spacing: .9em; margin-right: -.9em; color: #4a3020; opacity: 0; }
+  #prologue.stamped .pl-stamp em { opacity: .85; transition: opacity .8s 1.4s; }
+
+  /* result: ink wash over the frozen field; brush 勝利 / 敗北, counted tallies, the rank stamp, the epilogue */
+  #result { justify-content: flex-start;
+    background: linear-gradient(90deg, rgba(10,6,4,.95) 0, rgba(10,6,4,.86) 48%, rgba(10,6,4,.4) 82%, rgba(10,6,4,.25)); }
+  #result .rs { margin-left: 8vw; width: min(82rem, 86vw); display: flex; flex-direction: column; gap: 2.6rem; }
+  #result .rs-head { display: flex; align-items: center; gap: 2.6rem; animation: rsIn .6s both; }
+  #result .rs-badge { position: relative; flex: none; width: 10rem; height: 10rem; border-radius: 50%; overflow: hidden;
+    background: radial-gradient(circle at 50% 38%, #3c6f72, #16262a 70%); border: .32rem solid #d9d2c6;
+    box-shadow: 0 0 0 .2rem #1a1210, 0 0 0 .36rem #b8893a, 0 .4rem 1rem rgba(0,0,0,.6); }
+  #result .rs-badge canvas { position: absolute; left: 1rem; bottom: -.3rem; width: 8rem; height: 8rem; image-rendering: pixelated; }
+  #result .rs-head small { display: block; font: 600 1.2rem/1 var(--sans); letter-spacing: .35em; color: #cdbb9c; }
+  #result .rs-head h2 { margin: .5rem 0 .2rem; font: 700 11rem/1 var(--brush); letter-spacing: 1.6rem; color: #ffe3a0;
+    text-shadow: 0 0 .1rem #000, .35rem .45rem 0 rgba(0,0,0,.6), 0 0 3rem rgba(255,170,60,.35); animation: rsStamp .55s cubic-bezier(.2,.8,.3,1) both .1s; }
+  #result .rs-head em { font: 600 1.6rem/1 var(--sans); font-style: normal; letter-spacing: 1.2em; color: #f2c14e; }
+  #result.lose .rs-head h2 { color: #c9b8ae; text-shadow: 0 0 .1rem #000, .35rem .45rem 0 rgba(0,0,0,.6), 0 0 3rem rgba(200,40,20,.35); }
+  #result.lose .rs-head em { color: #d8715e; }
+  #result.lose .rs-badge { filter: grayscale(.8) brightness(.8); }
+  #result .rs-body { display: flex; align-items: center; gap: 6rem; }
+  #result .rs-stats { border-collapse: collapse; min-width: 46rem; border-left: .3rem solid #b3261e;
+    background: linear-gradient(90deg, rgba(0,0,0,.4), rgba(0,0,0,0)); }
+  #result .rs-stats tr { border-bottom: .1rem solid rgba(214,184,130,.16); animation: rsIn .45s both; animation-delay: calc(.55s + var(--i) * .35s); }
+  #result .rs-stats th { padding: .85rem 2rem; text-align: left; font: 700 2.3rem/1 var(--kai); color: #f2c14e; white-space: nowrap; }
+  #result .rs-stats th small { font: 600 1.05rem/1 var(--sans); letter-spacing: .25em; color: #cdbb9c; margin-left: 1rem; }
+  #result .rs-stats td { padding: .85rem 2rem; min-width: 12rem; text-align: right; font: 700 4rem/1 var(--brush); color: #f7f1e8;
+    font-variant-numeric: tabular-nums; text-shadow: .2rem .3rem 0 rgba(0,0,0,.55); }
+  #result .rs-rank { display: flex; flex-direction: column; align-items: center; gap: .6rem; animation: rsStamp .4s cubic-bezier(.3,1.5,.5,1) both 2.2s; }
+  #result .rs-rank span { font: 700 2.2rem/1 var(--kai); color: #efe3cf; }
+  #result .rs-rank span small { font: 600 1rem/1 var(--sans); letter-spacing: .3em; margin-left: .6rem; opacity: .75; }
+  #result .rs-rank b { display: grid; place-items: center; width: 16rem; height: 16rem; border-radius: 50%; font: 700 13rem/1 var(--brush);
+    color: #f7f1e8; background: radial-gradient(circle, rgba(0,0,0,.35) 52%, transparent 53%);
+    box-shadow: inset 0 0 0 .9rem var(--rc, #b3261e), inset 0 0 0 1.2rem rgba(0,0,0,.4), 0 0 2.4rem var(--rg, rgba(179,38,30,.4));
+    text-shadow: .3rem .4rem 0 rgba(0,0,0,.6), 0 0 1.6rem var(--rg, rgba(179,38,30,.4)); }
+  #result .rs-rank.rS b { --rc: #e2b040; --rg: rgba(255,200,80,.65); color: #fff0b8; }
+  #result .rs-rank.rA b { --rc: #b3261e; }
+  #result .rs-rank.rB b { --rc: #2f8a84; --rg: rgba(63,184,176,.35); }
+  #result .rs-rank.rC b { --rc: #7a6a5a; --rg: rgba(0,0,0,.3); color: #cdbb9c; }
+  #result .rs-epi { max-width: 76rem; animation: rsIn .8s both 2.6s; }
+  #result.lose .rs-epi { animation-delay: 1.9s; }
+  #result .rs-epi p { margin: 0 0 1.1rem; font: 700 2.1rem/1.55 var(--kai); color: #efe3cf; }
+  #result .rs-epi small { display: block; font: 500 1.35rem/1.45 var(--sans); letter-spacing: .02em; color: #cdbb9c; }
+  #result .rs-btns { display: flex; gap: 1.6rem; animation: rsIn .5s both 3s; }
+  #result.lose .rs-btns { animation-delay: 2.1s; }
+  #result .rs-btns button { padding: 1.1rem 3.6rem; cursor: pointer; border: 0; border-radius: .4rem; font: 700 2.8rem/1 var(--brush); letter-spacing: .5rem;
+    color: #1a120d; background: linear-gradient(#ffe7a3, #f2c14e 55%, #c98a22); box-shadow: 0 0 0 .15rem #5a3a10, 0 .5rem 1.6rem rgba(0,0,0,.5); }
+  #result .rs-btns button.sub { color: #f4ead8; background: rgba(0,0,0,.45); box-shadow: 0 0 0 .15rem rgba(239,227,207,.5); }
+  #result .rs-btns button small { font: 600 1.3rem/1 var(--sans); letter-spacing: .3em; margin-left: 1rem; }
+  #result .rs-btns button:hover, #result .rs-btns button:focus-visible { filter: brightness(1.12); outline: .2rem solid #ffe7a3; outline-offset: .35rem; }
+  @keyframes rsIn { from { opacity: 0; transform: translateX(-2rem); } }
+  @keyframes rsStamp { from { opacity: 0; transform: scale(1.7) rotate(-6deg); } }
 </style>
 </head>
 <body>
