@@ -5,9 +5,11 @@
 // focus, dt) = optional render-only camera/stage hook run after the gameplay rig while that screen is up); the sim only steps in
 // 'battle' and not paused (Esc: pause menu #menu). startBattle() resets the sim for a character / mode / chapter.
 // flow.go() returns a promise that settles once the new state's materials are compiled and two frames have presented
-// (menu.js inkWipe holds the ink until then). 'loading' (after 出陣) runs deploy(): startBattle for the chosen officer
-// under the card, compile, warm frames, then ink on into the prologue / battle — the officer on the field is the chosen
-// one before anything of the field is seen again, and his kit's first draws never stall on screen.
+// (menu.js inkWipe holds the ink until then). Every screen change goes through the ink wipe. 'loading' (after 出陣, or 再戰
+// on the result) runs deploy(): once the card is fully uncovered, startBattle for the chosen officer, compile, warm frames
+// (the bar tracks those real stages), a minimum dwell, then ink on into the prologue / battle — the officer on the field
+// is the chosen one before anything of the field is seen again, and his kit's first draws never stall on screen.
+// Select → loading also snaps the select stage's key-art frame of the officer (snapArt) for the loading card and result.
 // Dev shortcut: ?go=free|story[&char=id] skips the screens straight into a battle.
 import * as THREE from 'three';
 import { vrng, rng } from './core/rng.js';
@@ -29,7 +31,7 @@ import { createStory } from './story/index.js';
 import { createTitle, CONTROLS } from './ui/title.js';
 import { createSelect } from './ui/select.js';
 import { createLoading } from './ui/loading.js';
-import { inkWipe, wiping } from './ui/menu.js';
+import { inkWipe, wiping, createNav, sfx } from './ui/menu.js';
 import { createPrologue } from './story/prologue.js';
 import { createResult } from './story/result.js';
 
@@ -129,11 +131,39 @@ const menu = $('menu'), hudEl = $('hud');
 // the bindings mid-battle too (critic: checking aim meant quitting the chapter)
 menu.querySelector('.hint').insertAdjacentHTML('beforebegin', `<table>${CONTROLS.map(([zh, en, kb]) => `<tr><td>${zh}<small>${en}</small></td><td>${kb}</td></tr>`).join('')}</table>`);
 let paused = false, state = null, ctx = {}, hold = false;   // hold: loading, no renders until the new kit is compiled
-const setPaused = (v) => { paused = v; menu.hidden = !v; hudEl.hidden = v; input.sample(); };   // sample(): drop keys pressed on the menu
+// pause menu: title-screen vocabulary (diamond + swash on the focused item), 繼續 focused on open, ↑/↓ / pad move,
+// Enter / A confirm, Esc / B resume. 撤退 asks once (確定撤退？), a second confirm ink-wipes to the title.
+const mBtns = [$('go'), $('quit')], quitEl = $('quit');
+let mCur = 0, quitArm = false;
+const armQuit = (v) => {
+  quitArm = v; quitEl.classList.toggle('arm', v);
+  quitEl.innerHTML = v ? '確定撤退？<small>Confirm · progress is lost</small>' : '撤退<small>Quit to title</small>';
+};
+const mFocus = (i) => {
+  mCur = (i + mBtns.length) % mBtns.length;
+  mBtns.forEach((b, k) => b.classList.toggle('on', k === mCur));
+  if (mCur !== 1 && quitArm) armQuit(false);
+};
+const mOk = () => {
+  if (mCur === 0) return setPaused(false);
+  if (!quitArm) { sfx('ok'); return armQuit(true); }
+  sfx('back'); mNav.stop();
+  inkWipe(() => flow.go('title'));
+};
+const mNav = createNav({ move: (d) => { mFocus(mCur + d); sfx('move'); }, ok: mOk, back: () => setPaused(false) });
+const setPaused = (v) => {
+  paused = v; menu.hidden = !v; hudEl.hidden = v; input.sample();   // sample(): drop keys pressed on the menu
+  if (v) { mFocus(0); armQuit(false); mNav.start(); } else mNav.stop();
+};
+mBtns.forEach((b, i) => {
+  b.addEventListener('pointerenter', () => { if (mCur !== i) { mFocus(i); sfx('move'); } });
+  b.addEventListener('click', () => { mFocus(i); mOk(); });
+});
 const flow = {
   get state() { return state; },
-  /** Enter a flow state: 'title' | 'select' | 'prologue' | 'battle' | 'result' (ctx: see each screen module). */
+  /** Enter a flow state: 'title' | 'select' | 'loading' | 'prologue' | 'battle' | 'result' (ctx: see each screen module). */
   go(s, c = {}) {
+    if (s === 'loading' && state === 'select') c.art = arts[c.char] = snapArt();
     if (screens[state]) { screens[state].exit(); $(state).hidden = true; }
     state = s; ctx = c;
     if (s === 'battle') { startBattle(c); setPaused(false); }
@@ -144,6 +174,7 @@ const flow = {
   },
 };
 const nextFrame = () => new Promise((r) => requestAnimationFrame(r));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Compile every material in the scene (hidden pools included) for this camera, in parallel where the GPU has
  *  KHR_parallel_shader_compile, then let two frames present: the screen's first draws don't stall. */
 async function warm() {
@@ -151,33 +182,46 @@ async function warm() {
   await post.renderer.compileAsync(scene, camRig.camera);
   await nextFrame(); await nextFrame();
 }
-/** Under the loading card: the chosen officer's battle, compiled and rendered a few frames, then ink on into it. */
+/** Key-art still of the officer focused on the select stage, taken under full ink: one render in the select screen's
+ *  key-art framing, read back in the same task (no preserveDrawingBuffer needed). Cached per officer (retry reuses it). */
+const arts = {};
+function snapArt() {
+  const S = screens.select;
+  S.keyart(true); render(0); S.keyart(false);
+  try { return canvas.toDataURL('image/jpeg', 0.9); } catch { return null; }
+}
+/** Under the loading card: the chosen officer's battle, compiled and rendered a few frames, then ink on into it.
+ *  Runs only once the card is fully uncovered (the synchronous build would otherwise freeze the ink over it); each
+ *  stage is labelled on the card and the bar gets two frames to start moving before the main thread blocks. */
 async function deploy(c) {
-  const L = screens.loading, t0 = performance.now();
+  const L = screens.loading;
   hold = true;
-  await nextFrame();                               // the card is on screen before the synchronous kit build
-  startBattle(c); L.progress(0.45);
-  await post.renderer.compileAsync(scene, camRig.camera); L.progress(0.8);
+  while (wiping()) await nextFrame();
+  if (state !== 'loading') return;
+  const t0 = performance.now(), stage = async (p, zh, en) => { L.progress(p, zh, en); await nextFrame(); await nextFrame(); };
+  await stage(0.18, '點將', 'Summoning the officer');
+  startBattle(c);
+  await stage(0.5, '佈陣', 'Deploying the ranks');
+  await post.renderer.compileAsync(scene, camRig.camera);
+  await stage(0.82, '整軍備戰', 'Preparing the field');
   hold = false;                                    // the loop renders the field behind the card: shadow / first-draw variants
   for (let i = 0; i < 4; i++) await nextFrame();
   L.progress(1);
-  await new Promise((r) => setTimeout(r, Math.max(0, 1400 - (performance.now() - t0))));   // long enough to read the card
-  while (wiping()) await nextFrame();             // the wipe that brought the card up is still uncovering (slow machine)
+  await sleep(Math.max(500, 1300 - (performance.now() - t0)));   // the card stays readable >= 1.3 s once revealed
   if (state !== 'loading') return;
-  L.ready();
-  inkWipe(() => flow.go(c.mode === 'story' ? 'prologue' : 'battle', c));
+  L.ready(); sfx('ok');
+  await sleep(450);
+  if (state !== 'loading') return;
+  inkWipe(() => flow.go(c.mode === 'story' && !c.retry ? 'prologue' : 'battle', c));
 }
 const screens = {
   title: createTitle($('title'), flow), select: createSelect($('select'), flow), loading: createLoading($('loading')),
   prologue: createPrologue($('prologue'), flow), result: createResult($('result'), flow),
 };
-on('story:end', (e) => flow.go('result', { ...ctx, win: e.win, stats: e.stats }));
-$('go').addEventListener('click', () => setPaused(false));
-$('quit').addEventListener('click', () => flow.go('title'));
+on('story:end', (e) => inkWipe(() => flow.go('result', { ...ctx, win: e.win, stats: e.stats })));
 addEventListener('keydown', (e) => {
-  if (state !== 'battle') return;
-  if (e.code === 'Escape') setPaused(!paused);
-  else if (paused && (e.code === 'Enter' || e.code === 'NumpadEnter')) setPaused(false);
+  // opens; the menu's own nav (registered first) closes it and marks the key handled
+  if (state === 'battle' && !paused && e.code === 'Escape' && !e.defaultPrevented) setPaused(true);
 });
 addEventListener('blur', () => { if (state === 'battle') setPaused(true); });
 

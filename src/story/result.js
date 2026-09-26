@@ -1,11 +1,13 @@
 // Battle result (#result), DW8 style: the battlefield stays frozen behind an ink wash; the hero's portrait and a big
 // brush 勝利 / 敗北, then the tallies count up one by one (KOs, max chain, time, damage taken), the rank stamps in (win:
 // S/A/B/C, rules in index.js rank()), and the epilogue (ch1.js EPILOGUE) closes the chapter.
-// Win → 繼續 (title). Defeat → 再戰 (straight back into the battle, no prologue) or 返回 (title).
+// Win → 繼續 (title). Defeat → 再戰 (the loading card, then straight back into the battle, no prologue) or 返回 (title).
+// Every exit is an ink wipe (ui lane menu.js). ctx.art (the officer's key-art still, main.js snapArt) fills the right side.
 // Keys: Enter / Space press the focused button (← → move between them), Esc → title.
 // ctx in: { win, stats: { kos, time, hp, hpMax, maxChain, dmg, char, rank? }, mode, char, chapter }.
 import { CHARS, paintPortrait } from '../chars/index.js';
 import { EPILOGUE } from './ch1.js';
+import { inkWipe } from '../ui/menu.js';
 
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
@@ -14,11 +16,11 @@ export function createResult(el, flow) {
   el.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.act === 'retry') flow.go('battle', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter });
-    else flow.go('title');
+    if (b.dataset.act === 'retry') inkWipe(() => flow.go('loading', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter, art: ctx.art, retry: true }));
+    else inkWipe(() => flow.go('title'));
   });
   const key = (e) => {
-    if (e.code === 'Escape') return flow.go('title');
+    if (e.code === 'Escape') return inkWipe(() => flow.go('title'));
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
       const bs = [...el.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
       bs[(i + (e.code === 'ArrowLeft' || e.code === 'ArrowUp' ? bs.length - 1 : 1)) % bs.length]?.focus();
@@ -36,7 +38,8 @@ export function createResult(el, flow) {
         ['經過時間', 'TIME', s.time, mmss],
         ['受到傷害', 'DAMAGE TAKEN', Math.round(s.dmg || 0), (v) => v],
       ];
-      el.className = `scr ${win ? 'win' : 'lose'}`;
+      el.className = `scr ${win ? 'win' : 'lose'}${c.art ? ' art' : ''}`;
+      el.style.setProperty('--art', c.art ? `url("${c.art}")` : 'none');
       el.innerHTML = `<div class="rs">
         <div class="rs-head"><div class="rs-badge"><canvas width="20" height="20"></canvas></div>
           <div><small>第一章 定軍山 · CHAPTER I · MOUNT DINGJUN</small><h2>${win ? '勝利' : '敗北'}</h2><em>${win ? 'VICTORY' : 'DEFEAT'}</em></div></div>

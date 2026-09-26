@@ -100,7 +100,7 @@ const RAG = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 100' pres
 <feDisplacementMap in='SourceGraphic' scale='150' xChannelSelector='R' yChannelSelector='G'/></filter>
 <g filter='url(#f)'><rect x='120' y='-100' width='760' height='300'/>
 <rect x='60' y='22' width='80' height='5'/><rect x='80' y='61' width='60' height='3'/><rect x='860' y='38' width='90' height='4'/><rect x='870' y='79' width='50' height='6'/></g></svg>`;
-let ink = null, busy = false;
+let ink = null, busy = false, pend = null;
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 /** Cover the screen with ink, run mid() (screen swap), uncover once the promise mid() returns (flow.go: the new screen
  *  compiled and presented) settles. Ignored while a wipe is running. */
@@ -122,11 +122,14 @@ export function inkWipe(mid) {
     // two frames under full ink: the swapped screen lays out and the 3D view re-frames before the reveal
     requestAnimationFrame(() => requestAnimationFrame(() => {
       ink.animate([{ transform: 'translateX(-60vw)' }, { transform: 'translateX(-230vw)' }],
-        { duration: r ? 1 : 520, easing: 'cubic-bezier(.45,0,.2,1)', fill: 'forwards' }).finished.then(() => { ink.hidden = true; busy = false; });
+        { duration: r ? 1 : 520, easing: 'cubic-bezier(.45,0,.2,1)', fill: 'forwards' }).finished.then(() => { ink.hidden = true; busy = false; const f = pend; pend = null; f?.(); });
     }));
   });
 }
 export const wiping = () => busy;
+/** Run fn now, or once the running wipe has uncovered (a confirm pressed while the screen is still being revealed is
+ *  queued, not dropped; the latest press wins). */
+export function afterWipe(fn) { if (busy) pend = fn; else fn(); }
 
 /** Slam a red seal (1-3 glyphs) into `parent` at its .stamp-at anchor (CSS positions it); removed by clearStamp. */
 export function stamp(parent, text) {
