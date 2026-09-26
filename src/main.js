@@ -1,7 +1,8 @@
 // Boot, flow and the fixed 60 Hz loop. Sim modules (hero, combat, crowd, musou, story, camera control yaw) advance only
 // in step(); render-side modules read sim state in render() and never write it.
 // Flow: title → select → (story: prologue →) battle → result → title. Each non-battle state is a DOM screen (index.html
-// #title #select #prologue #result, modules below: createX(el, flow) → { enter(ctx), exit() }); the sim only steps in
+// #title #select #prologue #result, modules below: createX(el, flow) → { enter(ctx), exit(), view? }; view(scene, camera,
+// focus, dt) = optional render-only camera/stage hook run after the gameplay rig while that screen is up); the sim only steps in
 // 'battle' and not paused (Esc: pause menu #menu). startBattle() resets the sim for a character / mode / chapter.
 // Dev shortcut: ?go=free|story[&char=id] skips the screens straight into a battle.
 import * as THREE from 'three';
@@ -75,13 +76,15 @@ function step() {
 }
 
 let lastRenderFrame = 0;
-function render() {
-  const dt = Math.min(10, Math.max(0, (game.frame - lastRenderFrame) / 60));
+/** real: wall-clock dt while a screen is up (the field idles behind it: fires, flags, cloth keep moving); battle: sim time. */
+function render(real) {
+  const dt = real ?? Math.min(10, Math.max(0, (game.frame - lastRenderFrame) / 60));
   lastRenderFrame = game.frame;
   heroView.update(Math.min(dt, 0.1));
   crowdView.update(dt);
   vfx.update(dt);
   camRig.update(dt);
+  screens[state]?.view?.(scene, camRig.camera, camRig.focus, dt);   // ui lane: a screen may frame the idle field itself
   world.update(dt, camRig.focus);
   musouView.update(dt);
   post.render(scene, camRig.camera, game.frame / 60, camRig.focus, vfx.flash);   // post-fx: DoF focus + screen flash
@@ -148,10 +151,10 @@ let acc = 0, last = performance.now();
 const frame = (now) => {
   requestAnimationFrame(frame);
   // clamp at 0 too: the first rAF timestamp can precede the performance.now() taken at module init
-  acc += Math.min(0.1, Math.max(0, (now - last) / 1000));
-  last = now;
+  const d = Math.min(0.1, Math.max(0, (now - last) / 1000));
+  acc += d; last = now;
   if (paused) { acc = 0; input.sample(); return; }
-  if (state !== 'battle') { acc = 0; input.sample(); render(); return; }      // screens: the field idles behind them
+  if (state !== 'battle') { acc = 0; input.sample(); render(d); return; }     // screens: the field idles behind them
   let n = 0;
   while (acc >= 1 / 60 && n < 4 && state === 'battle') { step(); acc -= 1 / 60; n++; }
   if (n === 4) acc = 0;
