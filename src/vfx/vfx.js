@@ -18,6 +18,7 @@ import { mergeVoxel } from '../core/voxel.js';
 import { heroPose } from '../hero/hero.js';
 import { POSE_SIZE, spearWorld } from '../hero/rig.js';
 import { lensClear } from '../camera/occlusion.js';        // camera part (r3): debris never blocks the lens
+import { ground } from '../world/map.js';                  // effects live in sim space (y above ground); lifted at draw
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
 const _d = new THREE.Vector3(), _up = new THREE.Vector3(0, 0, 1), _c = new THREE.Color();
@@ -348,7 +349,7 @@ function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = 
         p.life[i] -= dtAll;
       }
       const k = p.kind[i], u = p.life[i] / p.max[i];
-      _p.set(p.x[i], p.y[i], p.z[i]);
+      _p.set(p.x[i], p.y[i] + ground(p.x[i], p.z[i]), p.z[i]);          // particles live in sim space (y above ground)
       if (k === 0) {
         _d.set(p.vx[i], p.vy[i], p.vz[i]);
         const sp = _d.length();
@@ -420,7 +421,7 @@ export function createVfx(scene, game, world) {
   let ringNext = 0;
   const ring = (x, z, r, dur, rgb) => {
     const m = rings[ringNext]; ringNext = (ringNext + 1) % rings.length;
-    m.position.set(x, 0.06, z); m.userData = { f0: now(), dur }; m.visible = true; m.scale.setScalar(r);
+    m.position.set(x, ground(x, z) + 0.06, z); m.userData = { f0: now(), dur }; m.visible = true; m.scale.setScalar(r);
     m.material.uniforms.uColor.value.setRGB(rgb[0], rgb[1], rgb[2]);
     m.material.uniforms.uU.value = 0;
   };
@@ -461,7 +462,7 @@ export function createVfx(scene, game, world) {
       }
       const L = B.len[i];
       _ax.set(B.dx[i], B.dy[i], B.dz[i]);
-      _st.set(B.sx[i], B.sy[i], B.sz[i]).addScaledVector(_ax, L * a0);
+      _st.set(B.sx[i], B.sy[i] + ground(B.sx[i], B.sz[i]), B.sz[i]).addScaledVector(_ax, L * a0);
       _ax.multiplyScalar(L * Math.max(0.01, a1 - a0));
       // x column = any perpendicular with length w (shader only reads its length)
       _sd.set(0, 1, 0).cross(_ax); if (_sd.lengthSq() < 1e-8) _sd.set(1, 0, 0); _sd.setLength(w);
@@ -492,7 +493,7 @@ export function createVfx(scene, game, world) {
       if (i === 0) { St.x[0] = tipNow.x; St.y[0] = tipNow.y; St.z[0] = tipNow.z; }
       const s = St.size[i] * (i === 0 ? 0.6 + 0.4 * Math.sin(u * Math.PI) : stars.aF.array[i * 3 + 2] ? Math.min(1, 0.8 + u * 3)   // burst: full on the contact frame
         : Math.min(1, 0.45 + u * 4) * (1 - 0.3 * u));
-      stars.mesh.setMatrixAt(i, _m.compose(_p.set(St.x[i], St.y[i], St.z[i]), _q.identity(), _s.set(s, s, s)));
+      stars.mesh.setMatrixAt(i, _m.compose(_p.set(St.x[i], St.y[i] + ground(St.x[i], St.z[i]), St.z[i]), _q.identity(), _s.set(s, s, s)));
       stars.aF.array[i * 3] = i === 0 ? u * 0.6 : u;
     }
     stars.mesh.instanceMatrix.needsUpdate = true; stars.aF.needsUpdate = true;
@@ -515,10 +516,10 @@ export function createVfx(scene, game, world) {
       side: THREE.DoubleSide, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor }));   // premultiplied over
     m.frustumCulled = false; m.renderOrder = edge ? 9 + edge : 0;
     if (!edge) m.onBeforeRender = (r, sc, cam) => {   // render camera, read by rocks/dustColumn and the ribbon's depth pull
-      camPos.copy(cam.position);
-      const h = game.hero;
-      heroA.value.set(h.x, h.y + 0.05, h.z).applyMatrix4(cam.matrixWorldInverse);
-      heroB.value.set(h.x, h.y + 1.85, h.z).applyMatrix4(cam.matrixWorldInverse);
+      const h = game.hero, gy = ground(h.x, h.z);
+      camPos.copy(cam.position); camPos.y -= gy;                   // sim space, like every effect position
+      heroA.value.set(h.x, h.y + gy + 0.05, h.z).applyMatrix4(cam.matrixWorldInverse);
+      heroB.value.set(h.x, h.y + gy + 1.85, h.z).applyMatrix4(cam.matrixWorldInverse);
     };
     scene.add(m);
   }
@@ -895,15 +896,16 @@ export function createVfx(scene, game, world) {
   function buildTrail() {
     while (samples.length && clock - samples[0].c > LIFE) samples.shift();
     let v = 0;
+    const gy = ground(game.hero.x, game.hero.z);                     // samples are sim space: lift onto the ground here
     const put = (b, t, age, g, hue, dead = false, fk = 0) => {
       if (v >= MAXV - 1) return;
       const a = Math.min(1, Math.max(0, age / LIFE));
       const k = 0.82 * a ** 1.25 * (1 - 0.75 * fk);   // crescent: the inner edge closes onto the tip path toward the tail (a flat spin keeps its width: disc)
       let o = v * 3, q = v * 4;
-      tpos[o] = b.x + (t.x - b.x) * k; tpos[o + 1] = b.y + (t.y - b.y) * k; tpos[o + 2] = b.z + (t.z - b.z) * k;
+      tpos[o] = b.x + (t.x - b.x) * k; tpos[o + 1] = gy + b.y + (t.y - b.y) * k; tpos[o + 2] = b.z + (t.z - b.z) * k;
       tat[q] = dead ? 1 : a; tat[q + 1] = 0; tat[q + 2] = dead ? 0 : g; tat[q + 3] = hue;
       v++; o += 3; q += 4;
-      tpos[o] = t.x; tpos[o + 1] = t.y; tpos[o + 2] = t.z;
+      tpos[o] = t.x; tpos[o + 1] = gy + t.y; tpos[o + 2] = t.z;
       tat[q] = dead ? 1 : a; tat[q + 1] = 1; tat[q + 2] = dead ? 0 : g; tat[q + 3] = hue;
       v++;
     };

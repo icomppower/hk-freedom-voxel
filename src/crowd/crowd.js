@@ -51,7 +51,7 @@ export const CROWD = {
   wave: [8, 15], waveEvery: [45, 110], waveDist: [16, 26],   // columns every 0.75 s below half strength, else 1.8 s
 };
 const DT = 1 / 60;
-const CELL = 1.2, GRID = 128, HALF = GRID * CELL / 2;
+const CELL = 1.2, GRID = 400, HALF = GRID * CELL / 2;           // ±240 m: the whole 定軍山 field (world/map.js)
 const MAXSQ = 64;
 
 export function createCrowd(game, grunts) {

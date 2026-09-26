@@ -12,9 +12,11 @@ import * as THREE from 'three';
 import { on } from '../core/events.js';
 import { vrng, hash01 } from '../core/rng.js';
 import { MUSOU, dragonAt, dragonArc } from './musou.js';
+import { ground } from '../world/map.js';
 
 const _m = new THREE.Matrix4(), _l = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _v = new THREE.Vector3(), _c = new THREE.Color();
+const _cam = new THREE.Vector3();                           // camera in the view's sim space (y above the ground under him)
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0), UP = new THREE.Vector3(0, 1, 0), FWD = new THREE.Vector3(0, 0, 1);
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const ramp = (t, a, b) => clamp01((t - a) / (b - a));
@@ -271,7 +273,7 @@ export function createMusouView(parent, game, camera) {
     // max-size DOF disc; they switch off/on exactly on the hard cuts)
     const moteK = t >= M.closeup && t < M.chase ? 0 : ramp(t, 1, 5) * (1 - ramp(t, M.chase + 4, M.chase + 20));
     const streak = ramp(t, M.chase, M.chase + 6) * 7;
-    const cam = camera.position, dist = (x, y, z) => Math.hypot(x - cam.x, y - cam.y, z - cam.z);
+    const cam = _cam.copy(camera.position).setY(camera.position.y - scene.position.y), dist = (x, y, z) => Math.hypot(x - cam.x, y - cam.y, z - cam.z);
     const near = (x, y, z) => ramp(dist(x, y, z), 0.9, 2.2);                                       // no blocks in the lens
     const hy = hero.yaw, still = t < M.chase;
     for (let i = 0; i < NM; i++) {
@@ -354,7 +356,7 @@ export function createMusouView(parent, game, camera) {
     const rgb = (d) => `rgb(${mul(d[0], C[0])},${mul(d[1], C[1])},${mul(d[2], C[2])})`;
     show(dimEl, dim + cool > 0.003 ? 1 : 0);
     if (dim > 0.003) {
-      _p.set(hero.x, t < M.closeup ? 1.1 : 1.5, hero.z).project(camera);
+      _p.set(hero.x, (t < M.closeup ? 1.1 : 1.5) + scene.position.y, hero.z).project(camera);
       const hx = (clamp01(_p.x * 0.5 + 0.5) * 100).toFixed(1), hy = ((1 - clamp01(_p.y * 0.5 + 0.5)) * 100).toFixed(1);
       setStyle(dimEl, 'background', `radial-gradient(ellipse 30% 58% at ${hx}% ${hy}%, ${rgb([150, 182, 222])} 0%, ` +
         `${rgb([84, 118, 165])} 55%, ${rgb([48, 72, 112])} 100%)`);
@@ -369,7 +371,7 @@ export function createMusouView(parent, game, camera) {
     // ray centre: contact point, then the finisher (Zhao Yun)
     if (f >= 0) _p.set(hero.x, 1.4, hero.z);
     else { mu.toWorld([0, 1.3, 2.2], W3); _p.set(W3[0], W3[1], W3[2]); }
-    _p.project(camera);
+    _p.y += scene.position.y; _p.project(camera);
     const cx = clamp01(_p.x * 0.5 + 0.5), cy = clamp01(_p.y * 0.5 + 0.5);
     show(washEl, wash);
     if (wash > 0) setStyle(washEl, 'background', flash ? '#fff' :
@@ -383,7 +385,7 @@ export function createMusouView(parent, game, camera) {
     if (add.visible) {
       u.uC.value.set(cx, cy); u.uAspect.value = camera.aspect; u.uTime.value = time;
       camera.getWorldDirection(_v);
-      _p.set(W3[0], W3[1], W3[2]).addScaledVector(_v, 3.5).project(camera);
+      _p.set(W3[0], W3[1] + scene.position.y, W3[2]).addScaledVector(_v, 3.5).project(camera);
       u.uDepth.value = Math.min(0.99999, _p.z);
     }
     // burst light on the camera side of the action, so the launched bodies are front-lit teal, not silhouettes
@@ -411,6 +413,7 @@ export function createMusouView(parent, game, camera) {
   return {
     update(dt) {
       time += dt;
+      scene.position.y = ground(hero.x, hero.z);                // sim space → the terrain under him (world/map.js)
       if (warm > 0 && tv < 0) { warm--; addU.uRays.value = 0; add.visible = fx.visible = dragon.visible = sh.m.visible = true; return; }
       if (mu.active) tv = mu.t;
       else if (tv >= 0) { tv += dt * 60; if (tv > MUSOU.end + 50) tv = -1; }
