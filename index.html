@@ -358,13 +358,14 @@
   /* narrow windows (≤ 4:3): tighter band so the officers keep the right half */
   @media (max-aspect-ratio: 4/3) {
     .t-band { left: 4rem; }
-    .t-logo h1 { font-size: 16rem; }
+    .t-logo h1 { font-size: 14rem; }
     .t-menu b { font-size: 3.6rem; }
     .t-press { top: 30rem; }
     #title .t-veil { background:
       linear-gradient(90deg, rgba(9,6,4,.95) 0, rgba(9,6,4,.88) 22rem, rgba(9,6,4,.6) 40rem, rgba(9,6,4,0) 60rem),
       linear-gradient(0deg, rgba(8,5,4,.92) 0, rgba(8,5,4,.55) 9rem, transparent 18rem), linear-gradient(rgba(8,5,4,.55), transparent 11rem); }
     #title .ui-foot { left: 4rem; right: 3rem; gap: 2rem; }
+    .t-tag { display: none; }   /* the pair is small beside the band here: the tags would sit on the bodies */
   }
 
   /* ---- select: live officer on the right, roster + info in the ink band */
