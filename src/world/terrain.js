@@ -1,6 +1,7 @@
 // Terrain of the 定軍山 field (render-only, built once from the map grid in map.js):
 //  · ground: one textured plane over the whole 2 m grid, heights = ground(), vertex colours for dust drifts, paving
-//    joints, damp river banks, scorched earth and bare rock on the high ground;
+//    joints, damp river banks, scorched earth, cliff-foot AO and bare rock on the high ground, with a dry-grass map
+//    splatted in by grassAt() (+ instanced wind-swayed tufts, boulders at the cliff feet);
 //  · cliffs: 2 m voxel rock columns on every node outside the walkable edge, stepped in 1 m courses — tall and sheer
 //    along the pass (DW8's canyon stages), low ridges round the camp plateau, gentle hills round the ford, a drop on
 //    the summit's rim (the vista). Only exposed faces are built, so a camera that slips inside a cliff sees through it;
@@ -59,7 +60,7 @@ function groundTexture() {
   const c = document.createElement('canvas'); c.width = c.height = SZ;
   const g = c.getContext('2d');
   const r = makeRng(99);
-  g.fillStyle = '#927c6c'; g.fillRect(0, 0, SZ, SZ);                        // pale dust: bright between the dark cobbles (low chroma: the warm sun and grade add the peach)
+  g.fillStyle = '#86725f'; g.fillRect(0, 0, SZ, SZ);                        // pale dust: bright between the dark cobbles (low chroma: the warm sun and grade add the peach)
   for (let i = 0; i < 160; i++) {                                            // tone blotches (dust / damp)
     const x = r.int(0, SZ), y = r.int(0, SZ), rad = r.range(30, 110), light = r.chance(0.55);
     const gr = g.createRadialGradient(x, y, 0, x, y, rad);
@@ -96,14 +97,78 @@ function groundTexture() {
   return t;
 }
 
+/**
+ * Dry golden-olive grass mask 0..1 on the open ground: gone on the road and the paving, trampled into patches where
+ * the fight runs, lush on the river banks, bare in the Wei camp's plaza/courtyard. Also seeds the grass tufts.
+ */
+function grassAt(x, z) {
+  const k = Math.round((x - X0) / S) + Math.round((z - Z0) / S) * NX, inside = G.in[k] ?? -9;
+  let g = smooth(0.2, 0.52, noise2(x * 0.05 + 13, z * 0.05 - 7, 41));
+  g *= smooth(2.5, 7.5, routeDist(x, z)) * (1 - paveMask(x, z));
+  if (inside > 5) g *= 0.5 + 0.5 * smooth(0.42, 0.7, noise2(x * 0.11, z * 0.11, 43));   // trampled where the fight runs
+  const dz = Math.abs(z - riverZ(x));
+  g = Math.max(g, (1 - smooth(8, 15, dz)) * smooth(4.4, 6.2, dz));              // lush banks, not in the water
+  if (z > 74 && z < 142 && x > -44 && x < 7) g *= 0.15;                         // the Wei camp: beaten earth
+  return g;
+}
+
+function grassTexture() {
+  // 8 m tile of dry grass seen from above: olive ground cover, dense 1×3 texel blades in straw gold / sage / deep olive,
+  // dark gaps. Alpha = a blade-height noise, used to break the grass/dirt edge into ragged tufts (not a smooth blend).
+  const SZ = 256, c = document.createElement('canvas'); c.width = c.height = SZ;
+  const g = c.getContext('2d'), r = makeRng(313);
+  g.fillStyle = '#4c5030'; g.fillRect(0, 0, SZ, SZ);
+  const COLS = ['#6c7040', '#7d7a44', '#5a6036', '#948648', '#454a2a', '#687244', '#a08e52'];   // olive, sage, a little straw
+  for (let i = 0; i < 9000; i++) { g.fillStyle = COLS[r.int(0, COLS.length - 1)]; g.fillRect(r.int(0, SZ - 1), r.int(0, SZ - 1), 1, r.int(2, 4)); }
+  // (a DataTexture, not the canvas: a canvas premultiplies, which would crush the colour under a low alpha)
+  const d = new Uint8Array(g.getImageData(0, 0, SZ, SZ).data);
+  for (let y = 0; y < SZ; y++) for (let x = 0; x < SZ; x++) {
+    const n = 0.5 * Math.sin(x * 0.19 + Math.sin(y * 0.13) * 2) * Math.sin(y * 0.23 + Math.sin(x * 0.11) * 2) + 0.5;
+    d[(y * SZ + x) * 4 + 3] = Math.min(255, (n * 0.6 + hash01(x, y, 7) * 0.4) * 255);
+  }
+  const t = new THREE.DataTexture(d, SZ, SZ);
+  t.generateMipmaps = true; t.needsUpdate = true;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
+
+/** Ground splat: dirt map × vertex tone (drifts, AO, scorch, damp banks, rock dust) with the grass map blended in by
+ *  aGrass, its edge broken by the grass alpha into ragged tufts, plus a world-space macro tone so no tile repeats. */
+function splatMaterial(map, grass) {
+  const m = new THREE.MeshStandardMaterial({ map, vertexColors: true, roughness: 0.96 });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.tGrass = { value: grass };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aGrass; varying float vGrass; varying vec2 vGw;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGrass = aGrass; vGw = position.xz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D tGrass; varying float vGrass; varying vec2 vGw;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        vec4 gT = texture2D(tGrass, vGw / 8.0);
+        float gF = texture2D(tGrass, vGw / 61.0 + 0.37).a;                       // macro: lusher / drier patches
+        float gm = smoothstep(0.42, 0.58, vGrass + (gT.a - 0.5) * 0.55);
+        vec3 grassC = gT.rgb * mix(vec3(0.82, 0.92, 0.7), vec3(1.05, 1.0, 0.72), gF);
+        diffuseColor.rgb = mix(diffuseColor.rgb * (0.88 + 0.24 * gF), grassC, gm);`);
+  };
+  return m;
+}
+
 function groundMesh(scorch) {
-  const tex = groundTexture();
+  const tex = groundTexture(), grass = grassTexture();
   const out = new THREE.Group();
   const W = (NX - 1) * S, D = (NZ - 1) * S;
   const geo = new THREE.PlaneGeometry(W, D, NX - 1, NZ - 1);
   geo.rotateX(-Math.PI / 2);
   geo.translate(X0 + W / 2, 0, Z0 + D / 2);
-  const p = geo.attributes.position, col = new Float32Array(p.count * 3);
+  const p = geo.attributes.position, col = new Float32Array(p.count * 3), gr = new Float32Array(p.count);
+  const nearRock = (i, j) => {                                                   // AO: ground at a cliff foot
+    let n = 0;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const ii = i + di, jj = j + dj, kk = ii + jj * NX;
+      if (ii >= 0 && jj >= 0 && ii < NX && jj < NZ && TOP[kk] > G.h[kk] + 1) n++;   // NaN compares false
+    }
+    return n;
+  };
   for (let v = 0; v < p.count; v++) {
     const x = p.getX(v), z = p.getZ(v), i = Math.round((x - X0) / S), j = Math.round((z - Z0) / S), k = i + j * NX;
     const h = G.h[k], t = TOP[k];
@@ -111,28 +176,128 @@ function groundMesh(scorch) {
     const dust = noise2(x * 0.045 + 40, z * 0.045, 9);
     let kk = 1.04 + (dust - 0.5) * 0.85;                                       // broad dust drifts vs darker trampled earth
     kk *= 1 - 0.28 * paveMask(x, z);                                           // dark joints under the paving
-    for (const [sx, sz, ss] of scorch) kk *= 1 - 0.5 * Math.exp(-((x - sx) ** 2 + (z - sz) ** 2) / (9 * ss * ss));   // scorched earth
+    let sc = 0;
+    for (const [sx, sz, ss] of scorch) sc = Math.max(sc, Math.exp(-((x - sx) ** 2 + (z - sz) ** 2) / (9 * ss * ss)));
+    kk *= 1 - 0.55 * sc;                                                       // scorched earth
     const wet = 1 - smooth(5, 11, Math.abs(z - riverZ(x)));                   // damp dark banks
     kk *= 1 - 0.3 * wet;
+    kk *= 1 - 0.1 * (1 - smooth(0, 4.5, routeDist(x, z)));                    // the road: worn darker by the march
+    kk *= 1 - 0.09 * Math.min(4, nearRock(i, j));                              // contact shadow at the cliff foot
     const rock = smooth(1, 6, h - 3 - z / 18) * (1 - smooth(-6, -1, G.in[k]) * 0.4);   // high ground: bare, cooler rock dust
-    col[v * 3] = kk * (1.03 - 0.1 * wet - 0.06 * rock); col[v * 3 + 1] = kk * (1 - 0.02 * wet); col[v * 3 + 2] = kk * (0.96 + 0.04 * wet + 0.05 * rock);
+    col[v * 3] = kk * (1.03 - 0.1 * wet - 0.08 * rock); col[v * 3 + 1] = kk * (1 - 0.02 * wet); col[v * 3 + 2] = kk * (0.94 + 0.04 * wet + 0.08 * rock);
+    gr[v] = grassAt(x, z) * (1 - sc) * (1 - 0.6 * rock);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aGrass', new THREE.BufferAttribute(gr, 1));
   geo.computeVertexNormals();
   const t1 = tex.clone(); t1.needsUpdate = true; t1.repeat.set(W / 24, D / 24);
-  const inner = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: t1, vertexColors: true, roughness: 0.96 }));
+  const inner = new THREE.Mesh(geo, splatMaterial(t1, grass));
   inner.receiveShadow = true;
   inner.name = 'ground';
   out.add(inner);
+  // the plain beyond the grid: dry grassland (the grass map, dimmed) under the haze
   const og = new THREE.PlaneGeometry(2400, 2400, 8, 8); og.rotateX(-Math.PI / 2);
-  const t2 = tex.clone(); t2.needsUpdate = true; t2.repeat.set(2400 / 24, 2400 / 24);
-  const outer = new THREE.Mesh(og, new THREE.MeshStandardMaterial({ map: t2, color: 0xf2e6e0, roughness: 0.97 }));
+  const t2 = grass.clone(); t2.needsUpdate = true; t2.repeat.set(2400 / 8, 2400 / 8);
+  const outer = new THREE.Mesh(og, new THREE.MeshStandardMaterial({ map: t2, color: 0xc9bfa0, roughness: 0.97 }));
   outer.position.set(0, -0.6, 30);                                             // under the grid (its rim settles to 0)
   out.add(outer);
   return out;
 }
 
+/**
+ * Grass tufts (one instanced mesh): two crossed quads with a pixel-art blade cutout, rooted where grassAt() is dense,
+ * swaying in the valley wind in the vertex shader (GRASS_TIME, advanced by world.js). Normals point up so they light
+ * like the ground they grow from. Never on the road or the water; ≤ 0.7 m so nothing hides the fight.
+ */
+export const GRASS_TIME = { value: 0 };
+function tufts() {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 16;
+  const g = cv.getContext('2d');
+  for (let b = 0; b < 7; b++) {                                                 // blades: leaning, tapering
+    const x0 = 1 + b * 2 + (b % 2), h = 9 + ((b * 5) % 7), lean = (b % 3) - 1;
+    for (let y = 0; y < h; y++) {
+      const t = y / h, x = Math.round(x0 + lean * t * t * 3);
+      g.fillStyle = `rgb(${190 + 60 * t | 0},${190 + 50 * t | 0},${160 + 30 * t | 0})`;
+      g.fillRect(x, 15 - y, y < h * 0.5 ? 2 : 1, 1);
+    }
+  }
+  const map = new THREE.CanvasTexture(cv);
+  map.magFilter = THREE.NearestFilter; map.minFilter = THREE.NearestFilter; map.generateMipmaps = false; map.colorSpace = THREE.SRGBColorSpace;
+  const q1 = new THREE.PlaneGeometry(1, 1), q2 = new THREE.PlaneGeometry(1, 1);
+  q1.translate(0, 0.5, 0); q2.translate(0, 0.5, 0); q2.rotateY(Math.PI / 2);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([...q1.attributes.position.array, ...q2.attributes.position.array], 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute([...q1.attributes.uv.array, ...q2.attributes.uv.array], 2));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(Array.from({ length: 8 }, () => [0, 1, 0]).flat(), 3));
+  geo.setIndex([...q1.index.array, ...[...q2.index.array].map((i) => i + 4)]);
+  const mat = new THREE.MeshStandardMaterial({ map, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = GRASS_TIME;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec2 gp = instanceMatrix[3].xz;
+        float gw = sin(uTime * 1.9 + gp.x * 0.21 + gp.y * 0.13) * 0.6 + sin(uTime * 3.3 + gp.x * 0.7) * 0.25 + 0.35;
+        transformed.xz += vec2(0.75, 0.55) * gw * 0.22 * uv.y * uv.y;`);
+  };
+  const r = makeRng(404), spots = [];
+  for (let n = 0; n < 80000 && spots.length < 9000; n++) {
+    const x = r.range(X0 + 4, X0 + (NX - 1) * S - 4), z = r.range(-160, 222);
+    const k = Math.round((x - X0) / S) + Math.round((z - Z0) / S) * NX;
+    if (TOP[k] > G.h[k] || G.in[k] < -1.2 || Math.abs(z - riverZ(x)) < 4.8) continue;   // not in the rock or the water
+    const gm = grassAt(x, z);
+    if (r.next() > (gm - 0.35) * 2.2) continue;
+    spots.push([x, z, gm]);
+  }
+  const mesh = new THREE.InstancedMesh(geo, mat, spots.length);
+  const m = new THREE.Matrix4(), qq = new THREE.Quaternion(), e = new THREE.Euler(), pp = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
+  const TINTS = [0x8e9070, 0xa09a78, 0x80896a, 0xaa9e7a, 0x8a8e6e];   // olive-sage, blue kept in: the warm sun + grade add the gold
+  spots.forEach(([x, z, gm], i) => {
+    const w = r.range(0.45, 0.8), hgt = r.range(0.32, 0.62) * (0.7 + 0.5 * gm);
+    mesh.setMatrixAt(i, m.compose(pp.set(x, ground(x, z) - 0.03, z), qq.setFromEuler(e.set(0, r.range(0, 3.14), 0)), sc.set(w, hgt, w)));
+    mesh.setColorAt(i, c.set(TINTS[r.int(0, TINTS.length - 1)]).multiplyScalar(r.range(0.8, 1.05)));
+  });
+  mesh.receiveShadow = true;
+  mesh.name = 'grass';
+  return mesh;
+}
+
+/** Boulders at the cliff feet and along the field's edges (low-poly, flat shaded; only outside the walkable edge). */
+function boulders() {
+  const r = makeRng(505), list = [];
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+    const k = i + j * NX, f = G.in[k];
+    if (f > -0.4 || f < -3.5 || hash01(i, j, 91) > 0.16) continue;
+    const x = X0 + i * S + r.range(-0.8, 0.8), z = Z0 + j * S + r.range(-0.8, 0.8);
+    if (Math.abs(z - riverZ(x)) < 6) continue;
+    list.push([x, z, r.range(0.4, 1.3) * (hash01(i, j, 92) < 0.15 ? 1.8 : 1)]);
+  }
+  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true }), list.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
+  const COLS = [0x806a5e, 0x6e5d55, 0x8c7a6a, 0x756a5a];
+  list.forEach(([x, z, s], i) => {
+    mesh.setMatrixAt(i, m.compose(p.set(x, topAt(x, z) + s * 0.25, z), q.setFromEuler(e.set(r.range(0, 3), r.range(0, 3), r.range(0, 3))), sc.set(s * r.range(0.9, 1.4), s * r.range(0.55, 0.85), s * r.range(0.9, 1.3))));
+    mesh.setColorAt(i, c.set(COLS[r.int(0, 3)]).multiplyScalar(r.range(0.8, 1.1)));
+  });
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.name = 'boulders';
+  return mesh;
+}
+
 // ---------------------------------------------------------------- cliffs
+/** World-space voxel grain: every `cell` m texel of the surface gets its own ± amt/2 value (chiselled rock up close,
+ *  averaged away by mips of distance/DoF). Non-instanced meshes. */
+export function voxelGrain(mat, cell, amt) {
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vGrainP;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGrainP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vGrainP;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        vec3 gCell = floor(vGrainP / ${cell.toFixed(3)} + 0.25);                // + 0.25: faces sit on cell boundaries
+        diffuseColor.rgb *= 1.0 + (fract(sin(dot(gCell, vec3(12.9898, 78.233, 37.719))) * 43758.5453) - 0.5) * ${amt.toFixed(3)};`);
+  };
+  return mat;
+}
+
 /**
  * Voxel mesher over TOP: a top quad per column and, on each side, the face down to the lower neighbour (or into the
  * ground beside it) in ≤ 2 m courses, so the strata banding lands on every course. Warm mauve-brown rock that the
@@ -141,10 +306,12 @@ function groundMesh(scorch) {
 function cliffs() {
   const pos = [], nor = [], col = [], idx = [];
   // tops a shade darker than the valley dust (the low sun lights them flat-on: a paler top reads as snow)
-  const c = new THREE.Color(), ROCK = new THREE.Color(0x735a50), DARK = new THREE.Color(0x4a3a37), TOPC = new THREE.Color(0x7d6656), MOSS = new THREE.Color(0x5a5a3c);
-  const quad = (a, b, cc, d, n) => {
+  const c = new THREE.Color(), ROCK = new THREE.Color(0x735a50), DARK = new THREE.Color(0x4a3a37), TOPC = new THREE.Color(0x7d6656), MOSS = new THREE.Color(0x5a5a3c), GRASSY = new THREE.Color(0x6f6c3e);
+  // ao: [bottom, top] brightness of a face quad (vertex order: bottom pair, top pair) — baked voxel AO: dark at the foot
+  // of every face, a sunlit lip on the top course
+  const quad = (a, b, cc, d, n, ao = [1, 1]) => {
     const o = pos.length / 3;
-    for (const q of [a, b, cc, d]) { pos.push(q[0], q[1], q[2]); nor.push(n[0], n[1], n[2]); col.push(c.r, c.g, c.b); }
+    [a, b, cc, d].forEach((q, vi) => { const k = vi < 2 ? ao[0] : ao[1]; pos.push(q[0], q[1], q[2]); nor.push(n[0], n[1], n[2]); col.push(c.r * k, c.g * k, c.b * k); });
     idx.push(o, o + 1, o + 2, o, o + 2, o + 3);
   };
   const lowAt = (i, j) => {                                                    // neighbour's surface (outside the grid: below the plain)
@@ -158,7 +325,8 @@ function cliffs() {
     const k = i + j * NX, t = TOP[k];
     if (Number.isNaN(t)) continue;
     const x = X0 + i * S, z = Z0 + j * S, v = hash01(i, j, 17), rise = t - G.h[k];
-    c.copy(rise > 7 && v < 0.35 ? MOSS : TOPC).multiplyScalar(0.84 + v * 0.26);
+    const grassy = noise2(x * 0.06 + 5, z * 0.06, 77) > 0.5;                 // patches of dry grass on the lower shelves
+    c.copy(rise > 7 && v < 0.35 ? MOSS : grassy && rise < 14 ? GRASSY : TOPC).multiplyScalar(0.84 + v * 0.26);
     quad([x - hs, t, z + hs], [x + hs, t, z + hs], [x + hs, t, z - hs], [x - hs, t, z - hs], [0, 1, 0]);
     for (const [di, dj, n] of SIDES) {
       const lo = lowAt(i + di, j + dj);
@@ -170,7 +338,7 @@ function cliffs() {
         const y0 = Math.max(lo, Math.ceil(y1 - 2));
         const band = 0.5 + 0.5 * Math.sin(y0 * 1.9 + noise2(x * 0.1, z * 0.1, 3) * 4);   // strata
         c.copy(ROCK).lerp(DARK, band * 0.55 + (y1 < t ? 0.1 : 0)).multiplyScalar(0.86 + hash01(i * 7 + di, j * 7 + dj, y0 | 0) * 0.2);
-        quad([p0x, y0, p0z], [p1x, y0, p1z], [p1x, y1, p1z], [p0x, y1, p0z], n);
+        quad([p0x, y0, p0z], [p1x, y0, p1z], [p1x, y1, p1z], [p0x, y1, p0z], n, [y0 <= lo ? 0.5 : 0.9, y1 >= t ? 1.14 : 1]);
         y1 = y0;
       }
     }
@@ -181,7 +349,7 @@ function cliffs() {
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   geo.setIndex(idx);
   geo.computeBoundingSphere();
-  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }));
+  const m = new THREE.Mesh(geo, voxelGrain(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }), 0.5, 0.2));
   m.receiveShadow = true;
   m.name = 'cliffs';
   return m;
@@ -258,8 +426,8 @@ function river() {
  */
 function cobbles() {
   const r = makeRng(11), C = 0.42, B = 10, list = [];                          // 10 cells ≈ 4.2 m blocks
-  const DUST = new THREE.Color(0xb8a597);
-  const PAL = [0x675650, 0x60504b, 0x6d5b54, 0x5b4b47, 0x6f5d54, 0x64544e];   // dark stone ≈ the concept's #5c433a–#614549 once lit and graded
+  const DUST = new THREE.Color(0xa99a8c);
+  const PAL = [0x625c5a, 0x5a5553, 0x6a625c, 0x55504e, 0x6d645c, 0x5e5856];   // grey-brown stone: cool against the warm dirt
   const taken = new Uint8Array(B * B);
   for (let bz = Z0; bz < Z0 + (NZ - 1) * S; bz += B * C) for (let bx = X0; bx < X0 + (NX - 1) * S; bx += B * C) {
     const cx = bx + B * C / 2, cz = bz + B * C / 2;
@@ -372,9 +540,9 @@ function ringNoise(n, seed) {
 const MZ = 30, PEAK_A = -0.1;
 function mountains() {
   const layers = [
-    { r: 330, lo: 8, hi: 40, col: 0x4f4555, haze: 0.3, seed: 3, peak: 34 },
-    { r: 480, lo: 16, hi: 64, col: 0x5b516a, haze: 0.44, seed: 7, peak: 0 },
-    { r: 680, lo: 30, hi: 112, col: 0x696383, haze: 0.58, seed: 13, peak: 0 },
+    { r: 330, lo: 8, hi: 40, col: 0x474a5c, haze: 0.3, seed: 3, peak: 34 },
+    { r: 480, lo: 16, hi: 64, col: 0x53576e, haze: 0.44, seed: 7, peak: 0 },
+    { r: 680, lo: 30, hi: 112, col: 0x646b8a, haze: 0.58, seed: 13, peak: 0 },
   ];
   const pos = [], cols = [];
   const A = 420, L = new THREE.Vector3(SUN_DIR.x, 0.6, SUN_DIR.z).normalize();   // the low sun: north faces backlit
@@ -426,5 +594,5 @@ function mountains() {
 export function buildTerrain(scene, fieldFires) {
   const r = makeRng(61), scorch = fieldFires.map(([x, z, s]) => [x, z, s]);
   for (let i = 0; i < 26; i++) scorch.push([r.range(-40, 40), r.range(-110, 200), r.range(0.5, 0.9)]);
-  scene.add(groundMesh(scorch), cliffs(), pines(), river(), cobbles(), rubble(), mountains());
+  scene.add(groundMesh(scorch), cliffs(), pines(), river(), cobbles(), rubble(), tufts(), boulders(), mountains());
 }

@@ -6,7 +6,7 @@
 // all animation is a pure function of render time.
 import * as THREE from 'three';
 import { SUN_DIR, HAZE, installHaze, createSky } from './sky.js';
-import { buildTerrain } from './terrain.js';
+import { buildTerrain, GRASS_TIME } from './terrain.js';
 import { buildCastle } from './castle.js';
 import { buildDressing } from './dressing.js';
 import { WALL_Z, GATE_X, CAMP_H, GATES, ground } from './map.js';
@@ -24,21 +24,21 @@ export function createWorld(scene) {
   scene.background = HAZE.clone();
   // clear fight disc; haze reaches 63 % 28 + 290 m out (sky.js): the far zones of the 370 m valley stay silhouettes,
   // the summit a dark shoulder under its beacon smoke from the Shu camp
-  scene.fog = new THREE.Fog(HAZE.clone(), 28, 290);
+  scene.fog = new THREE.Fog(HAZE.clone(), 36, 330);
   const sky = createSky();
   scene.add(sky);
 
-  const hemi = new THREE.HemisphereLight(0xaeaac6, 0x8e7a6e, 2.0);  // cool mauve sky fill (neutral enough that shaded brown stone stays brown, not rose), dust bounce
+  const hemi = new THREE.HemisphereLight(0x9cafd4, 0x9a7a5c, 2.2);  // cool dusk-blue sky fill, warm dust bounce (shade reads blue, light gold)
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffdcc0, 3.5);
+  const sun = new THREE.DirectionalLight(0xffcf9a, 4.0);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(2048, 2048); sun.shadow.radius = 2;
   const sc = sun.shadow.camera;
   sc.left = -28; sc.right = 28; sc.top = 28; sc.bottom = -28; sc.near = 1; sc.far = 160;
   sun.shadow.bias = -0.0006;
   sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
-  const rim = new THREE.DirectionalLight(0xffb07a, 1.2);            // warm back/rim light from the visible sun
+  const rim = new THREE.DirectionalLight(0xffa060, 1.6);            // warm back/rim light from the visible sun
   rim.position.copy(SUN_DIR).multiplyScalar(100);
   scene.add(rim);
 
@@ -68,7 +68,7 @@ export function createWorld(scene) {
       tmp.set(Math.round(focus.x / step) * step, ground(focus.x, focus.z), Math.round(focus.z / step) * step);
       sun.target.position.copy(tmp);
       sun.position.copy(LIGHT_DIR).multiplyScalar(70).add(tmp);
-      sky.material.uniforms.uTime.value = t;
+      sky.material.uniforms.uTime.value = t; GRASS_TIME.value = t;
       dressing.update(t, lit);
       castle.update(t);
       for (const id in open) open[id] += ((GATES[id].open ? 1 : 0) - open[id]) * Math.min(1, dt * 3);
