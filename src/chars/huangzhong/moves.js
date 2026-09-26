@@ -82,7 +82,9 @@ export const MOVES = {
   // C6 (N5 → C) explosive fire arrow driven into the ground ≈ 7 m ahead (or at the soft target): the burst launches the
   // whole ring there
   c6: { frames: 90, cancel: 82, dodgeCancel: 40, steer: 12, lunge: [[26, 30, -0.4]], armor: true, tell: 28,
-    shots: [{ f: 28, n: 1, pitch: -9, speed: 48, g: 6, range: 12, pierce: 0, rad: 0.5, home: 30, fire: true, big: 1, groundAim: 7,
+    // (fx r2: pierce 20 — it flies through the bodies in the way and bursts on the ground ≥ 5 m out, not on the first
+    // soldier at his elbow, which buried him in his own fireball)
+    shots: [{ f: 28, n: 1, pitch: -9, speed: 48, g: 6, range: 12, pierce: 20, rad: 0.5, home: 30, fire: true, big: 1, groundAim: 7,
       dmg: 14, kb: 'flinch', force: 2, hitstop: 0,
       burst: { range: 4.8, dmg: 34, kb: 'launch', force: 4, lift: 11, hitstop: 8, heavy: true } }] },
 

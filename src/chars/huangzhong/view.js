@@ -117,10 +117,9 @@ export function createMusouView(parent, game, camera) {
   // ---- Musou energy (fx): bow / arrowhead positions from the rendered pose
   const pose = new Float32Array(POSE_SIZE), hpos = new THREE.Vector3(), tip = new THREE.Vector3(), nock = new THREE.Vector3(), bowTop = new THREE.Vector3();
   let moteAcc = 0, ringAcc = 0, lastT = -1, released = false;
-  let tv = -1, relF = -99, burstF = -99;
+  let tv = -1, burstF = -99;
   on('musou:start', () => { tv = 0; });
   on('musou:burst', () => { burstF = game.frame; });
-  on('arrow:fire', (e) => { if (e.big > 1) relF = game.frame; });
   on('scenario', () => { tv = -1; });
 
   function hideAll() { show(dimEl, 0); show(washEl, 0); show(cut, 0); }
@@ -139,8 +138,8 @@ export function createMusouView(parent, game, camera) {
       setStyle(dimEl, 'background', `radial-gradient(ellipse 34% 62% at ${hx}% ${hy}%, rgb(${mul(252)},${mul(240)},${mul(226)}) 0%, ` +
         `rgb(${mul(186)},${mul(128)},${mul(100)}) 50%, rgb(${mul(70)},${mul(42)},${mul(40)}) 100%)`);
     }
-    const flash = t < 1 ? 0.08 : 0, washR = game.frame - relF < 3 ? 0.3 : 0, washB = game.frame - burstF < 3 ? 0.4 : 0;
-    const wash = Math.max(flash, washR, washB);
+    const flash = t < 1 ? 0.08 : 0, washB = game.frame - burstF < 3 ? 0.45 * (1 - (game.frame - burstF) / 3) : 0;   // fx r2: no release wash (a held fog) — a 2-3 frame white flash on the burst only
+    const wash = Math.max(flash, washB);
     show(washEl, wash);
     if (wash > 0) setStyle(washEl, 'background', flash ? '#fff' : 'radial-gradient(ellipse at 50% 55%, rgba(255,246,226,1) 0%, rgba(255,200,140,.7) 35%, rgba(230,140,80,.3) 100%)');
   }
@@ -233,9 +232,9 @@ export function createMusouView(parent, game, camera) {
         const d = k * 3.2;
         fx.ring(tip.x + fwx * d, tip.y, tip.z + fwz * d, fwx, 0, fwz, 0.4, 1.0 + k * 0.08, 0.06, 0.3, 2.4, 1.8, 0.8, k * 0.035);
       }
-      fx.groundRing(h.x, h.z, 0.6, 7, 0.05, 0.5, 1.6, 1.0, 0.35);
-      for (let k = 0; k < 18; k++) {
-        const a = h.yaw + Math.PI + vrng.range(-1.6, 1.6), v = vrng.range(3, 8);
+      fx.groundRing(h.x, h.z, 0.6, 4, 0.04, 0.4, 0.9, 0.55, 0.2);   // (fx r2: 7 m bright ring = a yellow band across the release lens)
+      for (let k = 0; k < 8; k++) {
+        const a = h.yaw + (k % 2 ? 1 : -1) * vrng.range(1.2, 2), v = vrng.range(3, 8);
         fx.smoke(h.x, 0.2, h.z, 0.5, 2, 0.9, 0.52, 0.4, 0.3, 0.5, Math.sin(a) * v, vrng.range(0.3, 1.2), Math.cos(a) * v, 2.5, 0.3);
       }
     }

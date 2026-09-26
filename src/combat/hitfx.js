@@ -40,7 +40,7 @@ export function patchHitMaterial(mat) {
 }
 
 const HOT = [1.55, 1.53, 1.5], GOLD = [1.0, 0.6, 0.12], AMBER = [1.0, 0.4, 0.07], KILL = [1.0, 0.25, 0.12];   // HOT: 1 + white emissive
-const EMBER = 0.45;                                                // KO'd bodies keep a dim red rim until they land
+const EMBER = 0.3;                                                 // KO'd bodies keep a dim red rim until they land
 /** Tint of soldier i this frame (colour × strength, or HOT on the contact frame), written into out[0..2]. */
 export function hitGlow(crowd, i, out) {
   const fl = crowd.flash[i], ember = crowd.kod[i] && crowd.st[i] === ST.AIR ? EMBER : 0;

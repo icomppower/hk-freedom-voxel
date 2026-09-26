@@ -307,9 +307,11 @@ export function createMusou(game) {
       // coils up around him
       const c = t - M.contact, w = easeOut(Math.min(1, c / 9)), k = smooth((c - 34) / 22);
       const sw = mu.side * PAYOFF_YAW * w;
+      // (fx r2: ≈ 0.5 m higher and looking down a touch more — at 1.1 m the lens sat in the grass tufts, which filled
+      // the bottom half of the frame and hid him)
       Object.assign(o, { id: 3, yaw: offSun(mu.ayaw + sw * (1 - 0.2 * k)),
-        dist: 2.7 + 2.5 * w + 0.5 * Math.min(1, c / 40) + 3.0 * k, pitch: 0.08 - 0.05 * w + 0.12 * k,
-        fov: 54 + 6 * w, height: 0.95 + 0.15 * w + 0.5 * k, side: mu.side * 1.5 * w * (1 - 0.8 * k), shake: 0.5 });
+        dist: 2.7 + 2.5 * w + 0.5 * Math.min(1, c / 40) + 3.0 * k, pitch: 0.08 + 0.06 * w + 0.06 * k,
+        fov: 54 + 6 * w, height: 0.95 + 0.6 * w + 0.3 * k, side: mu.side * 1.5 * w * (1 - 0.8 * k), shake: 0.5 });
     }
     return o;
   };

@@ -4,8 +4,9 @@
 //   glow    camera-facing soft sprite, additive: hot core + halo (flash cores, flame, embers, motes, fireball)
 //   streak  camera-facing ribbon between a head and a tail, additive, soft across and tapered to the tail: velocity
 //           aligned (sparks, falling rain) or fixed (muzzle rays, arrow core / glow trails, beams)
-//   smoke   camera-facing lumpy puff, premultiplied "over" (fire smoke, dust, rain impact field) — shaded from above,
-//           optionally delayed (explosion smoke rolls in behind the fireball)
+//   smoke   camera-facing soft noise puff, premultiplied "over" (fire smoke, dust, rain impact field) — shaded from above,
+//           optionally delayed (explosion smoke rolls in behind the fireball); fire = the same puff with a heat that
+//           cools from a white-hot heart through orange / deep red into dark smoke (fireballs)
 //   ring    oriented ring quad, additive: ground shock rings, air-burst rings on the arrow line, charge rings, markers
 //   decal   flat ground scorch: dark lumpy disc with glowing ember cracks that cool (premultiplied, lit-agnostic)
 //   debris  lit voxel chunks with gravity, one bounce, then sink (earth thrown up by explosions)
@@ -46,6 +47,9 @@ const STREAK_VS = /* glsl */`
     vec4 mv = mix(t, h, u);
     mv.xy += vec2(-sd.y, sd.x) * position.x * aPos.w + sd * (u - 0.5) * aPos.w * 0.8;   // soft round caps
     vUV = vec2(position.x * 2.0, u); vTaper = aDir.w; vCol = aCol; vCol.a *= ${NEAR};
+    float d = length(mv.xyz);
+    mv.xyz *= max(0.3, (d - 1.2) / d);   // fx r2: drawn 1.2 m nearer along the view ray (same pixels): a shot's beam at chest
+                                         // height reads over the rank it tears through instead of vanishing behind it
     gl_Position = projectionMatrix * mv;
   }`;
 const STREAK_FS = /* glsl */`
@@ -57,28 +61,55 @@ const STREAK_FS = /* glsl */`
     if (along * c * vCol.a < 0.003) discard;
     gl_FragColor = vec4(vCol.rgb * c * along * vCol.a, 1.0);
   }`;
+// fx r2: soft, noise-broken puffs (no pixel quantisation: at the lens and under DoF the stepped billows read as a
+// censorship mosaic), lit from above; aHeat = (heat 0..1, age 0..1). heat > 0 = a fire lump: an emissive temperature
+// ramp (white-hot heart → yellow → orange → deep red rim) that cools with age into the dark smoke colour (aCol.rgb), mostly
+// light (low alpha) while hot and occluding once it is smoke — one pool gives the fireball, its dark rim and the smoke
+// rising out of it.
 const SMOKE_VS = /* glsl */`
-  attribute vec4 aPos; attribute vec4 aCol; attribute float aSeed;
-  varying vec4 vCol; varying vec2 vP; varying float vSeed; varying float vSteps;
+  attribute vec4 aPos; attribute vec4 aCol; attribute float aSeed; attribute vec2 aHeat;
+  varying vec4 vCol; varying vec2 vP; varying float vSeed; varying vec2 vHeat;
   void main() {
     vec4 mv = viewMatrix * vec4(aPos.xyz, 1.0);
     mv.xy += position.xy * aPos.w;
     vP = position.xy * 2.0; vCol = aCol; vCol.a *= smoothstep(1.5, 4.0, -mv.z);
-    vSeed = aSeed;
-    vSteps = clamp(aPos.w * 5.0, 5.0, 16.0);
+    vSeed = aSeed; vHeat = aHeat;
     gl_Position = projectionMatrix * mv;
   }`;
 const SMOKE_FS = /* glsl */`
-  varying vec4 vCol; varying vec2 vP; varying float vSeed; varying float vSteps;
+  varying vec4 vCol; varying vec2 vP; varying float vSeed; varying vec2 vHeat;
+  float hs(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hs(i), hs(i + vec2(1.0, 0.0)), f.x), mix(hs(i + vec2(0.0, 1.0)), hs(i + 1.0), f.x), f.y); }
+  vec3 fireRamp(float t) {                                        // linear HDR; orange stays under the grade's shoulder
+    // (kept low: lumps stack, and the grade bleaches anything far over its knee to cream — the heart alone blooms)
+    vec3 c = mix(vec3(0.04, 0.028, 0.024), vec3(0.2, 0.025, 0.004), smoothstep(0.02, 0.2, t));
+    c = mix(c, vec3(0.7, 0.13, 0.012), smoothstep(0.2, 0.45, t));
+    c = mix(c, vec3(1.2, 0.36, 0.04), smoothstep(0.45, 0.75, t));
+    return mix(c, vec3(2.6, 1.8, 0.9), smoothstep(0.85, 1.25, t));
+  }
   void main() {
-    vec2 p = floor(vP * vSteps + 0.5) / vSteps;                  // voxel-pixel billows, like the world's dust
-    float r = length(p), th = atan(p.y, p.x);
-    float edge = 0.82 + 0.12 * sin(3.0 * th + vSeed) + 0.06 * sin(5.0 * th - 1.7 * vSeed);
-    float a = vCol.a * (1.0 - smoothstep(edge - 0.4, edge, r));
-    if (a < 0.01) discard;
-    vec2 q = p / edge; vec3 n = vec3(q, sqrt(max(0.0, 1.0 - dot(q, q))));
-    float sh = 0.6 + 0.5 * max(0.0, dot(n, vec3(0.25, 0.85, 0.45)));
-    gl_FragColor = vec4(vCol.rgb * sh * a, a);
+    float r = length(vP);
+    if (r > 1.0) discard;
+    float ca = cos(vSeed), sa = sin(vSeed);
+    vec2 q = mat2(ca, -sa, sa, ca) * vP;
+    vec2 o = vec2(vSeed * 3.7, vSeed * 1.3 - vHeat.y * 1.2);      // billows churn upward as it ages
+    float n = vn(q * 2.2 + o) * 0.6 + vn(q * 4.7 - o * 1.7) * 0.4;
+    float edge = 0.62 + 0.36 * n;
+    float dens = 1.0 - smoothstep(edge - 0.42, edge, r);
+    dens *= 0.85 + 0.3 * n;
+    float a = vCol.a * dens;
+    if (a < 0.006) discard;
+    vec3 nr = vec3(vP / max(edge, 0.3), 0.0); nr.z = sqrt(max(0.0, 1.0 - dot(nr.xy, nr.xy)));
+    float sh = 0.5 + 0.62 * max(0.0, dot(normalize(nr + vec3(0.0, 0.0, 0.2) * (n - 0.5)), vec3(0.25, 0.85, 0.45)));
+    vec3 col = vCol.rgb * sh * a;
+    if (vHeat.x > 0.001) {
+      float t = vHeat.x * (1.15 - 1.45 * r) * (0.7 + 0.6 * n);      // hot heart (inner ≈ 40 %), a dark churning rim
+      float fire = smoothstep(0.03, 0.3, t);
+      col = mix(col, fireRamp(t) * dens * vCol.a, fire);
+      a *= 1.0 - 0.15 * fire;                                       // opaque enough that the sand behind never pastels it
+    }
+    gl_FragColor = vec4(col, a);
   }`;
 const RING_VS = /* glsl */`
   attribute vec4 aPos; attribute vec4 aNrm; attribute vec4 aCol;
@@ -113,7 +144,7 @@ const DECAL_FS = /* glsl */`
   varying vec4 vCol; varying vec2 vP; varying float vSeed;
   float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
   void main() {
-    vec2 p = floor(vP * 14.0 + 0.5) / 14.0;
+    vec2 p = vP;                                                  // fx r2: soft (stepped read as a black mosaic under the blast)
     float r = length(p), th = atan(p.y, p.x);
     float edge = 0.78 + 0.14 * sin(4.0 * th + vSeed) + 0.08 * sin(7.0 * th - vSeed * 1.3) + 0.08 * (h(p + vSeed) - 0.5);
     float a = vCol.a * (1.0 - smoothstep(edge - 0.45, edge, r));
@@ -213,8 +244,8 @@ export function createFx(parent, camera) {
   };
 
   // ---------------------------------------------------------------- smoke / dust (premultiplied over)
-  const NK = 900, K = pool(NK, ['x', 'y', 'z', 'vx', 'vy', 'vz', 's0', 's1', 'r', 'g', 'b', 'a0', 'drag', 'rise', 'seed', 'dl']);
-  const [kGeo, kA] = quadGeo(NK, { aPos: 4, aCol: 4, aSeed: 1 });
+  const NK = 900, K = pool(NK, ['x', 'y', 'z', 'vx', 'vy', 'vz', 's0', 's1', 'r', 'g', 'b', 'a0', 'drag', 'rise', 'seed', 'dl', 'heat']);
+  const [kGeo, kA] = quadGeo(NK, { aPos: 4, aCol: 4, aSeed: 1, aHeat: 2 });
   const kMesh = shaderMesh(root, kGeo, SMOKE_VS, SMOKE_FS, 'over');
   kMesh.renderOrder = 2;
   /** Puff: size s0 → s1, colour rgb (display-ish, ≤ 1), opacity a0 (fades in fast, out slowly), rise (m/s² buoyancy),
@@ -223,6 +254,14 @@ export function createFx(parent, camera) {
     const i = K.take();
     K.x[i] = x; K.y[i] = y; K.z[i] = z; K.vx[i] = vx; K.vy[i] = vy; K.vz[i] = vz; K.s0[i] = s0; K.s1[i] = s1; K.dl[i] = delay;
     K.r[i] = r; K.g[i] = g; K.b[i] = b; K.a0[i] = a0; K.drag[i] = drag; K.rise[i] = rise; K.seed[i] = vrng.range(0, 6.283); K.life[i] = K.max[i] = life;
+    K.heat[i] = 0;
+    return i;
+  };
+  /** Fire lump (fx r2): a smoke-pool puff that starts at `heat` (1 = white-hot heart, 0.6 = orange body) and cools with
+   *  age through orange and deep red into dark smoke (rgb); appears at once, keeps rising (rise m/s²). */
+  fx.fire = (x, y, z, s0, s1, life, heat, vx = 0, vy = 0, vz = 0, drag = 3, rise = 2, delay = 0, r = 0.09, g = 0.075, b = 0.065, a0 = 0.9) => {
+    const i = fx.smoke(x, y, z, s0, s1, life, r, g, b, a0, vx, vy, vz, drag, rise, delay);
+    K.heat[i] = heat;
     return i;
   };
 
@@ -354,7 +393,7 @@ export function createFx(parent, camera) {
 
     // smoke
     n = 0;
-    const kp = kA.aPos.array, kc = kA.aCol.array, ks = kA.aSeed.array;
+    const kp = kA.aPos.array, kc = kA.aCol.array, ks = kA.aSeed.array, kh = kA.aHeat.array;
     for (let i = 0; i < NK; i++) {
       if (K.life[i] <= 0) continue;
       if (K.dl[i] > 0) { K.dl[i] -= dt; continue; }
@@ -365,12 +404,14 @@ export function createFx(parent, camera) {
       K.x[i] += K.vx[i] * dt; K.y[i] = Math.max(0.05, K.y[i] + K.vy[i] * dt); K.z[i] += K.vz[i] * dt;
       const o = n * 4;
       kp[o] = K.x[i]; kp[o + 1] = K.y[i] + ground(K.x[i], K.z[i]); kp[o + 2] = K.z[i]; kp[o + 3] = K.s0[i] + (K.s1[i] - K.s0[i]) * (1 - (1 - u) * (1 - u));
-      kc[o] = K.r[i]; kc[o + 1] = K.g[i]; kc[o + 2] = K.b[i]; kc[o + 3] = K.a0[i] * Math.min(1, u * 8) * (1 - u) * (1 - u * 0.3);
-      ks[n] = K.seed[i];
+      const hot = K.heat[i];
+      kc[o] = K.r[i]; kc[o + 1] = K.g[i]; kc[o + 2] = K.b[i];
+      kc[o + 3] = K.a0[i] * Math.min(1, u * (hot ? 40 : 8)) * (1 - u) * (1 - u * 0.3) * (hot ? 1 + u : 1);
+      ks[n] = K.seed[i]; kh[n * 2] = hot * Math.exp(-u * 3.4); kh[n * 2 + 1] = u;
       n++;
     }
     kGeo.instanceCount = n;
-    for (const a of [kA.aPos, kA.aCol, kA.aSeed]) { a.needsUpdate = n > 0; if (n) { a.clearUpdateRanges(); a.addUpdateRange(0, n * a.itemSize); } }
+    for (const a of [kA.aPos, kA.aCol, kA.aSeed, kA.aHeat]) { a.needsUpdate = n > 0; if (n) { a.clearUpdateRanges(); a.addUpdateRange(0, n * a.itemSize); } }
 
     // rings
     n = 0;

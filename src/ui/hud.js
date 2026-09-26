@@ -205,7 +205,7 @@ export function createHud(root, game, camera) {
       const m = mileOf(h.kos);
       if (m < S.mile) S.mile = m;
       if (m > S.mile && inMusou && m === 25) S.mile = m;                // a Musou always runs past 50: only "50" pops
-      if (m > S.mile) {
+      if (m > S.mile && !inMusou) {                                       // fx r2: never over a Musou payoff: it pops when control returns
         S.mile = m; S.mileF = f; num(mileB, m);
         S.shownKo = h.kos; S.koF = f; num(koB, h.kos); text(koG, h.kos);  // the corner count slams to the true total with it
         // keep the popup off Zhao Yun: its digits span x 42-61 %, y (top + 4) … (top + 19) %. If his screen box would sit
@@ -218,7 +218,6 @@ export function createHud(root, game, camera) {
           S.mileTop = Math.max(8, Math.round((hy - 0.21) * 100));
           if (hy - 0.21 < 0.08) S.mileDim = 0.4;
         }
-        if (inMusou) { S.mileTop = 7; S.mileDim = 0.85; }                    // fx r1: Musou payoffs fill the centre: fixed safe zone up top
         set(mile, 'top', `${S.mileTop}%`);
       }
       const kt = f - S.koF, slam = clamp01(1 - kt / 7);

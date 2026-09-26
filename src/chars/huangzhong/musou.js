@@ -170,10 +170,12 @@ export function createMusou(game) {
       const u = smooth((t - M.big) / (M.release - M.big));
       Object.assign(o, { id: 4, yaw: offSun(mu.yaw0 - 0.18), dist: 2.8 - 0.7 * u, pitch: 0.05, fov: 42 - 8 * u, height: 1.55, side: 0.62, shake: 0.2 });
     } else {
-      // cut to a high flank shot square to the arrow line (on the side away from the sun): the blaze crosses the frame
-      // from him to the explosion, the aim point drifting down range with it
-      const u = smooth((t - M.release - 4) / 40), s = mu.side;
-      Object.assign(o, { id: 5, yaw: mu.yaw0 + s * 1.3, dist: 12 + 4 * u, pitch: 0.22 + 0.08 * u, fov: 58, height: 2 + u, side: s * (7 + 10 * u), shake: 0.9 });
+      // cut to a flank shot square to the arrow line (on the side away from the sun): the blaze crosses the frame and
+      // the aim point rides down range onto the burst point (fx r2: it used to trail the arrow and left the explosion at
+      // the frame's left edge), so the payoff fills the centre third with the launched bodies against the fireball
+      const u = smooth((t - M.release - 4) / (GIANT_FRAMES - 6)), s = mu.side;
+      Object.assign(o, { id: 5, yaw: mu.yaw0 + s * Math.PI / 2, dist: 11 + 2.5 * u, pitch: 0.2 + 0.04 * u, fov: 54, height: 2 + 1.2 * u,
+        side: s * giant.range * (0.3 + 0.7 * u), shake: 0.9 });
     }
     return o;
   };
