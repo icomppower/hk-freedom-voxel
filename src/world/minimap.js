@@ -18,8 +18,8 @@ export function minimapLayer() {
     const wet = Math.abs(z - riverZ(x)) < 6.5;
     if (s > 0) {                                                         // field: pale, bright rim at the edge
       const rim = s < 1.2;
-      d[o] = 214; d[o + 1] = 184; d[o + 2] = 130; d[o + 3] = rim ? 150 : 34;
-      if (wet) { d[o] = 120; d[o + 1] = 160; d[o + 2] = 170; d[o + 3] = 70; }   // the fords
+      d[o] = 214; d[o + 1] = 184; d[o + 2] = 130; d[o + 3] = rim ? 190 : 96;
+      if (wet) { d[o] = 120; d[o + 1] = 160; d[o + 2] = 170; d[o + 3] = 130; }   // the fords
     } else if (wet) { d[o] = 70; d[o + 1] = 120; d[o + 2] = 150; d[o + 3] = 120; }   // deep water
     else { d[o] = 8; d[o + 1] = 5; d[o + 2] = 4; d[o + 3] = Math.min(120, 40 - s * 4); }   // rock: darker the further out
   }

@@ -208,6 +208,14 @@ export function clampWalk(x, z, pad = 0) {
   return _out;
 }
 
+/** Arrows (sim): true where a closed gate (≤ 4 m), the castle wall, a palisade or a cliff (≤ 6 m) stands at (x, z) at
+ *  height y above ground. The Han River's pools are off the walk field but open water, so they never block. */
+export function blocksArrow(x, z, y) {
+  if (y > 6) return false;
+  if (y < 4) for (const g of GATE_LIST) if (!g.open && rectIn(g.rect, x, z) > -0.3) return true;
+  return walkIn(x, z) < -0.6 && Math.abs(z - riverZ(x)) > 6.5;
+}
+
 /** Where the hero starts: { x, z, yaw }. Story: inside the 蜀軍本陣 gate facing the valley; free: the pass basin
  *  (the origin, where the free-mode army forms up around him). Battle start: also resets every gate to open. */
 export function spawnPoint(charId, mode) {

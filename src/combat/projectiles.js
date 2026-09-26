@@ -16,6 +16,7 @@
 import { ST } from '../crowd/crowd.js';
 import { emit } from '../core/events.js';
 import { hash01 } from '../core/rng.js';
+import { blocksArrow } from '../world/map.js';
 
 const DT = 1 / 60, D2R = Math.PI / 180;
 export const ARROW = {
@@ -250,11 +251,19 @@ export function createProjectiles(game) {
       const x0 = P.x[i], y0 = P.y[i], z0 = P.z[i];
       let x1 = x0 + P.vx[i] * DT, y1 = y0 + P.vy[i] * DT, z1 = z0 + P.vz[i] * DT;
       if (y1 < 0 && y0 >= 0) { const u = y0 / (y0 - y1); x1 = x0 + (x1 - x0) * u; z1 = z0 + (z1 - z0) * u; y1 = 0; }
+      // walls, closed gates, palisades and cliffs stop arrows: cut this frame's move at the first blocked third (a step is
+      // ≤ 1.5 m, every obstacle ≥ 3 m thick), so nobody behind one is swept, then the arrow sticks in its face
+      let wall = false;
+      for (let k = 1; k <= 3; k++) {
+        const u = k / 3, bx = x0 + (x1 - x0) * u, by = y0 + (y1 - y0) * u, bz = z0 + (z1 - z0) * u;
+        if (blocksArrow(bx, bz, by)) { x1 = bx; y1 = by; z1 = bz; wall = true; break; }
+      }
       P.x[i] = x1; P.y[i] = y1; P.z[i] = z1;
       if (s.rad && P.kind[i] !== 3) {
         if (!grid) { buildGrid(); grid = true; }
         if (!sweep(i, x0, y0, z0, x1, y1, z1)) continue;
       }
+      if (wall) { P.st[i] = AS.STUCK; P.t[i] = 0; continue; }   // no burst on a wall: it would leak through a closed gate
       if (P.kind[i] === 3 && (y1 > 26 || P.t[i] > 40)) { P.st[i] = AS.NONE; continue; }   // skyward volley leaves the frame
       if (y1 <= 0) {
         if (s.burst) burst(i, x1, z1);

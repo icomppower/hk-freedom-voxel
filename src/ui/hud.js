@@ -104,7 +104,7 @@ export function createHud(root, game, camera) {
   on('story:banner', (e) => banner(e.html, e.en, e.dur ?? 150, !!e.big, e.big ? 2 : 1));
   on('story:objective', (e) => { S.obj = e.zh ? { zh: e.zh, en: e.en || '', f: game.frame } : null; if (S.obj) { text(objB, e.zh); text(objS, e.en || ''); } });
   on('crowd:wave', (e) => {
-    if (game.frame - S.waveF > 600) { S.waveF = game.frame; banner('<em>魏軍</em>援兵 到着', 'Wei reinforcements have arrived!', 130); }
+    if (game.frame - S.waveF > 600) { S.waveF = game.frame; banner('<em>魏軍</em>援兵 抵達', 'Wei reinforcements have arrived!', 130); }
     S.waves.push({ x: e.x, z: e.z, f: game.frame });
   });
   on('hit', (e) => { S.actF = game.frame; if (e.officer) { S.tgt = e.i; S.tgtF = game.frame; } });
@@ -377,7 +377,7 @@ export function createHud(root, game, camera) {
       // units, view cone, reinforcement pings; officers off the map are pinned to its edge
       const R = 30, s = 100 / R, X = (x) => 100 - (x - h.x) * s, Y = (z) => 100 - (z - h.z) * s;
       map.clearRect(0, 0, 200, 200);
-      map.fillStyle = 'rgba(18,12,9,0.66)'; map.fillRect(0, 0, 200, 200);
+      map.fillStyle = 'rgba(18,12,9,0.88)'; map.fillRect(0, 0, 200, 200);   // near-opaque: bright fires / walls must not read through
       const L = minimapLayer();
       map.drawImage(L.canvas, (L.x1 - h.x - R) * L.ppm, (L.z1 - h.z - R) * L.ppm, 2 * R * L.ppm, 2 * R * L.ppm, 0, 0, 200, 200);
       map.strokeStyle = 'rgba(214,184,130,0.12)'; map.lineWidth = 1; map.beginPath();
