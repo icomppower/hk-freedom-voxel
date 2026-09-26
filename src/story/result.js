@@ -53,7 +53,9 @@ export function createResult(el, flow) {
         <div class="rs-btns">${win
           ? '<button data-act="title">繼續<small>CONTINUE</small></button>'
           : '<button data-act="retry">再戰<small>RETRY</small></button><button data-act="title" class="sub">返回<small>TITLE</small></button>'}</div>
-      </div>`;
+      </div>
+      <footer class="ui-foot">${win ? '' : '<span><kbd>←</kbd><kbd>→</kbd>選擇<small>Select</small></span>'}
+        <span><kbd>Enter</kbd>決定<small>Confirm</small></span><span><kbd>Esc</kbd>返回<small>Title</small></span></footer>`;
       paintPortrait(el.querySelector('canvas'), ch);
       // tallies count up in turn (0.7 s each, 0.35 s apart, after the title lands)
       const tds = [...el.querySelectorAll('.rs-stats td')], t0 = performance.now() + 700;

@@ -133,7 +133,10 @@ function weaponGeos() {
     if (Math.abs(r - 0.16) < 0.025) return 0xc8a050;
     return (Math.floor(Math.atan2(x, y - 0.12) / (Math.PI / 4)) & 1) ? 0x7a2418 : 0x5e1a12;
   }), b([-0.07, 0.1, 0.13], [0.07, 0.15, 0.17], 0xe0b860)], V, 0.1);
-  return { spear, sword, glaive, pole, shield };
+  // far LOD shield (≈ 36 tris vs ≈ 736): a stepped cross of solid boxes, the painted face's red + the bronze boss
+  const far_shield = boxesGeometry([box([0.58, 0.34, 0.06], [0, 0.12, 0.1], 0x6a1f15), box([0.34, 0.58, 0.06], [0, 0.12, 0.1], 0x6a1f15),
+    box([0.12, 0.12, 0.05], [0, 0.12, 0.14], 0xc8a050)]);
+  return { spear, sword, glaive, pole, shield, far_shield };
 }
 
 /** All crowd geometries. */
@@ -306,7 +309,7 @@ export function createCrowdView(scene, game) {
     hips: mk(geos.hips, G, mat, false), torso: mk(geos.torso, G, mat, geos.shadow_trunk), head: mk(geos.head, G, mat, false),
     crest: mk(geos.crest, G), arm: mk(geos.arm, G * 2, mat, geos.shadow_arm), thigh: mk(geos.thigh, G * 2, mat, geos.shadow_thigh),
     shin: mk(geos.shin, G * 2, mat, geos.shadow_shin),
-    spear: mk(geos.spear, G), sword: mk(geos.sword, G), shield: mk(geos.shield, G), glaive: mk(geos.glaive, G + O), pole: mk(geos.pole, G),
+    spear: mk(geos.spear, G), sword: mk(geos.sword, G), shield: mk(geos.shield, G), far_shield: mk(geos.far_shield, G), glaive: mk(geos.glaive, G + O), pole: mk(geos.pole, G),
     o_hips: mk(geos.o_hips, O), o_torso: mk(geos.o_torso, O), o_head: mk(geos.o_head, O),
     o_arm: mk(geos.o_arm, O * 2), o_thigh: mk(geos.o_thigh, O * 2), o_shin: mk(geos.o_shin, O * 2),
   };
@@ -546,7 +549,7 @@ export function createCrowdView(scene, game) {
     const wm = g === 0 ? M.spear : g === 1 ? M.sword : g === 2 ? M.glaive : M.pole;
     push(wm, mW, _c);
     if (g === 3) push(M.flag, mW, null);
-    if (g === 1) push(M.shield, local(mOut, mArmL, 0, -J.hand, 0, C[WL], C[WL + 1], C[WL + 2]), _c);
+    if (g === 1) push(far ? M.far_shield : M.shield, local(mOut, mArmL, 0, -J.hand, 0, C[WL], C[WL + 1], C[WL + 2]), _c);
     // telegraph: pixel-star glint on the weapon tip through the wind-up (drawn over the crowd); a real blow flares it
     // into a big solid red pixel star (white core) for the last 14 sf
     if (s === ST.ATTACK && t >= 3 && t < CROWD.windup && M.glint.count < 32) {

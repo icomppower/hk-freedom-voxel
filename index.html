@@ -249,7 +249,9 @@
       linear-gradient(transparent 72%, rgba(8,5,4,.85)); }
   #title kbd, #select kbd { display: inline-block; font: 600 1.2rem/1 var(--sans); padding: .3rem .5rem; margin-right: .3rem; min-width: 1rem;
     text-align: center; border: .12rem solid rgba(239,227,207,.55); border-radius: .35rem; background: rgba(0,0,0,.4); color: var(--paper); }
-  #title kbd.pad, #select kbd.pad { border-radius: 50%; min-width: 0; width: 1.2rem; padding: .3rem; color: #1a120d; background: #e9dcc2; border-color: #e9dcc2; }
+  #result kbd { display: inline-block; font: 600 max(12px, 1.3rem)/1 var(--sans); padding: .3rem .5rem; margin-right: .3rem; min-width: 1rem;
+    text-align: center; border: .12rem solid rgba(239,227,207,.6); border-radius: .35rem; background: rgba(0,0,0,.45); color: var(--paper); }
+  #title kbd.pad, #select kbd.pad, #menu kbd.pad { border-radius: 50%; min-width: 0; width: 1.2rem; padding: .3rem; color: #1a120d; background: #e9dcc2; border-color: #e9dcc2; }
 
   /* prompts strip along the bottom (console-style button legend) */
   .ui-foot { position: absolute; left: 7rem; right: 6rem; bottom: 2.6rem; display: flex; justify-content: flex-end; gap: 3.2rem;
@@ -381,22 +383,23 @@
     box-shadow: inset .3rem 0 0 #f2c14e; }
   .s-mode small { font: 600 max(13px, 1.3rem)/1 var(--sans); letter-spacing: .1em; margin-left: .7rem; color: #f8e4c8; }
 
-  .s-roster { position: absolute; left: 7rem; top: 12rem; width: 23rem; display: flex; flex-direction: column; gap: 1.4rem; }
+  .s-roster { position: absolute; left: 7rem; top: 12rem; width: 27rem; display: flex; flex-direction: column; gap: 1.4rem; }
   .s-fac { display: flex; align-items: center; gap: 1rem; margin-bottom: .4rem; color: var(--paper); }
   .s-fac i { font: 700 3rem/1 var(--brush); font-style: normal; color: #ffe3a0; padding: .7rem .8rem 1.5rem;
     background: linear-gradient(#3a8a60, var(--shu) 60%, #174a30); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%);
     box-shadow: inset 0 .3rem 0 #f2c14e; text-shadow: 0 .15rem .3rem rgba(0,0,0,.6); }
   .s-fac small { font: 600 max(13px, 1.3rem)/1 var(--sans); letter-spacing: .2em; color: var(--dim); }
   /* officer cards: hover = highlight only, click = focus (.on), :active = pressed; .pick replays the focus flash */
-  #select .s-card { position: relative; display: grid; grid-template-columns: 9rem 1fr; column-gap: 1.4rem; align-content: center;
-    padding: .7rem 1.4rem .7rem .7rem; color: rgba(244,234,216,.5); background: linear-gradient(90deg, rgba(26,18,14,.9), rgba(18,12,9,.55));
+  #select .s-card { position: relative; display: grid; grid-template-columns: 13.5rem 1fr; column-gap: 1.4rem; align-content: center;
+    padding: .8rem 1.6rem .8rem .8rem; color: rgba(244,234,216,.74); background: linear-gradient(90deg, rgba(26,18,14,.9), rgba(18,12,9,.55));
     box-shadow: 0 0 0 .1rem rgba(214,170,90,.22), 0 .4rem 1rem rgba(0,0,0,.35);
-    transition: transform .22s cubic-bezier(.3,0,.2,1), box-shadow .22s, color .18s, background .22s; }
-  .s-card canvas { grid-row: 1 / 3; width: 9rem; height: 9rem; image-rendering: pixelated;
+    transition: transform .22s cubic-bezier(.3,0,.2,1); }   /* only the composited slide eases: ring / colour swap at once, so a
+    main-thread hitch never leaves the old card looking lit next to the new one */
+  .s-card canvas { grid-row: 1 / 3; width: 13.5rem; height: 13.5rem; image-rendering: pixelated;
     background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--acc) 55%, #222), #120c0a 75%);
-    box-shadow: 0 0 0 .12rem rgba(214,170,90,.25); filter: saturate(.35) brightness(.6); transition: filter .22s, box-shadow .22s; }
+    box-shadow: 0 0 0 .12rem rgba(214,170,90,.25); filter: saturate(.5) brightness(.72); }
   .s-card b { align-self: end; font: 700 3.6rem/1 var(--brush); letter-spacing: .2rem; white-space: nowrap; }
-  .s-card small { font: 600 max(13px, 1.3rem)/1.2 var(--sans); letter-spacing: .1em; padding-top: .5rem; opacity: .85; }
+  .s-card small { font: 600 max(13px, 1.3rem)/1.2 var(--sans); letter-spacing: .06em; padding-top: .5rem; opacity: .9; white-space: nowrap; }
   .s-card > i { position: absolute; right: .8rem; top: .8rem; font: 700 1.2rem/1.05 var(--brush); font-style: normal; writing-mode: vertical-rl;
     color: #fbe9d6; background: var(--sealr); padding: .3rem .2rem; border-radius: .2rem; opacity: .35; transition: opacity .22s; }
   .s-card em { position: absolute; right: .5rem; bottom: .5rem; font: 700 1.1rem/1 var(--kai); font-style: normal; color: #fbe9d6;
@@ -420,7 +423,7 @@
   @keyframes portPop { from { transform: scale(.82); } }
   @keyframes cardPoint { to { transform: translate(.5rem, -50%); } }
 
-  .s-info { position: absolute; left: 35rem; top: 10.5rem; width: 42rem; color: var(--paper); }
+  .s-info { position: absolute; left: 39rem; top: 10.5rem; width: 42rem; color: var(--paper); }
   .s-name { display: flex; align-items: flex-start; gap: 1.4rem; }
   .s-name h1 { margin: 0; font: 700 10rem/1 var(--brush); letter-spacing: .4rem; color: #f9f3e8; white-space: nowrap;
     text-shadow: .3rem .4rem 0 rgba(0,0,0,.55), 0 0 2.4rem color-mix(in srgb, var(--acc) 45%, transparent); }
@@ -440,7 +443,7 @@
   .s-bio span + span { margin-top: .6rem; }
   .s-bio small { display: block; font: 500 max(13px, 1.4rem)/1.35 var(--sans); color: var(--dim); }
   .s-stats { list-style: none; margin: 1.8rem 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 2.6rem; }
-  .s-stats li { display: grid; grid-template-columns: 5rem 1fr; align-items: center; row-gap: .15rem; }
+  .s-stats li { display: grid; grid-template-columns: 5.4rem 1fr; column-gap: .9rem; align-items: center; row-gap: .15rem; }
   .s-stats b { grid-row: 1 / 3; font: 700 2.4rem/1 var(--brush); color: #ffe3a0; }
   .s-stats small { font: 600 max(13px, 1.3rem)/1 var(--sans); letter-spacing: .14em; color: var(--dim); }
   .s-stats span { display: flex; gap: .35rem; }
@@ -473,17 +476,20 @@
   #select .s-go:hover { filter: brightness(1.1); }
   .s-act .ui-stamp { right: -1rem; bottom: 5.6rem; font-size: 4.4rem; }
 
-  /* focus change: name inks in, stats refill left → right, the intro line is brushed down */
-  #select.swap .s-name h1 { animation: nameIn .5s cubic-bezier(.3,0,.2,1) both; }
-  #select.swap :is(.s-en, .s-epi, .s-wpn, .s-bio, .s-musou) { animation: fadeIn .45s ease .08s both; }
+  /* focus change: name inks in, stats refill left → right, the intro line slides down */
+  #select.swap .s-name h1 { animation: nameIn .5s cubic-bezier(.3,0,.2,1) backwards; transform-origin: 0 60%; }
+  #select.swap :is(.s-en, .s-epi, .s-wpn, .s-bio, .s-musou) { animation: swapIn .45s ease .08s backwards; }
   #select.swap .s-stats i.f { animation: segIn .3s cubic-bezier(.3,0,.2,1) both; }
   #select.swap .s-stats i:nth-child(2) { animation-delay: .05s; } #select.swap .s-stats i:nth-child(3) { animation-delay: .1s; }
   #select.swap .s-stats i:nth-child(4) { animation-delay: .15s; } #select.swap .s-stats i:nth-child(5) { animation-delay: .2s; }
-  #select.swap .s-line p { animation: brushDown 1s cubic-bezier(.4,0,.2,1) .25s both; }
-  #select.swap .s-line small { animation: fadeIn .6s ease .9s both; }
-  @keyframes nameIn { from { opacity: 0; filter: blur(.7rem); transform: translateX(-1.5rem); letter-spacing: 1.4rem; } }
+  #select.swap .s-line p { animation: lineIn .7s cubic-bezier(.3,0,.2,1) .1s backwards; }
+  #select.swap .s-line small { animation: swapIn .6s ease .5s backwards; }
+  /* motion only, the text stays opaque: an animation stalled at its first frame (main-thread hitch after a focus change,
+     measured in headless runs) leaves the name and the intro line fully readable, just offset */
+  @keyframes nameIn { from { transform: translateX(-1.5rem) scale(1.06); text-shadow: .3rem .4rem 0 rgba(0,0,0,.55), 0 0 4rem var(--acc); } }
+  @keyframes swapIn { from { opacity: .75; } }
+  @keyframes lineIn { from { transform: translateY(-1.6rem); } }
   @keyframes segIn { from { transform: skewX(-24deg) scaleX(0); } }
-  @keyframes brushDown { from { clip-path: inset(0 -50% 100% -50%); } to { clip-path: inset(-5% -50% -5% -50%); } }
 
   /* ---- loading card (#loading, loading.js): after 出陣, while main.js builds + compiles the chosen officer's battle */
   #loading { --acc: #3fb8b0; }
@@ -578,6 +584,10 @@
   #menu button small { font: 600 max(13px, 1.3rem)/1 var(--sans); letter-spacing: .12em; margin-left: 1rem; opacity: .85; }
   #menu .hint { margin-top: 3rem; font-size: max(13px, 1.4rem); opacity: .85; }
   #menu .hint kbd { font-size: max(12px, 1.3rem); }
+  #menu kbd.pad { width: max(12px, 1.3rem); padding: .3rem; }
+  #menu td.pad { color: #c9b995; }
+  #menu td:nth-child(2) { white-space: normal; max-width: 34rem; line-height: 1.45; }   /* the pad column must not push the table over the name */
+  #result .ui-foot { left: 8vw; right: 6rem; }
 
   @media (prefers-reduced-motion: reduce) { #title *, #select * { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
   /* story lane: #prologue / #result styles */
@@ -635,9 +645,9 @@
   #prologue .pl-en { position: absolute; right: 7vw; bottom: 10.5vh; margin: 0; max-width: 56rem; text-align: right; text-wrap: balance; opacity: 0;
     font: italic 500 1.75rem/1.45 var(--sans); letter-spacing: .04em; color: #3b2a1a; transition: opacity .3s; }
   #prologue .pl-card.on + .pl-en, #prologue .pl-en.on { opacity: .9; transition: opacity .8s 1.9s; }
-  #prologue .pl-pips { position: absolute; left: 4vw; bottom: 5vh; display: flex; gap: 1.1rem; font: 700 2.2rem/1 var(--brush); color: rgba(42,26,14,.3); }
+  #prologue .pl-pips { position: absolute; left: 4vw; bottom: 5vh; display: flex; gap: 1.1rem; font: 700 2.2rem/1 var(--brush); color: rgba(42,26,14,.58); }
   #prologue .pl-pips b { transition: color .4s; }
-  #prologue .pl-pips b.past { color: rgba(42,26,14,.6); }
+  #prologue .pl-pips b.past { color: rgba(42,26,14,.85); }
   #prologue .pl-pips b.on { color: var(--wei); }
   /* skip legend in the brocade strip under the scroll: same kbd + label + romanisation layout as .ui-foot */
   #prologue .pl-skip { position: absolute; right: 5.5vw; bottom: max(2px, calc(2.2vh - 1.4rem)); display: flex; align-items: center; gap: 3rem;
@@ -733,7 +743,7 @@
   <div class="sub">戰局暫停<small>Battle paused</small></div>
   <button id="go">繼續<small>Resume</small></button>
   <button id="quit">撤退<small>Quit to title</small></button>
-  <div class="hint"><kbd>↑</kbd><kbd>↓</kbd> 選擇 Select · <kbd>Enter</kbd> 決定 Confirm · <kbd>Esc</kbd> 繼續 Resume</div>
+  <div class="hint"><kbd>↑</kbd><kbd>↓</kbd> 選擇 Select · <kbd>Enter</kbd><kbd class="pad">A</kbd> 決定 Confirm · <kbd>Esc</kbd><kbd class="pad">B</kbd> 繼續 Resume</div>
 </div>
 <!-- flow screens (main.js). ui lane: #title #select · story lane: #prologue #result -->
 <div id="title" class="scr" hidden></div>

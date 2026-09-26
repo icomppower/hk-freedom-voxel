@@ -96,9 +96,21 @@ export function createPrologue(el, flow) {
       const id = m.dataset.id, now = c.show.includes(id), before = PROLOGUE.slice(0, k).some((p) => p.show.includes(id));
       m.classList.toggle('on', now || before); m.classList.toggle('hot', now);
     }
-    const [fx, fy, s] = c.focus, lim = (s - 1) / 2 * 100;   // drift: bring the focus toward 38 % x (clear of the calligraphy
-    // card on the right, which covered 南鄭 when the focus was centred), never past the paper edge
-    const tx = Math.max(-lim, Math.min(lim, (0.38 - fx / 1600) * s * 100)), ty = Math.max(-lim, Math.min(lim, (0.5 - fy / 900) * s * 100));
+    // drift: bring the focus toward 38 % x (clear of the calligraphy card on the right, which covered 南鄭 when the focus
+    // was centred), never past the paper edge; every lit place label stays readable on the paper left of that card (the
+    // card-4 zoom cropped 陽平關 at the left edge): the zoom backs off until their span fits, then the drift is clamped
+    let x0 = 1600, x1 = 0, y0 = 900, y1 = 0;
+    for (const m of el.querySelectorAll('.pl-labels .pl-mark.on')) {
+      const b = m.getBBox(); x0 = Math.min(x0, b.x); x1 = Math.max(x1, b.x + b.width); y0 = Math.min(y0, b.y); y1 = Math.max(y1, b.y + b.height);
+    }
+    const [fx, fy, s0] = c.focus, fit = x1 > x0, s = fit ? Math.max(1.02, Math.min(s0, 1060 / (x1 - x0), 840 / (y1 - y0))) : s0;
+    let tx = (0.38 - fx / 1600) * s * 100, ty = (0.5 - fy / 900) * s * 100;
+    if (fit) {                                                // screen x = 800 + (x - 800)·s + tx·16 (viewBox units)
+      tx = Math.max(Math.min(tx, (1100 - 800 - (x1 - 800) * s) / 16), (40 - 800 - (x0 - 800) * s) / 16);
+      ty = Math.max(Math.min(ty, (870 - 450 - (y1 - 450) * s) / 9), (30 - 450 - (y0 - 450) * s) / 9);
+    }
+    const lim = (s - 1) / 2 * 100;
+    tx = Math.max(-lim, Math.min(lim, tx)); ty = Math.max(-lim, Math.min(lim, ty));
     map.style.transform = `translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%) scale(${s})`;
     pips.innerHTML = PROLOGUE.map((_, j) => `<b class="${j === k ? 'on' : j < k ? 'past' : ''}">${NUM[j]}</b>`).join('');
     later(() => show(k + 1), 1.4 + v.cols.length * 0.55 + Math.min(3.2, 1.6 + v.en.length * 0.018));
