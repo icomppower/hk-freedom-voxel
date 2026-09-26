@@ -11,7 +11,6 @@
 // Emits musou:ready/start/hit/burst/end. The camera asks mu.shot() for the shot list; src/musou/view.js renders the
 // grade, motes, dragon and payoff light from this state (dragonPath is shared so the hits land where the dragon is).
 import { emit } from '../core/events.js';
-import { CLIPS } from '../hero/hero.js';
 import { P, clip, spearAbout } from '../hero/rig.js';
 import { setState, stickDir, turnToward } from '../hero/locomotion.js';
 import { ST, wrap } from '../crowd/crowd.js';
@@ -88,7 +87,7 @@ export function dragonAt(a, out) {
   return out;
 }
 
-// ---------------------------------------------------------------- hero clips (registered into the hero's clip registry)
+// ---------------------------------------------------------------- hero clips (merged into Zhao Yun's clip registry: src/chars/zhaoyun/kit.js)
 const FEET = { footL: [0.24, 0.08, 0.14, 0, 20], footR: [-0.24, 0.08, -0.14, 0, -20] };
 const OVERHEAD = { ...FEET, hips: [0, 0.94, 0], hipsR: [-4, -8, 0], spine: [-6, 0, 0], chest: [-10, 0, 0], head: [-14, 0, 0],
   spear: spearAbout([0, 1.98, 0.1], 90, 24, 0, 0.9), gripR: 0.64, gripL: 1.18 };
@@ -112,7 +111,7 @@ const runKey = (u) => {
   return [u, P({ ...CHARGE, hips: [0, 0.8 + Math.abs(Math.cos(ph)) * 0.05, 0.1], hipsR: [24, -30 + s * 8, 0], chest: [4, -8 - s * 10, 0],
     footL: foot(0.12, 0), footR: foot(-0.12, Math.PI), spear: [-0.2, 1.02 - s * 0.03, -0.08, 5, -3, 90] }), 'lin'];
 };
-Object.assign(CLIPS, {
+export const MUSOU_CLIPS = {
   // DW8 activation: spear planted upright in the right hand, left arm thrown out, chin up at the camera
   mu_act: clip([
     [0, P()],
@@ -138,7 +137,7 @@ Object.assign(CLIPS, {
     [0.62, P({ ...SLAM, hips: [0, 0.64, 0.2], chest: [10, 0, 0] })],
     [1, P(), 'io'],
   ]),
-});
+};
 
 const DT = 1 / 60;
 const easeOut = (u) => 1 - (1 - u) * (1 - u);

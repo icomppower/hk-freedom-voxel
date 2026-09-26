@@ -2,63 +2,38 @@
 // musou gauge (bottom band), KO count with slam pops and 50-KO milestone seal (bottom right / centre, kept off the hero),
 // chain counter that rolls up hit by hit with DW8 ghost digits (left), officer target bar (top left) and stacked floating
 // officer name/HP/▼▼ tags, square battlefield minimap with morale bar (top right), queued system banners and dialogue,
-// a title/controls intro card, and an idle auto-fade.
+// a title/controls intro card, an objective line (top left), and an idle auto-fade.
+// Character text / portraits come from game.hero.char (src/chars/index.js), refreshed on every 'scenario'. Dialogue,
+// banners and the objective are driven by story events (story:say / story:banner / story:objective, core/events.js).
 // Render-only: reads sim state, never writes it. Animations are timed in sim frames.
 // Styles live in index.html (#hud ...). Sizes are rem, and 1rem = 1/72 of the viewport height (10 px at 720p).
 import { Vector3 } from 'three';
 import { on } from '../core/events.js';
 import { ST } from '../crowd/crowd.js';
 import { ARENA_RADIUS, WALL_Z, GATE_X } from '../world/world.js';
-
-const OFFICERS = [['夏侯恩', 'XIAHOU EN'], ['晏明', 'YAN MING'], ['淳于導', 'CHUNYU DAO'], ['張郃', 'ZHANG HE']];
-// 20×20 pixel portrait of Zhao Yun (voxel look): hair, teal headband, peach skin, white/teal armour collar.
-const FACE = [
-  '....................',
-  '.......KKKKK........',
-  '.....KKKKKKKKK......',
-  '....KKKKKKKKKKKK....',
-  '...KKKkkKKKKKKKKK...',
-  '...KKKKKKKKKKKKKKKK.',
-  '...KTTTTTTTTTTTTKKTt',
-  '...KKKKKKKKKKKKKKKtT',
-  '...KKKSKKKKKSKKKKKKt',
-  '...KKSSSSSSSSSSKKKKK',
-  '...KKEESSSSSSEEKKKK.',
-  '...KKSwESSSSwESKKKK.',
-  '...KKSSSSSsSSSSKKK..',
-  '....KSSSSSsSSSSKKK..',
-  '....KsSSSSSSSSsKK...',
-  '.....sSSSMMSSSsKK...',
-  '......ssSSSSssKK....',
-  '...WWTtssssssTtWW...',
-  '.WWWWWWTWWWWTWWWWW..',
-  'WWwwWWWWTWWTWWWWwwW.',
-];
-const PAL = { K: '#1d1514', k: '#4a3834', S: '#efc3a0', s: '#c38a6c', E: '#140c0c', M: '#7e3a2e', T: '#3fb8b0', t: '#1f5f5c', W: '#efe8de', w: '#ffffff' };
-
-function paintFace(cv) {
-  const g = cv.getContext('2d');
-  FACE.forEach((row, y) => [...row].forEach((ch, x) => { if (PAL[ch]) { g.fillStyle = PAL[ch]; g.fillRect(x, y, 1, 1); } }));
-}
+import { ground } from '../world/map.js';
+import { CHARS, paintPortrait } from '../chars/index.js';
 
 // render-only seam: crowd view skips its 3D officer ▼ where the floating tags below take over
 export const HUD_TAG_R = 44.7;
 
 export function createHud(root, game, camera) {
+  const nOff = game.crowd.N - game.crowd.grunts;                     // officer slots (crowd CROWD.officerSlots)
   root.innerHTML = `
-    <div class="h-intro"><div class="zh">趙雲</div><i class="seal">常山</i><div class="en">ZHAO YUN</div>
-      <div class="sub">常山龍膽 · 單騎無雙 · 義貫雲天</div>
+    <div class="h-obj"><i>◆</i><b></b><small></small></div>
+    <div class="h-intro"><div class="zh"></div><i class="seal"></i><div class="en"></div>
+      <div class="sub"></div>
       <div class="keys"><kbd>WASD</kbd> 移動 move · <kbd>J</kbd> 攻擊 attack · <kbd>K</kbd> 蓄力 charge<br>
         <kbd>Space</kbd> 跳躍 jump · <kbd>L</kbd> 閃避 dodge · <kbd>I</kbd> 無雙 musou · <kbd>Q</kbd><kbd>E</kbd> 視角 · <kbd>H</kbd> 說明</div></div>
     <div class="h-target"><i class="seal">將</i><b></b><span></span><div class="bar"><em></em><i></i></div><strong>擊破</strong></div>
     <div class="h-map"><div class="morale"><i></i><span>蜀</span><span>魏</span></div><canvas width="200" height="200"></canvas><i class="seal">長坂</i></div>
-    <div class="h-offs">${OFFICERS.map(([zh, en]) => `<div class="off"><i class="ld"></i><div class="mk">▼▼</div><div class="bd"><b>${zh}</b><span>${en}</span><div class="bar"><em></em><i></i></div></div></div>`).join('')}</div>
+    <div class="h-offs">${'<div class="off"><i class="ld"></i><div class="mk">▼▼</div><div class="bd"><b></b><span></span><div class="bar"><em></em><i></i></div></div></div>'.repeat(nOff)}</div>
     <div class="h-chain"><div class="num"><b class="dig" data-t="0"><span>0</span></b><u></u><u></u><u></u></div><small><em>連擊</em>CHAIN</small></div>
     <div class="h-mile"><b class="dig" data-t="50"><span>50</span></b><i class="seal">擊破</i></div>
     <div class="h-band"><p></p><small></small></div>
-    <div class="h-dlg"><canvas width="20" height="20"></canvas><div><b>趙雲 <span>ZHAO YUN</span></b><p></p><small></small></div></div>
-    <div class="h-copy">長槍所向<br>百軍皆破</div>
-    <div class="h-player"><div class="badge"><canvas width="20" height="20"></canvas></div><div class="name">趙雲</div>
+    <div class="h-dlg"><canvas width="20" height="20"></canvas><div><b><i></i> <span></span></b><p></p><small></small></div></div>
+    <div class="h-copy"></div>
+    <div class="h-player"><div class="badge"><canvas width="20" height="20"></canvas></div><div class="name"></div>
       <div class="bar hp"><em></em><i></i></div>
       <div class="mu"><div><i></i></div><div><i></i></div><div><i></i></div><span>無雙</span></div></div>
     <div class="h-ko"><div class="num"><b class="dig" data-t="0"><span>0</span></b><u>0</u></div><small><em>擊破</em>K.O. COUNT</small></div>`;
@@ -71,25 +46,48 @@ export function createHud(root, game, camera) {
   const dlg = $('.h-dlg'), dlgP = $('.h-dlg p'), dlgS = $('.h-dlg small'), copy = $('.h-copy');
   const target = $('.h-target'), targetB = $('.h-target b'), targetS = $('.h-target span'), targetI = $('.h-target .bar i'), targetE = $('.h-target .bar em');
   const offs = $$('.off').map((el) => ({ el, bd: el.querySelector('.bd'), mk: el.querySelector('.mk'), ld: el.querySelector('.ld'),
-    bar: el.querySelector('.bar i'), lagEl: el.querySelector('.bar em'), lag: 1 }));
+    nm: el.querySelector('b'), en: el.querySelector('span'), bar: el.querySelector('.bar i'), lagEl: el.querySelector('.bar em'), lag: 1 }));
+  const obj = $('.h-obj'), objB = $('.h-obj b'), objS = $('.h-obj small'), dlgCv = $('.h-dlg canvas'), dlgN = $('.h-dlg b i'), dlgE = $('.h-dlg b span');
   const moraleI = $('.morale i'), mapEl = $('.h-map');
   const mapCv = $('.h-map canvas'), map = mapCv.getContext('2d');
-  $$('canvas[width="20"]').forEach(paintFace);
+  const offName = (i) => game.crowd.offName[i - game.crowd.grunts] || { zh: '敵將', en: 'OFFICER' };
+  const cap = (en) => en.replace(/\b(\w)(\w*)/g, (m, a, b) => a + b.toLowerCase());
 
-  // ---- event-driven state (frames are sim frames)
-  const S = {
-    lastCombo: 0, shownChain: 0, chainF: -99, chainQ: [], ghostN: 0, shownKo: 0, koF: -99, mile: 0, mileF: -99, mileTop: 33, mileDim: 1,
-    lagHp: 1, lastF: 0, hurtF: -99, actF: 0, band: null, bandQ: [], dlg: null, waveF: -999, tgt: -1, tgtF: -999, tgtKoF: -999,
-    musouF: -999, musouEnd: -999, waves: [], introCut: 0,
+  // ---- event-driven state (frames are sim frames), rebuilt on every 'scenario' (game.frame restarts at 0)
+  const S = {};
+  const reset = () => {
+    Object.assign(S, {
+      lastCombo: 0, shownChain: 0, chainF: -99, chainQ: [], ghostN: 0, shownKo: 0, koF: -99, mile: 0, mileF: -99, mileTop: 33, mileDim: 1,
+      lagHp: 1, lastF: 0, hurtF: -99, actF: 0, band: null, bandQ: [], dlg: null, waveF: -999, tgt: -1, tgtF: -999, tgtKoF: -999,
+      musouF: -999, musouEnd: -999, waves: [], introCut: 0, obj: null,
+    });
+    const ch = game.hero.char;                                        // character text + portraits
+    text($('.h-intro .zh'), ch.name.zh); text($('.h-intro .seal'), ch.seal); text($('.h-intro .en'), ch.name.en.toUpperCase());
+    text($('.h-intro .sub'), ch.motto); text($('.h-player .name'), ch.name.zh);
+    $('.h-copy').innerHTML = ch.lines.copy.join('<br>');
+    paintPortrait($('.h-player canvas'), ch);
+    for (const g of chainG) g.f = -99;
+    for (const o of offs) o.lag = 1;
   };
+  on('scenario', reset);
   // heavy numerals: the rim layer (::before) reads data-t, the gradient face is the inner span
   const num = (el, v) => { v = String(v); if (el.dataset.t !== v) { el.dataset.t = v; el.firstChild.textContent = v; } };
   let showKeys = null;
   // system banners queue (one at a time, held back while the Musou plays); dialogue (top left) and the banner band
   // (y 64-70 %) sit apart, so neither cancels the other. Dialogue holds 5 s like DW8.
   const banner = (html, en, dur = 150) => { if (S.bandQ.length < 3) S.bandQ.push({ html, en, dur }); };
-  const say = (zh, en, dur = 300) => { S.dlg = { zh, en, f: game.frame, dur }; };
-  on('scenario', () => { S.dlg = { zh: '主公之子在此，趙雲誓死護之！', en: 'My lord\'s son is in my care. None of you shall pass!', f: 185, dur: 300 }; });
+  // dialogue: speaker {zh, en} (default: the hero); portrait = CHARS id or a {face, pal} 20×20 portrait (chars/index.js),
+  // null = no badge; default: the hero's when the hero speaks, none for anyone else
+  const say = (zh, en, dur = 300, speaker = game.hero.char.name, portrait = game.hero.char.id) => {
+    S.dlg = { zh, en, f: game.frame, dur };
+    text(dlgN, speaker.zh); text(dlgE, speaker.en.toUpperCase());
+    const ch = typeof portrait === 'string' ? CHARS[portrait] : portrait ? { portrait } : null;
+    if (ch) paintPortrait(dlgCv, ch); else dlgCv.getContext('2d').clearRect(0, 0, 20, 20);
+    set(dlgCv, 'visibility', ch ? 'visible' : 'hidden');
+  };
+  on('story:say', (e) => say(e.zh, e.en, e.dur ?? 300, e.speaker || undefined, e.portrait !== undefined ? e.portrait : e.speaker ? null : undefined));
+  on('story:banner', (e) => banner(e.html, e.en, e.dur ?? 150));
+  on('story:objective', (e) => { S.obj = e.zh ? { zh: e.zh, en: e.en || '', f: game.frame } : null; if (S.obj) { text(objB, e.zh); text(objS, e.en || ''); } });
   on('crowd:wave', (e) => {
     if (game.frame - S.waveF > 600) { S.waveF = game.frame; banner('<em>魏軍</em>援兵 到着', 'Wei reinforcements have arrived!', 130); }
     S.waves.push({ x: e.x, z: e.z, f: game.frame });
@@ -98,12 +96,12 @@ export function createHud(root, game, camera) {
   on('attack:start', () => { S.actF = game.frame; });
   on('ko', (e) => {
     if (!e.officer) return;
-    const [zh, en] = OFFICERS[(e.i - game.crowd.grunts) % OFFICERS.length];
-    banner(`敵將 <em>${zh}</em> 擊破！`, `Enemy officer ${en.replace(/\b(\w)(\w*)/g, (m, a, b) => a + b.toLowerCase())} defeated!`, 150);
+    const { zh, en } = offName(e.i);
+    banner(`敵將 <em>${zh}</em> 擊破！`, `Enemy officer ${cap(en)} defeated!`, 150);
     S.tgt = e.i; S.tgtKoF = game.frame;
   });
   on('musou:start', () => { S.musouF = S.actF = game.frame; S.band = null; S.dlg = null; });
-  on('musou:end', () => { S.musouEnd = game.frame; say('吾乃常山趙子龍也！', 'I am Zhao Zilong of Changshan!'); S.dlg.f += 20; });
+  on('musou:end', () => { S.musouEnd = game.frame; const l = game.hero.char.lines.musouEnd; say(l.zh, l.en); S.dlg.f += 20; });
   on('hero:hurt', () => { S.hurtF = S.actF = game.frame; });
   addEventListener('keydown', (e) => { if (e.code === 'KeyH') showKeys = !(showKeys ?? true); });
 
@@ -112,6 +110,7 @@ export function createHud(root, game, camera) {
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
   const mileOf = (n) => (n < 50 ? (n >= 25 ? 25 : 0) : Math.floor(n / 50) * 50);   // last KO milestone reached
   const v3 = new Vector3();
+  reset();
 
   return {
     update() {
@@ -194,8 +193,9 @@ export function createHud(root, game, camera) {
         // keep the popup off Zhao Yun: its digits span x 42-61 %, y (top + 4) … (top + 19) %. If his screen box would sit
         // under them, lift it clear of his head; if there is no room above (close Musou shots), fade it to 40 %.
         S.mileTop = 33; S.mileDim = 1;
-        v3.set(h.x, h.y + 2.05, h.z).project(camera); const hx = (v3.x + 1) / 2, hy = (1 - v3.y) / 2, front = v3.z < 1;
-        v3.set(h.x, h.y, h.z).project(camera); const fy = (1 - v3.y) / 2, hw = Math.max(0.03, (fy - hy) * 0.35 * H / W);
+        const gy = ground(h.x, h.z);
+        v3.set(h.x, h.y + gy + 2.05, h.z).project(camera); const hx = (v3.x + 1) / 2, hy = (1 - v3.y) / 2, front = v3.z < 1;
+        v3.set(h.x, h.y + gy, h.z).project(camera); const fy = (1 - v3.y) / 2, hw = Math.max(0.03, (fy - hy) * 0.35 * H / W);
         if (front && hx - hw < 0.62 && hx + hw > 0.41 && hy < 0.53 && fy > 0.36) {
           S.mileTop = Math.max(8, Math.round((hy - 0.21) * 100));
           if (hy - 0.21 < 0.08) S.mileDim = 0.4;
@@ -237,6 +237,8 @@ export function createHud(root, game, camera) {
         set(dlg, 'opacity', dlgA.toFixed(2));
         set(dlg, 'transform', `translateX(${(-Math.max(0, 1 - dt / 8) * 2).toFixed(2)}rem)`);
       } else set(dlg, 'opacity', '0');
+      // objective (top left, above the target bar): fades in over 12 f, hidden while the intro card or a Musou is up
+      set(obj, 'opacity', S.obj && !inMusou ? (Math.min(1, (f - S.obj.f) / 12) * (1 - introA)).toFixed(2) : '0');
 
       // musou: vertical calligraphy copy on the right (concept) while the musou runs
       const mf = f - S.musouF, me = f - S.musouEnd;
@@ -256,7 +258,7 @@ export function createHud(root, game, camera) {
       const tKo = tg >= 0 && f - S.tgtKoF < 70 && tg === S.tgt;
       set(target, 'opacity', tg >= 0 && introA < 0.5 ? (tKo ? clamp01((70 - (f - S.tgtKoF)) / 20) : 1).toFixed(2) : '0');
       if (tg >= 0) {
-        const [zh, en] = OFFICERS[(tg - c.grunts) % OFFICERS.length];
+        const { zh, en } = offName(tg);
         text(targetB, zh); text(targetS, en);
         const th = clamp01(c.hp[tg] / c.hpMax[tg]);
         set(targetI, 'transform', `scaleX(${th.toFixed(4)})`);
@@ -296,7 +298,8 @@ export function createHud(root, game, camera) {
         // ▼▼ on the helmet crest (2.3 m standing); a reacting officer bends or falls, so the anchor eases down with him
         const st = c.st[i], hy = st === ST.HURT || st === ST.KNOCK ? 1.7 : st === ST.AIR ? 1.3 : st === ST.DOWN || st === ST.GETUP ? 1.1 : 2.3;
         o.hy = o.hy == null || df > 30 ? hy : o.hy + (hy - o.hy) * (1 - 0.7 ** df);
-        v3.set(c.x[i], c.y[i] + o.hy, c.z[i]);
+        v3.set(c.x[i], c.y[i] + o.hy + ground(c.x[i], c.z[i]), c.z[i]);
+        const nm = offName(i); text(o.nm, nm.zh); text(o.en, nm.en);
         const k = Math.max(0.7, Math.min(1, 14 / v3.distanceTo(camera.position)));
         v3.project(camera);
         const sx = (v3.x + 1) / 2, sy = (1 - v3.y) / 2;

@@ -13,6 +13,7 @@ import { ST, KIND, CROWD } from './crowd.js';
 import { patchHitMaterial, hitGlow } from '../combat/hitfx.js';   // hit-impact: victim flash/tint
 import { hash01 } from '../core/rng.js';
 import { HUD_TAG_R } from '../ui/hud.js';
+import { ground } from '../world/map.js';
 
 const V = 0.042;
 const b = (a, bb, c, paint) => ({ a, b: bb, c, paint });
@@ -494,6 +495,7 @@ export function createCrowdView(scene, game) {
       if (s === ST.DEAD && t > CROWD.deadTime - 50) y -= (t - (CROWD.deadTime - 50)) / 50 * 0.5;
     }
     const shake = crowd.hs[i] > 0 ? Math.sin(crowd.hs[i] * 2.7) * 0.05 : 0;
+    y += ground(crowd.x[i], crowd.z[i]);                          // sim y is height above ground (world/map.js)
     _root.makeRotationFromEuler(_e.set(rx, crowd.yaw[i], 0)).setPosition(crowd.x[i] + shake, y, crowd.z[i]);
     _root.multiply(_s.makeScale(sc, sc, sc));
     // colour: per-soldier tint; the hit flash is an emissive glow (hit-impact, src/combat/hitfx.js)

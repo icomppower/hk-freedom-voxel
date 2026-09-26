@@ -13,7 +13,8 @@
 // foot becomes a lifted step. The pose's `plant` channel = 1 tells the rig the feet are in the hero-facing frame. Every
 // clip starts on the feet the previous move of its string left at its cancel frame (ENTRY), so strings never re-stance.
 import { P, clip, sampleClip, spearAbout, STANCE, CH, POSE_SIZE } from '../rig.js';
-import { MOVES, lungeAt } from '../moves.js';
+import { MOVES } from '../moves.js';
+import { lungeAt } from '../moveset.js';
 
 const D2R = Math.PI / 180;
 const ST = STANCE;

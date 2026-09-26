@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { on } from '../core/events.js';
 import { ST } from '../crowd/crowd.js';
+import { ground } from '../world/map.js';
 
 const DEG = Math.PI / 180;
 const BLEND = 0.45;                                   // s, Musou → gameplay blend (bench: 0.3-0.6 s, no pop)
@@ -164,6 +165,7 @@ export function createCameraRig(game, width, height) {
   on('musou:burst', () => kick(4, 0.3, 1, 10));
   on('musou:start', () => { cine = { phase: -1 }; });
   on('musou:end', () => { cine = null; blend = BLEND; });                  // eased blend back to the gameplay rig
+  on('scenario', () => { kicks.length = 0; cine = null; blend = 0; snap = true; });   // new battle (game.frame restarts at 0)
 
   /** Nearby-crowd stats around the hero (render-side read of sim arrays): count within crowdR and lateral pull. */
   function crowdAround(h, rx, rz) {
@@ -226,7 +228,7 @@ export function createCameraRig(game, width, height) {
       // … and the fall after a jump (feet stay in frame): capped and eased, so the plunge start/landing is not a jolt
       const leadY = shot || h.grounded ? 0 : clamp(h.vy * lift / CAM.followY, -CAM.leadYMax, CAM.leadYMax);
       leadYs = snap ? leadY : leadYs + (leadY - leadYs) * (1 - Math.exp(-CAM.leadYRate * dt));
-      target.set(h.x + rx * lat + h.vx * lead, h.y * lift + height + leadYs, h.z + rz * lat + h.vz * lead);
+      target.set(h.x + rx * lat + h.vx * lead, h.y * lift + height + leadYs + ground(h.x, h.z), h.z + rz * lat + h.vz * lead);   // sim y is above ground
       const kxz = snap ? 1 : 1 - Math.exp(-CAM.follow * dt), kyv = snap ? 1 : 1 - Math.exp(-CAM.followY * dt);
       if (snap) api.focus.copy(target);
       else { api.focus.x += (target.x - api.focus.x) * kxz; api.focus.z += (target.z - api.focus.z) * kxz; api.focus.y += (target.y - api.focus.y) * kyv; }
@@ -238,7 +240,7 @@ export function createCameraRig(game, width, height) {
         // last-resort guard: never let a non-finite pose stick (blank fog forever) — snap to the default follow pose
         if (!warned) { warned = true; console.error('camera: non-finite rig state, snapped to the default follow pose', { yaw, bk, pull, bias }); }
         yaw = game.cam.yaw; pull = bias = blend = 0;
-        api.focus.set(h.x, h.y * CAM.airLift + CAM.height, h.z);
+        api.focus.set(h.x, h.y * CAM.airLift + CAM.height + ground(h.x, h.z), h.z);
         behind(pos, yaw, CAM.pitch, CAM.dist).add(api.focus);
         camera.fov = CAM.fov;
       }

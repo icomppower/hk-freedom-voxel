@@ -15,11 +15,13 @@
 //    threatening while only about one blow in 4-6 s connects. A flinch still cancels a wind-up.
 //  · Reinforcements: while the ring is under strength and no block waits nearer, a column of 8-15 (with its bearer)
 //    spawns 16-26 m out in front of the camera and runs in; `crowd:wave` announces it. Waves only run once a scenario
-//    spawned an army or a ring.
+//    spawned an army or a ring (setWaves).
+//  · Story API (src/story drives it): spawnSquad, spawnOfficer, clearAll, setWaves — see below. Officers carry a
+//    name (c.offName[i - grunts] = {zh, en}, shown by the HUD tags) and a boss flag (c.boss[i]).
 // Reaction states (HURT..GETUP) are driven by src/combat; this module owns the rest.
 import { rng } from '../core/rng.js';
 import { emit } from '../core/events.js';
-import { WALL_Z } from '../world/world.js';
+import { clampWalk } from '../world/map.js';
 
 export const ST = { OFF: 0, IDLE: 1, ADVANCE: 2, GUARD: 3, ATTACK: 4, HURT: 5, KNOCK: 6, AIR: 7, DOWN: 8, GETUP: 9, DEAD: 10 };
 const isReacting = (s) => s >= ST.HURT && s <= ST.GETUP;
@@ -28,8 +30,12 @@ export const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 export const KIND = { SPEAR: 0, SWORD: 1, CAPTAIN: 2, BEARER: 3, OFFICER: 4 };
 const SQ_HOLD = 1, SQ_MARCH = 2, SQ_HALT = 3, SQ_CHARGE = 4;
 
+// free-mode (arena) officers, in slot order
+const FREE_OFFICERS = [{ zh: '夏侯恩', en: 'XIAHOU EN' }, { zh: '晏明', en: 'YAN MING' }, { zh: '淳于導', en: 'CHUNYU DAO' }, { zh: '張郃', en: 'ZHANG HE' }];
+
 export const CROWD = {
-  officers: 4,
+  officers: 4,                  // officers the free-mode army fields (and brings back with the waves)
+  officerSlots: 6,              // officer slots (indices grunts … N-1); the story may field up to this many at once
   walk: 2.4, run: 4.8, march: 3.0, charge: 5.0, turn: 7,
   radius: 0.48, heroR: 0.8,
   bands: [[1.9, 2.8], [3.4, 5.6], [6.5, 10]], share: [0.4, 0.85], bandMin: [14, 20], bandMax: [18, 30],   // inner ring, second row, outer
@@ -39,7 +45,7 @@ export const CROWD = {
   grace: [150, 240], rally: [3, 5], rallyTime: 44,             // feints for 2.5-4 s after a blow lands; guards raising
   windup: 40, strike: 40, recover: 24, cooldown: [110, 260], officerCd: [40, 90],  // strike lands 0.67 s after wind-up starts
   hp: 30, captainHp: 80, officerHp: 520,
-  deadTime: 210, fieldR: 62,
+  deadTime: 210,
   engaged: 84, transit: 72,                                   // director target: soldiers on the hero; cap on blocks en route
   halt: 15, haltFrames: 36, fold: 7.5,                        // squad: halt at 15 m, then charge, fold at 7.5 m
   wave: [8, 15], waveEvery: [45, 110], waveDist: [16, 26],   // columns every 0.75 s below half strength, else 1.8 s
@@ -49,7 +55,7 @@ const CELL = 1.2, GRID = 128, HALF = GRID * CELL / 2;
 const MAXSQ = 64;
 
 export function createCrowd(game, grunts) {
-  const N = grunts + CROWD.officers;
+  const N = grunts + CROWD.officerSlots;
   const F = (n = N) => new Float64Array(n), I = (n = N) => new Int32Array(n);
   const c = {
     N, grunts,
@@ -61,6 +67,7 @@ export function createCrowd(game, grunts) {
     sq: { x: F(MAXSQ), z: F(MAXSQ), face: F(MAXSQ), st: I(MAXSQ), t: I(MAXSQ), n: 0 },
     raiseF: I(), feint: I(), wind: I(),                         // raiseF: rallying until (render + ring surge); feint strike; winding up
     hitHeavy: I(),                                              // last hit was heavy (set by combat, read by hitfx.js)
+    boss: I(), offName: new Array(CROWD.officerSlots).fill(null),   // story: boss flag; officer display names {zh, en}
     waveT: 0, tokensUsed: 0, strikeF: 0, gap: 0, graceF: 0, heroHp: 0, wavesOn: false, engaged: 0,
   };
   const head = new Int32Array(GRID * GRID), next = new Int32Array(N);
@@ -70,13 +77,14 @@ export function createCrowd(game, grunts) {
   function place(i, x, z, engaged, kind) {
     const off = i >= grunts;
     if (off) kind = KIND.OFFICER;
-    c.x[i] = x; c.z[i] = Math.min(z, WALL_Z - 2.5); c.y[i] = 0; c.vx[i] = c.vz[i] = c.vy[i] = 0;
+    [x, z] = clampWalk(x, z, -0.5);
+    c.x[i] = x; c.z[i] = z; c.y[i] = 0; c.vx[i] = c.vz[i] = c.vy[i] = 0;
     c.yaw[i] = Math.atan2(game.hero.x - x, game.hero.z - z);
     c.type[i] = off ? 1 : 0; c.kind[i] = kind;
     c.hpMax[i] = c.hp[i] = off ? CROWD.officerHp : kind === KIND.CAPTAIN ? CROWD.captainHp : CROWD.hp;
     c.st[i] = engaged ? ST.ADVANCE : ST.IDLE; c.stT[i] = rng.int(0, 60);
     c.token[i] = 0; c.cd[i] = rng.int(0, 120); c.hs[i] = 0; c.flash[i] = 0; c.raiseF[i] = 0; c.feint[i] = 0; c.wind[i] = 0;
-    c.rx[i] = c.rxV[i] = c.spinV[i] = 0; c.bounce[i] = 0; c.lastHit[i] = -1; c.kod[i] = 0;
+    c.rx[i] = c.rxV[i] = c.spinV[i] = 0; c.bounce[i] = 0; c.lastHit[i] = -1; c.kod[i] = 0; c.boss[i] = 0;
     const r = rng.next();
     if (kind === KIND.BEARER) { c.band[i] = 2; c.pref[i] = rng.range(7, 11); }
     else setBand(i, off ? 0 : r < CROWD.share[0] ? 0 : r < CROWD.share[1] ? 1 : 2);
@@ -87,6 +95,7 @@ export function createCrowd(game, grunts) {
   function setBand(i, k) { c.band[i] = k; c.pref[i] = rng.range(CROWD.bands[k][0], CROWD.bands[k][1]); c.seated[i] = 0; }
 
   c.reset = () => {
+    c.offName.fill(null);
     c.st.fill(ST.OFF); c.token.fill(0); c.tokensUsed = 0; c.strikeF = 0; c.gap = 0; c.graceF = 0; c.heroHp = game.hero.hp; c.waveT = 0; c.sq.n = 0; c.wavesOn = false;
   };
 
@@ -98,11 +107,11 @@ export function createCrowd(game, grunts) {
   }
 
   /** New squad at (sx, sz) facing `face`; members fill a block `cols` wide, 1.15 m apart; bearer ahead, captain on
-   *  the front-left. Does nothing when the table is full. */
+   *  the front-left. Does nothing when the table is full (returns the squad id, or -1). */
   function makeSquad(slots, sx, sz, face, cols, st) {
     let q = -1;
     for (let k = 0; k < c.sq.n; k++) if (!c.sq.st[k]) { q = k; break; }
-    if (q < 0) { if (c.sq.n >= MAXSQ) return; q = c.sq.n++; }
+    if (q < 0) { if (c.sq.n >= MAXSQ) return -1; q = c.sq.n++; }
     c.sq.x[q] = sx; c.sq.z[q] = sz; c.sq.face[q] = face; c.sq.st[q] = st; c.sq.t[q] = 0;
     const sn = Math.sin(face), cs = Math.cos(face);
     const rows = Math.ceil((slots.length - 1) / cols);
@@ -120,6 +129,7 @@ export function createCrowd(game, grunts) {
       c.yaw[i] = face;
       if (st !== SQ_HOLD) c.st[i] = ST.ADVANCE;
     });
+    return q;
   }
 
   /** Squads spread over the field around the origin: the default army layout. One big block waits in front of the
@@ -134,16 +144,44 @@ export function createCrowd(game, grunts) {
       const size = Math.min(slots.length - k, big ? rng.int(50, 60) : rng.int(18, 30));
       const a = big ? fwd + rng.range(-0.25, 0.25) : n % 3 === 2 ? fwd + Math.PI + rng.range(-1.4, 1.4) : fwd + rng.range(-1.8, 1.8);
       const d = big ? rng.range(24, 28) : rng.range(11, 34);
-      const sx = Math.sin(a) * d, sz = Math.min(Math.cos(a) * d, WALL_Z - 6);
+      const sx = Math.sin(a) * d, sz = clampWalk(sx, Math.cos(a) * d, 3)[1];
       const face = Math.atan2(-sx, -sz);
       makeSquad(slots.slice(k, k + size), sx, sz, face, big ? 10 : Math.max(4, Math.round(Math.sqrt(size * 1.6))), SQ_HOLD);
       k += size; n++;
     }
     for (const i of freeSlots(true)) {
+      if (i >= grunts + CROWD.officers) break;
       const a = rng.range(0, Math.PI * 2), d = rng.range(12, 30);
       place(i, Math.cos(a) * d, Math.sin(a) * d, false);
+      c.offName[i - grunts] = FREE_OFFICERS[(i - grunts) % FREE_OFFICERS.length];
     }
   };
+
+  // ---- story API (sim: call from story.step / story.reset only). All positions go through clampWalk.
+  /** A block of n grunts (standard-bearer + captain + rank and file) at (x, z) facing `face` (default: toward the
+   *  hero). hold (default): waits until the director sends it or the hero walks into it; charge: runs straight in.
+   *  Fields what is free if fewer than n grunt slots are OFF. Returns the squad id, or -1 (no free slot / squad table full). */
+  c.spawnSquad = ({ x, z, n = 20, face, cols, charge = false }) => {
+    const slots = freeSlots(false).slice(0, n);
+    if (!slots.length) return -1;
+    [x, z] = clampWalk(x, z, 3);
+    return makeSquad(slots, x, z, face ?? Math.atan2(game.hero.x - x, game.hero.z - z), cols || Math.max(3, Math.round(Math.sqrt(slots.length * 1.6))), charge ? SQ_CHARGE : SQ_HOLD);
+  };
+  /** A named officer at (x, z): name {zh, en} (HUD tag / target bar / KO banner), hp (default CROWD.officerHp), boss
+   *  (flag for the story / HUD), engaged: start closing in at once (else he waits until the hero comes within
+   *  CROWD.officerAggro). Returns his soldier index, or -1 when every officer slot is taken. */
+  c.spawnOfficer = ({ x, z, name, hp = CROWD.officerHp, boss = false, engaged = false }) => {
+    const i = freeSlots(true)[0];
+    if (i === undefined) return -1;
+    place(i, x, z, engaged);
+    c.hp[i] = c.hpMax[i] = hp; c.boss[i] = boss ? 1 : 0;
+    c.offName[i - grunts] = name;
+    return i;
+  };
+  /** Remove every soldier and squad at once (scene change); waves stop. */
+  c.clearAll = () => c.reset();
+  /** Reinforcement columns on/off (they run while the ring is under strength, see waves()). */
+  c.setWaves = (on) => { c.wavesOn = !!on; };
 
   /** Nearest alive enemy within maxR whose bearing is within `cone` radians of `yaw`. */
   c.nearest = (x, z, maxR, yaw, cone) => {
@@ -486,14 +524,9 @@ export function createCrowd(game, grunts) {
       const dx = c.x[i] - h.x, dz = c.z[i] - h.z, d = Math.hypot(dx, dz);
       if (d < hr && !h.y) { const k = (hr - d) / (d || 1e-4); px[i] += dx * k; pz[i] += dz * k; }
     }
-    const lim = CROWD.fieldR;
     for (let i = 0; i < N; i++) {
       if (!px[i] && !pz[i]) continue;
-      c.x[i] += Math.max(-0.2, Math.min(0.2, px[i] * 0.6));
-      c.z[i] += Math.max(-0.2, Math.min(0.2, pz[i] * 0.6));
-      const r = Math.hypot(c.x[i], c.z[i]);
-      if (r > lim) { c.x[i] *= lim / r; c.z[i] *= lim / r; }
-      if (c.z[i] > WALL_Z - 2) c.z[i] = WALL_Z - 2;
+      [c.x[i], c.z[i]] = clampWalk(c.x[i] + Math.max(-0.2, Math.min(0.2, px[i] * 0.6)), c.z[i] + Math.max(-0.2, Math.min(0.2, pz[i] * 0.6)), -1);
     }
   }
 
@@ -507,13 +540,14 @@ export function createCrowd(game, grunts) {
     c.waveT = 0;
     const n = Math.min(off.length, rng.int(CROWD.wave[0], CROWD.wave[1]));
     const a = game.cam.yaw + rng.range(-1.1, 1.1), d = rng.range(CROWD.waveDist[0], CROWD.waveDist[1]);
-    let sx = h.x + Math.sin(a) * d, sz = h.z + Math.cos(a) * d;
-    const r = Math.hypot(sx, sz);
-    if (r > CROWD.fieldR - 4) { sx *= (CROWD.fieldR - 4) / r; sz *= (CROWD.fieldR - 4) / r; }
-    sz = Math.min(sz, WALL_Z - 4);
+    const [sx, sz] = clampWalk(h.x + Math.sin(a) * d, h.z + Math.cos(a) * d, 1);
     makeSquad(off.slice(0, n), sx, sz, Math.atan2(h.x - sx, h.z - sz), 3, SQ_CHARGE);   // a column that runs straight in
-    // KO'd officers come back with the waves
-    for (const i of freeSlots(true)) { place(i, sx + rng.range(-2, 2), sz + rng.range(-2, 2), true); break; }
+    // free mode: KO'd officers come back with the waves (story officers are named and stay down)
+    for (const i of freeSlots(true)) {
+      if (game.mode === 'story' || i >= grunts + CROWD.officers) break;
+      place(i, sx + rng.range(-2, 2), sz + rng.range(-2, 2), true); c.offName[i - grunts] = FREE_OFFICERS[(i - grunts) % FREE_OFFICERS.length];
+      break;
+    }
     emit('crowd:wave', { x: sx, z: sz });
   }
 

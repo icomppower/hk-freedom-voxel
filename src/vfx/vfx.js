@@ -15,7 +15,6 @@ import * as THREE from 'three';
 import { on } from '../core/events.js';
 import { vrng } from '../core/rng.js';
 import { mergeVoxel } from '../core/voxel.js';
-import { MOVES } from '../hero/moves.js';
 import { heroPose } from '../hero/hero.js';
 import { POSE_SIZE, spearWorld } from '../hero/rig.js';
 import { lensClear } from '../camera/occlusion.js';        // camera part (r3): debris never blocks the lens
@@ -532,11 +531,13 @@ export function createVfx(scene, game, world) {
   let flashDecay = 2.2;
   const flash = (v, decay = 2.2) => { if (v >= vfx.flash) { vfx.flash = v; flashDecay = decay; } };
 
+  const NO_TRAIL = { base: 1.25, baseHeavy: 1.05, tip: 2.18 };   // tip sampling still feeds the thrust streak height
   const isHeavyMove = (id) => !!id && (id[0] === 'c' || id === 'jc' || id === 'n6');
   function trailActive(h) {
+    if (!h.kit.trail) return false;                          // kit without a weapon ribbon (src/chars/index.js)
     if (h.state === 'musou') return h.stateT > 30;           // after the activation pose
     if (h.state !== 'attack') return false;
-    for (const w of MOVES[h.move].hits) if (h.moveT >= w.f[0] - 3 && h.moveT <= w.f[1] + 2) return true;
+    for (const w of h.kit.moves[h.move].hits) if (h.moveT >= w.f[0] - 3 && h.moveT <= w.f[1] + 2) return true;
     return false;
   }
 
@@ -706,11 +707,8 @@ export function createVfx(scene, game, world) {
   // C3 gold pillar ring (after the dark smoke arc, see afterStep), C5 fan of blue-white shafts from the ground,
   // C6 rock eruption inside a 2.5 H dust wall, jump charge a small quake; the rest is shaped by the hitbox.
   const GOLD = [1.5, 0.72, 0.2], SHAFT = [0.28, 0.52, 0.92];
-  // integration r2: the pillar ring is the `pillars` window (combo-system's delayed ground wave), so the dark arc leads it
-  const C3_SLAM = ((MOVES.c3 && (MOVES.c3.hits.find((w) => w.pillars) || MOVES.c3.hits.find((w) => w.heavy))) || { f: [0] }).f[0];
   on('attack:swing', (e) => {
-    const m = MOVES[e.move], hit = m && m.hits[e.win];
-    const h = game.hero;
+    const h = game.hero, m = h.kit.moves[e.move], hit = m && m.hits[e.win];
     if (!m) return;
     if (!m.air && h.y < 0.3) dustPuff(h.x + Math.sin(e.yaw) * 0.4, h.z + Math.cos(e.yaw) * 0.4, e.heavy ? 4 : 2, 1.8, 0.34, 0.08, 0.4);
     if (!hit || !e.heavy) return;
@@ -829,14 +827,14 @@ export function createVfx(scene, game, world) {
     if (game.hitstop === 0 || game.hitstop % 2 === 0) clock++;   // half-rate ageing in hitstop: a heavy hit must not hang the crescent
     heroPose(h, pose);
     hpos.set(h.x, h.y, h.z);
-    const musou = h.state === 'musou', heavy = musou || (h.state === 'attack' && isHeavyMove(h.move));
-    spearWorld(pose, hpos, h.yaw, heavy ? 1.05 : 1.25, 2.18, baseNow, tipNow);   // ribbon ≈ 0.9-1.1 m wide: a crisp band, not a sheet
+    const musou = h.state === 'musou', heavy = musou || (h.state === 'attack' && isHeavyMove(h.move)), tr = h.kit.trail || NO_TRAIL;
+    spearWorld(pose, hpos, h.yaw, heavy ? tr.baseHeavy : tr.base, tr.tip, baseNow, tipNow);   // ribbon ≈ 0.9-1.1 m wide: a crisp band, not a sheet
 
     if (h.state === 'attack' && game.hitstop === 0) {
       const tick = h.moveSeq * 1000 + h.moveT;
       if (tick !== lastTick) {
         lastTick = tick;
-        const m = MOVES[h.move], t = h.moveT;
+        const m = h.kit.moves[h.move], t = h.moveT;
         for (const hit of m.hits) {
           if (hit.shape !== 'line' || t < hit.f[0] || t > hit.f[1]) continue;
           if (hit.every ? (t - hit.f[0]) % hit.every !== 0 : t !== hit.f[0]) continue;
@@ -851,7 +849,9 @@ export function createVfx(scene, game, world) {
         }
         // C3: dark smoke arc grows over the hero from ≈ 12 sf before the slam, so the gold pillars flash out of a dark
         // beat (benchmark: dark arc f341-348, pillars f349)
-        if (h.move === 'c3' && C3_SLAM > 12) { const k = t - (C3_SLAM - 12); if (k >= 0 && k < 8) darkArc(h, k / 8, (k + 1) / 8); }
+        // (integration r2: the pillar ring is the `pillars` window — combo-system's delayed ground wave — so the arc leads it)
+        const pil = m.hits.find((w) => w.pillars), slam = pil ? pil.f[0] : 0;
+        if (slam > 12) { const k = t - (slam - 12); if (k >= 0 && k < 8) darkArc(h, k / 8, (k + 1) / 8); }
         // footfall dust while a lunge carries the hero along the ground (N4 run-in, dash, N6 hop-lunge…)
         if (!m.air && h.y < 0.2 && t % 4 === 0) for (const [f0, f1] of m.lunge) if (t >= f0 && t <= f1) { dustPuff(h.x, h.z, 2, 1.4, 0.3, 0.05, 0.4); break; }
       }

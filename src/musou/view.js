@@ -82,8 +82,10 @@ function dragonParts() {
 }
 const HEAD_SCALE = 2.3;
 
-export function createMusouView(scene, game, camera) {
+export function createMusouView(parent, game, camera) {
   const mu = game.musou, hero = game.hero;
+  const scene = new THREE.Group();                           // everything 3D lives here, so dispose() removes it all
+  parent.add(scene);
   const addMat = () => new THREE.MeshBasicMaterial({ color: 0xffffff, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false });
 
   // ---- grade quads
@@ -418,6 +420,12 @@ export function createMusouView(scene, game, camera) {
       updateFx(tv);
       updateDragon(tv, dt);
       updateCut(tv);
+    },
+    /** Rebuilt per character (main.js): drop the 3D group and the DOM layers (event subscriptions: events.js collect). */
+    dispose() {
+      parent.remove(scene);
+      scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+      for (const el of [dimEl, washEl, css, cut]) el.remove();
     },
   };
 }

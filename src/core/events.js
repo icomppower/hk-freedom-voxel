@@ -4,7 +4,8 @@
 // you keep.
 //
 // Catalogue (emitter → payload fields):
-//  scenario      main     {name}                                        after a scenario reset
+//  scenario      main     {name, mode, char, chapter}                   after a battle reset (name: 'arena' free | chapter id)
+//  flow          main     {state, ctx}                                  flow state entered: title|select|prologue|battle|result
 //  attack:start  combo    {move, x,y,z, yaw, charge, tell}              a move begins (charge: C1–C6/jump charge;
 //                                                                        tell: frames until its first active frame)
 //  attack:swing  combat   {move, win, yaw, heavy}                       a hitbox window opens (whoosh)
@@ -19,6 +20,7 @@
 //  footstep      loco     {x,y,z, foot, speed, kick?}                   a foot plants in the run (≥2.5 m/s) / out of a dodge roll
 //                                                                       / the dash lunge landing (kick: 1 = a hard plant: dust burst)
 //  hero:hurt     hero     {dmg, hp, x,y,z, armored}
+//  hero:down     hero     {x,z}                                         story mode: hp reached 0 (h.dead; free mode never)
 //  musou:ready   musou    {}               a Musou became available: ≥ 1 of the 3 gauge segments full (edge; r3: one Musou spends one segment)
 //  musou:start   musou    {x,z, activation, burstAt, contact}           activation/burstAt/contact in musou frames
 //                                                                       (close-up cut, finisher, first mass hit)
@@ -28,12 +30,30 @@
 //  musou:burst   musou    {count, x,z}                                  finisher: the ring wave starts at Zhao Yun
 //  musou:end     musou    {}
 //  crowd:wave    crowd    {x,z}                                         reinforcements spawned
+//  story:say     story    {speaker, zh, en, dur, portrait}              dialogue line (HUD, top left). speaker: {zh, en} name
+//                                                                       (omitted = the hero); portrait: CHARS id | {face, pal} |
+//                                                                       null (omitted = the hero's if the hero speaks); dur: sim frames
+//  story:banner  story    {html, en, dur}                               system banner (HUD band; html may use <em>)
+//  story:objective story  {zh, en}                                      current objective (HUD, top left; empty zh clears it)
+//  story:end     story    {win, stats}                                  battle over → flow goes to the result screen.
+//                                                                       stats: {kos, time (s), hp, maxChain, rank?, ...}
 const subs = new Map();
+let rec = null;                   // collect(): subscriptions made while a factory runs
 
 export function on(name, fn) {
   let a = subs.get(name);
   if (!a) subs.set(name, (a = []));
   a.push(fn);
+  if (rec) rec.push([name, fn]);
+}
+
+/** Run factory() and record every on() it makes. Returns [result, off]; off() drops those subscriptions (views that are
+ *  rebuilt per character: hero / musou view). Do not call off() from inside an event handler. */
+export function collect(factory) {
+  const prev = rec, list = (rec = []);
+  try {
+    return [factory(), () => { for (const [n, f] of list) { const a = subs.get(n), k = a.indexOf(f); if (k >= 0) a.splice(k, 1); } }];
+  } finally { rec = prev; }
 }
 
 export function emit(name, payload) {

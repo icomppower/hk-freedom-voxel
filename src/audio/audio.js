@@ -16,7 +16,6 @@
 // Positional: pan + distance attenuation from the hero, relative to the sim camera yaw. Read-only on the sim; audio
 // randomness is Math.random, never the sim RNG. Starts on the first user gesture.
 import { on } from '../core/events.js';
-import { MOVES } from '../hero/moves.js';
 import { buildBank, makeIR, noiseBuf } from './bank.js';
 
 const rnd = (a, b) => a + (b - a) * Math.random();
@@ -180,7 +179,7 @@ export function createAudio(game) {
     lastT = now;
     if (!ok()) return;
     musouFrame();
-    const h = game.hero, m = h.state === 'attack' && h.move && MOVES[h.move];
+    const h = game.hero, m = h.state === 'attack' && h.move && h.kit.moves[h.move];
     if (m) {
       if (h.moveSeq !== seq) { seq = h.moveSeq; seenT = -1; }   // missed attack:start (should not happen)
       for (let t = seenT + 1; t <= h.moveT; t++) cue(m, t);
@@ -201,7 +200,7 @@ export function createAudio(game) {
   }
   requestAnimationFrame(frame);
   on('attack:start', (e) => {                 // fires inside the sim step: frame-0 cues play without the rAF poll's lag
-    const h = game.hero, m = MOVES[e.move];
+    const h = game.hero, m = h.kit.moves[e.move];
     seq = h.moveSeq; seenT = 0;
     if (ok() && m) cue(m, 0);
   });
@@ -226,7 +225,7 @@ export function createAudio(game) {
     }
     // multi-tick window (C2-C4, C6 flurries): where this tick sits in its train. The next tick comes every + hitstop
     // frames later; the last one of a train lands hardest (a crescendo, so the spin / flurry ends on its blow)
-    const h = game.hero, mv = e.move === h.move && MOVES[h.move];
+    const h = game.hero, mv = e.move === h.move && h.kit.moves[h.move];
     const w = mv && mv.hits.find((q) => q.every && q.every < 99 && h.moveT >= q.f[0] && h.moveT <= q.f[1]);
     const more = !!w && h.moveT + w.every <= w.f[1], fin = !!w && !more && h.moveT > w.f[0];
     // a spin train opens light (its big whoosh + kiai carry the first tick) and builds to the last blow
