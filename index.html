@@ -32,14 +32,18 @@
   #hud .bar em { background: #f7efe2; }
 
   /* intro card: title + controls (concept top-left typography) */
-  #hud .h-intro { left: 2.6rem; top: 1.4rem; }
+  /* one ink plate behind the whole card (name, romanisation, epithet, keys): readable over any crowd */
+  #hud .h-intro { left: 0; top: 1.4rem; padding: .6rem 9rem 1rem 2.6rem;
+    background: linear-gradient(90deg, rgba(10,7,5,.9), rgba(10,7,5,.84) calc(100% - 10rem), rgba(10,7,5,0));
+    box-shadow: inset .3rem 0 0 var(--seal); }
   #hud .h-intro .zh { display: inline-block; font: 700 8rem/1 var(--brush); letter-spacing: .3rem; color: #f7f1e8;
     text-shadow: 0 0 .1rem #000, .3rem .4rem 0 rgba(0,0,0,.5), 0 0 2rem rgba(0,0,0,.4); }
   #hud .h-intro .seal { vertical-align: 1.2rem; margin-left: .6rem; }
-  #hud .h-intro .en { font: 500 1.25rem/1 var(--sans); letter-spacing: .95em; margin: .2rem 0 0 .5rem; opacity: .85; }
-  #hud .h-intro .sub { font-size: 1.45rem; letter-spacing: .35rem; margin: .9rem 0 0 .4rem; opacity: .85; }
-  #hud .h-intro .keys { font: 500 max(13px, 1.3rem)/2.2 var(--sans); margin: .9rem 0 0 .2rem; padding: .3rem 1rem; color: #efe3cf;
-    background: linear-gradient(90deg, rgba(12,8,6,.86), rgba(12,8,6,.78) 70%, rgba(12,8,6,0)); border-left: .2rem solid var(--seal); }
+  #hud .h-intro .en { font: 600 max(13px, 1.45rem)/1 var(--sans); letter-spacing: .5em; margin: .4rem 0 0 .5rem; color: #f4e2b8; }
+  #hud .h-intro .sub { font-size: max(15px, 1.75rem); letter-spacing: .3rem; margin: 1rem 0 0 .4rem; color: #fbf3e4;
+    text-shadow: 0 .1rem .2rem #000, 0 0 .6rem rgba(0,0,0,.9); }
+  #hud .h-intro .keys { font: 500 max(13px, 1.3rem)/2.2 var(--sans); margin: 1rem 0 0 .2rem; padding: .4rem 0 0; color: #f1e6d2;
+    border-top: .1rem solid rgba(214,170,90,.4); }
   #hud kbd { font: 600 1.05rem/1 var(--sans); padding: .2rem .45rem; border: .1rem solid rgba(239,227,207,.55); border-radius: .3rem;
     background: rgba(0,0,0,.4); margin-right: .15rem; }
 
@@ -105,8 +109,8 @@
   #hud .h-chain small { color: #bfeeff; margin: -.3rem 0 0 .3rem; }
 
   /* KO milestone: centre, heavy gold brush number (digits ~13 % H like DW8) + red 擊破 seal stamp */
-  #hud .h-mile { left: 0; right: 0; top: 33%; text-align: center; opacity: 0; }
-  #hud .h-mile b { display: inline-block; font: 700 15rem/1 var(--brush); --rw: 1rem; --ew: .3rem; --hi: #fffdf0; --mid: #ffdc6a;
+  #hud .h-mile { right: calc(2.4% + 24rem); top: 3.4rem; text-align: right; opacity: 0; transform-origin: 70% 50%; }
+  #hud .h-mile b { display: inline-block; font: 700 11rem/1 var(--brush); --rw: 1rem; --ew: .3rem; --hi: #fffdf0; --mid: #ffdc6a;
     vertical-align: middle; }
   #hud .h-mile b::before { filter: drop-shadow(0 0 1.4rem rgba(0,0,0,.8)) drop-shadow(.5rem .6rem 0 rgba(0,0,0,.5)); }
   #hud .h-mile .seal { font-size: 3.3rem; padding: .6rem .45rem; vertical-align: middle; margin-left: .2rem; }
@@ -134,6 +138,9 @@
   #hud .h-dlg.wei .dseal { background: var(--seal); box-shadow: inset 0 0 0 .22rem var(--seal), inset 0 0 0 .38rem rgba(248,230,210,.8),
     0 0 0 .15rem #d9d2c6, 0 .3rem .6rem rgba(0,0,0,.5); }
   /* big band: commander intro / 討取 banner, DW8's slain-officer weight */
+  #hud .h-band.lo { left: 26%; right: 26%; top: 27%; padding: .4rem 0 .5rem;
+    background: linear-gradient(90deg, rgba(10,6,4,0), rgba(10,6,4,.78) 18%, rgba(10,6,4,.78) 82%, rgba(10,6,4,0)); }
+  #hud .h-band.lo p { font-size: 2.2rem; }
   #hud .h-band.big { padding: 1rem 0 1.1rem; }
   #hud .h-band.big p { font: 700 5.2rem/1.1 var(--brush); letter-spacing: .6rem; color: #ffe3a0;
     text-shadow: 0 0 .1rem #000, .25rem .35rem 0 rgba(0,0,0,.6), 0 0 2rem rgba(255,170,60,.45); }
@@ -267,7 +274,7 @@
   #title .t-veil { background:
       radial-gradient(46rem 30rem at 24rem 20rem, rgba(110,34,8,.22), transparent 70%),
       linear-gradient(90deg, rgba(9,6,4,.95) 0, rgba(9,6,4,.9) 26rem, rgba(9,6,4,.72) 44rem, rgba(9,6,4,.32) 60rem, rgba(9,6,4,0) 76rem),
-      linear-gradient(0deg, rgba(8,5,4,.92) 0, rgba(8,5,4,.55) 9rem, transparent 18rem),
+      linear-gradient(0deg, rgba(8,5,4,.96) 0, rgba(8,5,4,.9) 7.5rem, rgba(8,5,4,.5) 12rem, transparent 20rem),
       linear-gradient(rgba(8,5,4,.55), transparent 11rem),
       radial-gradient(130% 100% at 66% 45%, transparent 55%, rgba(6,4,3,.55)); }
   .t-band { position: absolute; left: 7rem; top: 4.6rem; bottom: 9rem; display: flex; flex-direction: column; }
@@ -317,7 +324,7 @@
   #title.pre .t-menu button { opacity: 0; transform: translateX(-3rem); pointer-events: none; }
   .t-menu button:nth-child(2) { transition-delay: 0s, 0s, .07s; } .t-menu button:nth-child(3) { transition-delay: 0s, 0s, .14s; }
   #title.ctl .t-menu, #title.ctl .t-logo { opacity: .3; } .t-logo { transition: opacity .3s; }
-  #title .ui-foot { transition: opacity .4s; font-size: max(15px, 1.8rem); } #title.pre .ui-foot { opacity: 0; }
+  #title .ui-foot { left: 55%; transition: opacity .4s; font-size: max(15px, 1.8rem); } #title.pre .ui-foot { opacity: 0; }
   #title .ui-foot small { opacity: 1; color: #cfc1a2; font-size: max(13px, 1.2rem); }
   #title kbd { font-size: max(12px, 1.3rem); border-color: rgba(239,227,207,.75); background: rgba(0,0,0,.6); }
   #title kbd.pad { width: max(12px, 1.3rem); }
@@ -632,10 +639,14 @@
   #prologue .pl-pips b { transition: color .4s; }
   #prologue .pl-pips b.past { color: rgba(42,26,14,.6); }
   #prologue .pl-pips b.on { color: var(--wei); }
-  #prologue .pl-skip { position: absolute; right: 5.5vw; bottom: .6vh; display: flex; align-items: center; gap: .9rem; opacity: .8;
-    font: 700 1.5rem/1 var(--kai); color: #efe3cf; text-shadow: 0 .1rem .3rem #000; }
-  #prologue .pl-skip small { display: inline; margin-left: 1rem; font: 600 .95rem/1 var(--sans); letter-spacing: .25em; opacity: .8; }
-  #prologue .pl-skip svg { width: 2.4rem; height: 2.4rem; transform: rotate(-90deg); }
+  /* skip legend in the brocade strip under the scroll: same kbd + label + romanisation layout as .ui-foot */
+  #prologue .pl-skip { position: absolute; right: 5.5vw; bottom: max(2px, calc(2.2vh - 1.4rem)); display: flex; align-items: center; gap: 3rem;
+    font: 700 max(15px, 1.9rem)/1 var(--kai); color: #f6ecd9; text-shadow: 0 .1rem .3rem #000, 0 0 .8rem #000; }
+  #prologue .pl-skip span { display: flex; align-items: center; }
+  #prologue .pl-skip small { display: inline; margin-left: .7rem; font: 600 max(13px, 1.3rem)/1 var(--sans); letter-spacing: .12em; color: #e2d4b6; }
+  #prologue kbd { display: inline-block; font: 600 max(12px, 1.3rem)/1 var(--sans); padding: .3rem .5rem; margin-right: .4rem; text-shadow: none;
+    border: .12rem solid rgba(239,227,207,.75); border-radius: .35rem; background: rgba(0,0,0,.6); color: #f6ecd9; }
+  #prologue .pl-skip svg { width: 2.6rem; height: 2.6rem; margin-right: .6rem; transform: rotate(-90deg); }
   #prologue .pl-skip circle { fill: none; stroke: rgba(239,227,207,.35); stroke-width: 3; }
   #prologue .pl-skip circle.p { stroke: #f2c14e; stroke-dasharray: 1 1; stroke-dashoffset: 1; }
   #prologue.stamped .pl-card, #prologue.stamped .pl-en, #prologue.stamped .pl-pips, #prologue.stamped .pl-skip { opacity: 0; transition: opacity .4s; }

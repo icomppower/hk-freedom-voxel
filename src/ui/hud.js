@@ -1,5 +1,5 @@
 // DOM HUD in the DW8 layout with the concept's calligraphy: pixel portrait badge + long teal HP bar + 3-segment
-// musou gauge (bottom band), KO count with slam pops and 50-KO milestone seal (bottom right / centre, kept off the hero),
+// musou gauge (bottom band), KO count with slam pops and 50-KO milestone seal (bottom right / upper third, held back during finishers),
 // chain counter that rolls up hit by hit with DW8 ghost digits (left), officer target bar (top left) and stacked floating
 // officer name/HP/▼▼ tags, square battlefield minimap with morale bar (top right), queued system banners and dialogue,
 // a title/controls intro card, an objective line (top left), and an idle auto-fade.
@@ -57,7 +57,7 @@ export function createHud(root, game, camera) {
   const S = {};
   const reset = () => {
     Object.assign(S, {
-      lastCombo: 0, shownChain: 0, chainF: -99, chainQ: [], ghostN: 0, shownKo: 0, koF: -99, mile: 0, mileF: -99, mileTop: 33, mileDim: 1,
+      lastCombo: 0, shownChain: 0, chainF: -99, chainQ: [], ghostN: 0, shownKo: 0, koF: -99, mile: 0, mileQ: 0, mileF: -99, busyF: -99,
       lagHp: 1, lastF: 0, hurtF: -99, actF: 0, band: null, bandQ: [], dlg: null, waveF: -999, tgt: -1, tgtF: -999, tgtKoF: -999,
       musouF: -999, musouEnd: -999, waves: [], introCut: 0, obj: null,
     });
@@ -203,37 +203,27 @@ export function createHud(root, game, camera) {
         S.koF = f; num(koB, S.shownKo); text(koG, S.shownKo);
       }
       const m = mileOf(h.kos);
-      if (m < S.mile) S.mile = m;
-      if (m > S.mile && inMusou && m === 25) S.mile = m;                // a Musou always runs past 50: only "50" pops
-      if (m > S.mile && !inMusou) {                                       // fx r2: never over a Musou payoff: it pops when control returns
-        S.mile = m; S.mileF = f; num(mileB, m);
+      if (m < S.mile) S.mile = S.mileQ = m;
+      if (m > S.mile) { S.mile = m; num(mileB, m); }                    // queued: shows the highest one crossed
+      // held back while a charge finisher or the Musou payoff owns the screen (+ ~0.4 s for its blast to clear)
+      if (inMusou || (h.move && (h.move[0] === 'c' || h.move === 'jc'))) S.busyF = f;
+      if (S.mile > S.mileQ && f - S.busyF > 24 && f - S.musouEnd > 24) {
+        S.mileQ = S.mile; S.mileF = f;
         S.shownKo = h.kos; S.koF = f; num(koB, h.kos); text(koG, h.kos);  // the corner count slams to the true total with it
-        // keep the popup off Zhao Yun: its digits span x 42-61 %, y (top + 4) … (top + 19) %. If his screen box would sit
-        // under them, lift it clear of his head; if there is no room above (close Musou shots), fade it to 40 %.
-        S.mileTop = 33; S.mileDim = 1;
-        const gy = ground(h.x, h.z);
-        v3.set(h.x, h.y + gy + 2.05, h.z).project(camera); const hx = (v3.x + 1) / 2, hy = (1 - v3.y) / 2, front = v3.z < 1;
-        v3.set(h.x, h.y + gy, h.z).project(camera); const fy = (1 - v3.y) / 2, hw = Math.max(0.03, (fy - hy) * 0.35 * H / W);
-        if (front && hx - hw < 0.62 && hx + hw > 0.41 && hy < 0.53 && fy > 0.36) {
-          S.mileTop = Math.max(8, Math.round((hy - 0.21) * 100));
-          if (hy - 0.21 < 0.08) S.mileDim = 0.4;
-        }
-        set(mile, 'top', `${S.mileTop}%`);
       }
       const kt = f - S.koF, slam = clamp01(1 - kt / 7);
-      set(koB, 'transform', `scale(${(1 + 1.9 * slam * slam).toFixed(3)})`);
-      set(koB, 'opacity', (kt < 3 ? 0.45 + kt * 0.2 : 1).toFixed(2));
+      set(koB, 'transform', `scale(${(1 + 0.45 * slam * slam).toFixed(3)})`);   // the slam stays inside its corner box
       const ring = kt >= 5 && kt < 20 ? (kt - 5) / 15 : 1;
       set(koG, 'opacity', ((1 - ring) * 0.55).toFixed(2));
-      set(koG, 'transform', `scale(${(1 + ring * 0.9).toFixed(3)})`);
+      set(koG, 'transform', `scale(${(1 + ring * 0.35).toFixed(3)})`);
       set(ko, 'opacity', S.shownKo === 0 ? '0' : Math.min(calm, f - S.koF > 300 ? 0.7 : 1).toFixed(2));   // hidden until the first KO
 
-      // KO milestone (centre), DW8 timing (~0.3 s): slams in solid at 1.7× → 1 over 3 f with a white-hot flash, holds to
+      // KO milestone (upper third, right of centre: off the fighting space), DW8 timing (~0.3 s): slams in solid at 1.7× → 1 over 3 f with a white-hot flash, holds to
       // f 11, then slides left and fades out by f 18. The red 擊破 seal stamps down at f 2.
       const mt = f - S.mileF;
       if (mt < 19) {
         const k = clamp01(1 - mt / 3), fl = clamp01(1 - mt / 5);
-        set(mile, 'opacity', ((mt < 11 ? 1 : 1 - (mt - 11) / 7) * S.mileDim).toFixed(2));
+        set(mile, 'opacity', ((mt < 11 ? 1 : 1 - (mt - 11) / 7)).toFixed(2));
         set(mile, 'transform', `translate(${(mt < 11 ? 0 : -(mt - 11) * 0.36).toFixed(2)}rem, 0) scale(${(1 + 0.7 * k * k).toFixed(3)})`);
         set(mile, 'filter', fl > 0 ? `brightness(${(1 + 0.9 * fl).toFixed(2)})` : 'none');
         const st = mt - 2;
@@ -241,11 +231,11 @@ export function createHud(root, game, camera) {
         set(mileS, 'transform', `rotate(-6deg) scale(${(1 + 0.5 * clamp01(1 - st / 2)).toFixed(3)})`);
       } else set(mile, 'opacity', '0');
 
-      // system banner (full-width band, y 64-70 %) and dialogue (portrait + 2 lines, top left: keeps the centre clear)
+      // system banner (story: full-width band, y 64-70 %; pri-0 chatter — waves, officer KOs — a narrow strip up at y 27 %) and dialogue (portrait + 2 lines, top left: keeps the centre clear)
       if ((!S.band || f - S.band.f >= S.band.dur) && S.bandQ.length && !inMusou) S.band = { ...S.bandQ.shift(), f };
       const b = S.band, bt = b ? f - b.f : 1e9;
       if (b && bt < b.dur) {
-        if (bandP.innerHTML !== b.html) { bandP.innerHTML = b.html; text(bandS, b.en); band.classList.toggle('big', b.big); }
+        if (bandP.innerHTML !== b.html) { bandP.innerHTML = b.html; text(bandS, b.en); band.classList.toggle('big', b.big); band.classList.toggle('lo', !b.pri); }
         set(band, 'opacity', Math.min(1, bt / 6, (b.dur - bt) / 18).toFixed(2));
         set(band, 'transform', `scaleY(${Math.min(1, 0.3 + bt / 6).toFixed(3)})`);
       } else set(band, 'opacity', '0');

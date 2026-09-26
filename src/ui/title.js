@@ -1,4 +1,4 @@
-// Title screen (#title, ui lane). DW-style key art over the live battlefield: Zhao Yun (spear planted, arm thrown out)
+// Title screen (#title, ui lane). DW-style key art over the live battlefield: Zhao Yun (spear planted, free arm thrown up)
 // and Huang Zhong (at full draw) stand large in the right two thirds of the frame on their real voxel models (kit.model on
 // their own rigs, cloth/hair chains), backlit by the low sun up the pass with the burning Wei camp, 趙 / 黃 war banners
 // and rising embers behind them in deep bokeh; a slow push-in on enter, then a breathing drift (+ a little mouse parallax).
@@ -11,7 +11,7 @@
 // Screen contract: createTitle(el, flow) → { enter(ctx), exit(), view } (src/main.js header).
 import * as THREE from 'three';
 import { CHARS } from '../chars/index.js';
-import { createRig, sampleClip, POSE_SIZE, HERO_SCALE } from '../hero/rig.js';
+import { createRig, sampleClip, POSE_SIZE, HERO_SCALE, CH } from '../hero/rig.js';
 import { heroLook } from '../hero/model.js';
 import { createNav, sfx, inkWipe, wiping, afterWipe, stamp, clearStamp } from './menu.js';
 import { ground, zone } from '../world/map.js';
@@ -44,13 +44,17 @@ export const CONTROLS = [   // also the pause menu's table (main.js)
 export const STAGE = {
   at: 0.56,                    // stage point: this far up the pass zone (0 = south edge, 1 = north); the lens stays north
                                // of the origin, where the idle gameplay hero stands before any battle
-  dist: 5.1, eye: 1.05, aim: 1.5, fov: 32, screenX: 0.63,       // pair centred at x ≈ 63 % of the frame; aim high enough to keep Zhao Yun's spearhead in shot
+  dist: 4.8, eye: 1.05, aim: 1.65, fov: 32, screenX: 0.63,       // pair centred at x ≈ 63 % of the frame; aim high enough to keep Zhao Yun's spearhead in shot
+                               // (legs below the knee sink into the ink strip along the bottom: a deliberate crop, not the footer)
   push: -0.3, pushT: 3.2,      // enter: start this much closer (on Zhao Yun), pull back to the pair over pushT s (the path
                                // stays between the lens and the officers: nothing on the road can cross it)
   embers: 240,
+  // Zhao Yun in front, his free arm thrown up and away (arm: armL FK override, degrees) so it never meets Huang Zhong;
+  // Huang Zhong a step back and right, drawing toward the lens, whole bow inside the frame. Each surname standard stands
+  // behind its officer in the DoF (趙 over Zhao Yun's shoulder, 黃 right of Huang Zhong).
   cast: [
-    { id: 'zhaoyun', clip: 'mu_act', u: 1, x: 0.15, z: 0, face: Math.PI + 0.4, look: [0.7, 1.8], tag: [-0.32, 2.45], banner: [1.9, 5.5] },
-    { id: 'huangzhong', clip: 'hz_face', u: 1, x: -1.35, z: 1.4, face: Math.PI + 0.55, look: [1.0, 2.0], tag: [0.3, 2.75], banner: [-5.2, 7.5] },
+    { id: 'zhaoyun', clip: 'mu_act', u: 1, x: 0.15, z: 0, face: Math.PI + 0.1, arm: [-10, 0, 130, 20], look: [0.7, 1.8], tag: [-0.32, 2.45], banner: [1.2, 6] },
+    { id: 'huangzhong', clip: 'hz_face', u: 1, x: -1.45, z: 1.3, face: Math.PI - 0.1, look: [1.0, 2.0], tag: [0.55, 2.6], banner: [-3.2, 9] },
   ],
 };
 
@@ -134,10 +138,18 @@ export function createTitle(el, flow) {
     const cv = document.createElement('canvas'); cv.width = 128; cv.height = 320;
     const g = cv.getContext('2d');
     const paint = () => {
-      g.fillStyle = '#e8d6ae'; g.fillRect(0, 0, 128, 320);
-      g.fillStyle = '#9a2a1c'; g.fillRect(0, 0, 128, 26); g.fillRect(0, 0, 14, 320); g.fillRect(114, 0, 14, 320);
-      for (let y = 300; y < 320; y += 4) g.fillRect(14 + ((y * 7) % 20), y, 100 - ((y * 13) % 30), 4);      // frayed hem
-      g.fillStyle = '#1c0d08'; g.font = '700 96px "Xingkai SC", "STXingkai", "HudBrush", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      // weathered dye: smoke-dulled cream that darkens toward the hem, soot stains, a faded vermilion border
+      const bg = g.createLinearGradient(0, 0, 0, 320);
+      bg.addColorStop(0, '#bfa67a'); bg.addColorStop(0.55, '#9c835c'); bg.addColorStop(1, '#5a4530');
+      g.fillStyle = bg; g.fillRect(0, 0, 128, 320);
+      for (let i = 0; i < 26; i++) {                                                       // soot / water stains (fixed scatter)
+        const r = (k) => Math.abs((Math.sin(i * 91.7 + k * 12.3) * 43758.5) % 1);
+        g.fillStyle = `rgba(30,18,10,${(0.05 + r(3) * 0.1).toFixed(3)})`;
+        g.beginPath(); g.ellipse(r(1) * 128, 60 + r(2) * 260, 6 + r(4) * 22, 4 + r(5) * 16, 0, 0, 7); g.fill();
+      }
+      g.fillStyle = '#6a1c12'; g.fillRect(0, 0, 128, 26); g.fillRect(0, 0, 14, 320); g.fillRect(114, 0, 14, 320);
+      for (let y = 300; y < 320; y += 4) g.clearRect(14 + ((y * 7) % 20), y, 100 - ((y * 13) % 30), 4);    // frayed hem
+      g.fillStyle = '#140905'; g.font = '700 96px "Xingkai SC", "STXingkai", "HudBrush", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(glyph, 64, 150);
       tex.needsUpdate = true;
     };
@@ -157,7 +169,9 @@ export function createTitle(el, flow) {
       // surname standard: pole + a nobori cloth (CPU wave on a 5 × 12 grid)
       const tex = bannerTex(CHARS[c.id].name.zh[0]);
       const cloth = new THREE.PlaneGeometry(1.15, 3.1, 4, 12);
-      const mat = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.35, side: THREE.DoubleSide, roughness: 0.9, flatShading: true });
+      // low warm emissive = the low sun glowing through the cloth from behind (the camera sees its shaded face)
+      const mat = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffa060, emissiveIntensity: 0.12, side: THREE.DoubleSide,
+        roughness: 0.95, flatShading: true, alphaTest: 0.5 });
       const mesh = new THREE.Mesh(cloth, mat), pole = new THREE.Mesh(new THREE.BoxGeometry(0.09, 6.2, 0.09), new THREE.MeshStandardMaterial({ color: 0x2e1d15, roughness: 0.8 }));
       group.add(mesh, pole);
       banners.push({ c, mesh, pole, base: Float32Array.from(cloth.attributes.position.array), ph: banners.length * 1.7 });
@@ -192,6 +206,7 @@ export function createTitle(el, flow) {
     for (let i = 0; i < cast.length; i++) {
       const { c, K, rig, sec } = cast[i], br = Math.sin(t * 1.5 + i * 2.1);
       sampleClip(K.clips[c.clip], c.u, pose);
+      if (c.arm) for (let k = 0; k < 4; k++) pose[CH.armL + k] = c.arm[k] * Math.PI / 180;   // key-art arm (free left arm FK)
       pose[1] += br * 0.008; pose[9] += br * 0.02; pose[12] -= br * 0.015;
       P.set(O.x + c.x, 0, O.z + c.z); P.y = ground(P.x, P.z);
       rig.root.scale.set(1, 1, 1);
@@ -208,7 +223,8 @@ export function createTitle(el, flow) {
     for (const b of banners) {
       const [bx, bz] = b.c.banner, x = O.x + bx, z = O.z + bz, gy = ground(x, z);
       b.pole.position.set(x, gy + 3.1, z);
-      b.mesh.position.set(x - 0.62, gy + 3.3, z); b.mesh.rotation.y = 0.35;   // low enough that the whole surname reads in frame
+      // front face toward the lens (rotation π: texture reads left-to-right), cloth hanging from the pole to screen-right
+      b.mesh.position.set(x - 0.6, gy + 3.3, z + 0.11); b.mesh.rotation.y = Math.PI + 0.2;
       const a = b.mesh.geometry.attributes.position, B = b.base;
       for (let k = 0; k < a.count; k++) {
         const u = (B[k * 3] + 0.575) / 1.15, v = (1.55 - B[k * 3 + 1]) / 3.1;            // u 0 at the pole, v 0 at the top
