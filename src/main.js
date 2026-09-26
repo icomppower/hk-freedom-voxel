@@ -88,7 +88,7 @@ function render(real) {
   lastRenderFrame = game.frame;
   heroView.root.visible = state !== 'title' && state !== 'select';   // no officer chosen yet: the field stands empty
   heroView.update(Math.min(dt, 0.1));
-  crowdView.update(dt);
+  crowdView.update(dt, camRig.camera);
   vfx.update(dt);
   camRig.update(dt);
   screens[state]?.view?.(scene, camRig.camera, camRig.focus, dt);   // ui lane: a screen may frame the idle field itself

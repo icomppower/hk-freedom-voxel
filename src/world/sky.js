@@ -18,13 +18,14 @@ export const HAZE = lin(0x9495ae);        // cool lavender-blue haze away from t
 const HAZE_WARM = lin(0xcc9468);          // golden amber haze toward the sun
 const GLOW = lin(0xf6d2a8);               // forward-scatter glow around the sun
 const SKY_MID = lin(0x9c9cba), SKY_TOP = lin(0x3c5586);   // dusk blue overhead: the cool half of the frame
+export const SKY_UP = SKY_MID.clone().lerp(SKY_TOP, 0.3);   // what the river reflects looking up
 // golden horizon band (sky only, not the fog): the gameplay frame shows just the lowest ≈ 2-5° of sky, so the sunset
 // lives there — saturated gold toward the sun, amber-rose away from it — and distant silhouettes, fogged toward the
 // darker HAZE colours, read against it
 const HZN_SUN = lin(0xffae48), HZN_AWAY = lin(0xe0a080);
 const CLOUD_ROSE = lin(0xd89c86), CLOUD_SHADE = lin(0x646a8c), CLOUD_LIT = lin(0xffd49a);
 // ground dust: a pale layer hugging the plain (scale height DUST[2] m) that thickens from DUST[0] m out over DUST[1] m up
-// to DUST[3] — the backlit dust the concept's fight stands in: dark cobbles at the hero's feet, a glowing mid-ground,
+// to DUST[3] — the backlit dust the concept's fight stands in: dark paving at the hero's feet, a glowing mid-ground,
 // soldiers' legs fading into it with distance. Walls and towers rise out of it (it is gone by ≈ 3 m up).
 const DUST = [16.0, 50.0, 1.0, 0.1], DUST_LIT = lin(0xe0b080), DUST_SHADE = lin(0x6a6e8a);
 // the terrain climbs 28 m: dust and the height thinning below are measured from the ground under the camera, taken as

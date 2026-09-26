@@ -55,7 +55,8 @@ export const STAGE = {
 };
 
 // warm glows [x, y, z, width, height, r, g, b] in the stage frame
-const GLOWS = [[1, 2.5, 30, 46, 16, 0.55, 0.24, 0.07], [-7, 1.2, 12, 9, 6, 0.9, 0.38, 0.08], [6, 0.8, 16, 7, 4, 0.7, 0.3, 0.06]];
+const GLOWS = [[1, 2.5, 30, 46, 16, 0.55, 0.24, 0.07], [-7, 1.2, 12, 9, 6, 0.9, 0.38, 0.08], [6, 0.8, 16, 7, 4, 0.7, 0.3, 0.06],
+  [11, 3.5, 22, 26, 13, 0.42, 0.17, 0.05]];   // last: backlit smoke-glow behind the logo side (screen-left), no dead black
 
 export function createTitle(el, flow) {
   el.innerHTML = `
@@ -205,7 +206,7 @@ export function createTitle(el, flow) {
     for (const b of banners) {
       const [bx, bz] = b.c.banner, x = O.x + bx, z = O.z + bz, gy = ground(x, z);
       b.pole.position.set(x, gy + 3.1, z);
-      b.mesh.position.set(x - 0.62, gy + 4.4, z); b.mesh.rotation.y = 0.35;
+      b.mesh.position.set(x - 0.62, gy + 3.3, z); b.mesh.rotation.y = 0.35;   // low enough that the whole surname reads in frame
       const a = b.mesh.geometry.attributes.position, B = b.base;
       for (let k = 0; k < a.count; k++) {
         const u = (B[k * 3] + 0.575) / 1.15, v = (1.55 - B[k * 3 + 1]) / 3.1;            // u 0 at the pole, v 0 at the top

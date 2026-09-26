@@ -9,6 +9,7 @@
 //                     chromatic fringe, split-tone grade (scene-linear), hue-preserving S-curve + per-channel soft
 //                     shoulder (fire stays orange/yellow, white armour keeps its shading), bottom darkening,
 //                     vignette, grain, 2 px ordered dither + palette quantisation (retro).
+// Quality tier: a sustained frame time over budget drops the scene MSAA 4× → 2× → off (?hq pins it).
 // Render-only: reads camera/focus, never touches sim state.
 import * as THREE from 'three';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -25,7 +26,7 @@ const P = {
   // reaching 1.0 at tmMax; knee = start of the per-channel shoulder; hotDesat = how fast overflow bleaches to white
   exposure: 1.3, tmContrast: 3.3, tmShoulder: 0.97, tmMidIn: 0.11, tmMidOut: 0.1, tmMax: 5, knee: 0.75, hotDesat: 0.25,
   sat: 1.32, lift: 0.006,
-  shadowTint: [0.86, 0.96, 1.16], highTint: [1.1, 1.0, 0.8], tintLo: 0.02, tintHi: 0.4,   // split tone: teal-blue shade, gold light (DW golden hour, not sepia)
+  shadowTint: [0.8, 0.94, 1.24], highTint: [1.14, 1.0, 0.76], tintLo: 0.02, tintHi: 0.36,   // split tone: teal-blue shade, gold light (DW golden hour, not sepia)
   hazeCool: [0.09, 0.11, 0.19], hazeWarm: [0.36, 0.21, 0.12], sunGlow: [0.9, 0.6, 0.35], sunGlowGeo: 0.8, inscatter: [0.02, 0.011, 0.005], sunBurst: [0.1, 0.06, 0.025], inscatterDist: 60,
   hazeStart: 9, hazeDensity: 0.006, hazeMax: 0.06, skyHaze: 0.3, skyGain: 0.5, farGain: 0.45,   // light enough that the wall keeps its bricks
   nearBlur: 26, farBlur: 0.6, bandNear: 1.4, bandFar: 5,          // DoF: CoC in half-res px, bands in metres
@@ -150,9 +151,12 @@ const FinalShader = /* glsl */`
   }
   void main() {
     vec2 d = vUv - 0.5;
-    // light lateral chromatic fringe toward the edges
+    // light lateral chromatic fringe toward the edges: the composite once, R/B shifted by the sharp buffer's difference
+    // (3 taps, not three full scene() composites)
     vec2 ca = vec2(uCa * dot(d, d) * 4.0 / uRes.x, 0.0);
-    vec3 c = vec3(scene(vUv + ca).r, scene(vUv).g, scene(vUv - ca).b);
+    vec3 c = scene(vUv), s0 = texture2D(tSharp, vUv).rgb;
+    c.r += texture2D(tSharp, vUv + ca).r - s0.r; c.b += texture2D(tSharp, vUv - ca).b - s0.b;
+    c = max(c, 0.0);
     // faint horizontal streaks: highlights smear sideways (tape / anamorphic feel), plus low row-to-row jitter
     vec3 st = vec3(0.0);
     for (int i = 1; i <= 6; i++) {
@@ -253,11 +257,24 @@ export function createPost({ canvas, width, height }) {
   }
   setSize(width, height);
 
+  // quality tier: sustained frames over budget (EMA > 20 ms for 2 s) step the scene MSAA 4× → 2× → off. Never steps
+  // back up (no oscillation). ?hq pins full quality (captures).
+  const autoQ = !new URLSearchParams(location.search).has('hq');
+  let lastT = 0, ema = 16.7, slow = 0;
+  function tier(now) {
+    const dt = lastT ? now - lastT : 16.7; lastT = now;
+    if (!autoQ || dt > 250 || sceneRT.samples === 0) return;              // a long stall (tab hidden, compile) isn't load
+    ema += (dt - ema) * 0.05;
+    slow = ema > 20 ? slow + 1 : 0;
+    if (slow > 120) { sceneRT.samples = sceneRT.samples > 2 ? 2 : 0; sceneRT.dispose(); slow = 0; ema = 16.7; }
+  }
+
   return {
     renderer,                                       // main.js: compileAsync warm-up behind the loading card / ink wipe
     setSize,
     /** focus: world point the camera frames (hero) → DoF focus plane; flash: white screen flash (0..1). */
     render(scene, camera, time, focus, flash) {
+      tier(performance.now());
       renderer.setRenderTarget(sceneRT);
       renderer.render(scene, camera);
 

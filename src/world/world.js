@@ -19,6 +19,15 @@ const FIELD_FIRES = [[-33, -64, 1.2], [32, -58, 1.1], [-30, 8, 1.3], [30, -8, 1.
 const LIGHT_DIR = new THREE.Vector3(0.5, 0.58, 0.64).normalize();
 
 installHaze();
+// the sun's shadow fades out over the outer 20 % of its box instead of cutting off: soldiers and props at the box edge
+// no longer pop a shadow on / off as the hero moves (must patch before any material compiles)
+const SHADOW_BOX = 34;
+{
+  const RET = '\t\t\treturn mix( 1.0, shadow, shadowIntensity );\n\t\t}\n\t#elif defined( SHADOWMAP_TYPE_VSM )';
+  const src = THREE.ShaderChunk.shadowmap_pars_fragment;
+  if (src.includes(RET)) THREE.ShaderChunk.shadowmap_pars_fragment = src.replace(RET, RET.replace('\t\t\treturn',
+    '\t\t\tshadow = mix( shadow, 1.0, smoothstep( 0.8, 0.98, max( abs( shadowCoord.x - 0.5 ), abs( shadowCoord.y - 0.5 ) ) * 2.0 ) );\n\t\t\treturn'));
+}
 
 export function createWorld(scene) {
   scene.background = HAZE.clone();
@@ -34,7 +43,7 @@ export function createWorld(scene) {
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); sun.shadow.radius = 2;
   const sc = sun.shadow.camera;
-  sc.left = -28; sc.right = 28; sc.top = 28; sc.bottom = -28; sc.near = 1; sc.far = 160;
+  sc.left = -SHADOW_BOX; sc.right = SHADOW_BOX; sc.top = SHADOW_BOX; sc.bottom = -SHADOW_BOX; sc.near = 1; sc.far = 160;
   sun.shadow.bias = -0.0006;
   sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
@@ -64,12 +73,12 @@ export function createWorld(scene) {
     update(dt, focus) {
       t += dt;
       // shadow frustum follows the focus (snapped to texels to avoid shimmer), at the ground under it
-      const step = 56 / 2048;
+      const step = 2 * SHADOW_BOX / 2048;
       tmp.set(Math.round(focus.x / step) * step, ground(focus.x, focus.z), Math.round(focus.z / step) * step);
       sun.target.position.copy(tmp);
       sun.position.copy(LIGHT_DIR).multiplyScalar(70).add(tmp);
       sky.material.uniforms.uTime.value = t; GRASS_TIME.value = t;
-      dressing.update(t, lit);
+      dressing.update(t, lit, focus);
       castle.update(t);
       for (const id in open) open[id] += ((GATES[id].open ? 1 : 0) - open[id]) * Math.min(1, dt * 3);
       castle.setDoors(open.weiCamp * (2 - open.weiCamp));

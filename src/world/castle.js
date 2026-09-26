@@ -39,12 +39,12 @@ function stoneFaceBack(b, r, x0, x1, y0, y1, zf, holes) {
   }
 }
 
-/** The same coursing on a face that looks +X (the castle's open flank), running z0 → z1. */
-function stoneFaceX(b, r, z0, z1, y0, y1, xf) {
+/** The same coursing on a face that looks +X (the castle's open flank; dir -1: -X, its courtyard side), z0 → z1. */
+function stoneFaceX(b, r, z0, z1, y0, y1, xf, dir = 1) {
   for (let y = y0, row = 0; y < y1 - 0.05; y += 0.6, row++) {
     for (let z = z0 - (row % 2 ? 0.55 : 0); z < z1;) {
       const w = Math.min(r.range(0.9, 1.6), z1 - z), h = Math.min(0.6, y1 - y);
-      if (w > 0.2) b.push({ s: [0.3, h - 0.07, w - 0.07], p: [xf + 0.12 + r.range(-0.05, 0.05), y + 0.3, z + w / 2], c: shade(r.chance(0.25) ? 0x876a68 : STONE, r.range(0.8, 1.14)), skip: [1, 3, 4, 5] });
+      if (w > 0.2) b.push({ s: [0.3, h - 0.07, w - 0.07], p: [xf + dir * (0.12 + r.range(-0.05, 0.05)), y + 0.3, z + w / 2], c: shade(r.chance(0.25) ? 0x876a68 : STONE, r.range(0.8, 1.14)), skip: dir > 0 ? [1, 3, 4, 5] : [0, 3, 4, 5] });
       z += w;
     }
   }
@@ -166,6 +166,7 @@ export function buildCastle(scene, { wallZ, gateX }) {
   const FL = 40, fx = cx + 5.5;
   b.push({ s: [T, H, FL], p: [fx - T / 2, H / 2, z0 + 10 + FL / 2], c: MORTAR });
   stoneFaceX(b, r, z0 + 10, z0 + 10 + FL, 0, H, fx);
+  stoneFaceX(b, r, z0 + 10, z0 + 10 + FL, 0, H, fx - T, -1);   // courtyard side: stone, not the black mortar core
   for (let z = z0 + 10; z + 1.1 <= z0 + 10 + FL; z += 2.0) b.push({ s: [0.8, 1.25, 1.15], p: [fx - 0.4, H + 0.62, z + 0.575], c: shade(STONE, r.range(0.82, 1.08)) });
   // gatehouse on the wall walk
   b.push({ s: [22, 0.6, 8.4], p: [gateX, H + 0.3, z0 + 4.4], c: 0x5a4a44 });

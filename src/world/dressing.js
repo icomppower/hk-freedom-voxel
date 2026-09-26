@@ -17,6 +17,7 @@ import { lensClear } from '../camera/occlusion.js';
 const WIND = new THREE.Vector3(0.75, 0, 0.55).normalize();   // blows up the valley, toward the castle's end
 const lit = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, flatShading: true });
 const frac = (x) => x - Math.floor(x);
+const FOCUS = { value: new THREE.Vector3() };   // the camera's focus (hero), for the reeds' sight line
 
 // ---------------------------------------------------------------- banners
 function bannerTexture(ch, { bg, fg, border, w = 128, h = 256, tatter = true, seed = 1 }) {
@@ -107,8 +108,8 @@ function smokeMaterial() {
   }
   g.putImageData(img, 0, 0);
   const map = new THREE.CanvasTexture(cv);
-  map.magFilter = THREE.NearestFilter; map.minFilter = THREE.NearestFilter; map.generateMipmaps = false;
-  return billboard(new THREE.MeshBasicMaterial({ map, transparent: true, opacity: 0.62, depthWrite: false }));
+  map.magFilter = THREE.NearestFilter; map.minFilter = THREE.LinearMipmapLinearFilter;   // mipmapped: no sparkle far off
+  return billboard(new THREE.MeshBasicMaterial({ map, transparent: true, opacity: 0.72, depthWrite: false }));
 }
 
 /** Instanced camera-facing quads: instance matrix = position + rotation/scale in the view plane. */
@@ -131,31 +132,82 @@ function glowTexture() {
   return new THREE.CanvasTexture(cv);
 }
 
+/** Flame card: a vertical (cylindrical) billboard whose flame is drawn in the shader on a 12 × 20 pixel grid — two
+ *  noise layers scrolling up erode a teardrop, hot yellow-white core → orange → dark-red tips; additive HDR (the cores
+ *  bloom, the tips don't). instanceColor = [seed, intensity, -]; the card leans downwind at the tip and fades out
+ *  within 7 m of the lens. */
+const FLAME_VS = /* glsl */`
+  uniform float uTime;
+  varying vec2 vUv; varying vec3 vP; varying float vNear;
+  void main() {
+    vec3 base = instanceMatrix[3].xyz;
+    float w = length(instanceMatrix[0].xyz), h = length(instanceMatrix[1].xyz);
+    vec3 right = normalize(vec3(viewMatrix[0][0], 0.0, viewMatrix[2][0]) + vec3(1e-5, 0.0, 0.0));
+    vec3 wp = base + right * position.x * w + vec3(0.0, (position.y + 0.5) * h, 0.0);
+    float sw = sin(uTime * 2.7 + instanceColor.x * 40.0) * 0.6 + sin(uTime * 5.3 + instanceColor.x * 17.0) * 0.4;
+    wp.xz += vec2(0.8, 0.6) * uv.y * uv.y * h * (0.12 + 0.08 * sw);
+    vec4 mv = viewMatrix * vec4(wp, 1.0);
+    vNear = smoothstep(2.5, 7.0, -mv.z);
+    vUv = uv; vP = instanceColor;
+    gl_Position = projectionMatrix * mv;
+  }`;
+const FLAME_FS = /* glsl */`
+  uniform float uTime;
+  varying vec2 vUv; varying vec3 vP; varying float vNear;
+  float fHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float fNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(fHash(i), fHash(i + vec2(1.0, 0.0)), f.x), mix(fHash(i + vec2(0.0, 1.0)), fHash(i + vec2(1.0, 1.0)), f.x), f.y);
+  }
+  void main() {
+    vec2 px = vec2(12.0, 20.0), uv = (floor(vUv * px) + 0.5) / px;         // chunky flame pixels (voxel style)
+    float sd = vP.x * 23.0, sp = 2.1 + vP.x * 0.8;
+    float n = fNoise(vec2(uv.x * 3.2 + sd, uv.y * 2.6 - uTime * sp)) * 0.6 + fNoise(vec2(uv.x * 6.5 - sd, uv.y * 5.0 - uTime * sp * 1.7)) * 0.4;
+    float x = abs(uv.x - 0.5) * 2.0;
+    // a narrow teardrop eroded hard by the noise: separate tongues licking up, a hot root, dark-red torn tips
+    float heat = (1.0 - x / mix(0.9, 0.2, uv.y)) * (1.0 - 0.8 * uv.y) + (n - 0.5) * (0.55 + uv.y * 1.3) - 0.05;
+    heat *= 0.55 + 0.6 * smoothstep(0.0, 0.16, uv.y);
+    if (heat < 0.06) discard;
+    vec3 c = mix(vec3(0.35, 0.03, 0.006), vec3(1.7, 0.36, 0.04), smoothstep(0.06, 0.3, heat));
+    c = mix(c, vec3(2.8, 1.25, 0.26), smoothstep(0.42, 0.72, heat));
+    c = mix(c, vec3(3.2, 2.2, 0.9), smoothstep(0.8, 1.0, heat));             // the white-hot root only
+    gl_FragColor = vec4(c * smoothstep(0.06, 0.2, heat) * vP.y * vNear, 1.0);
+  }`;
+
 /** list: [x, y, z, scale, smoke = scale ≥ 1.3, gate id]: a gate-linked fire only burns once that gate is open (the
- *  barricade was fired). update(t, lit(gateId) → bool). */
+ *  barricade was fired). update(t, lit(gateId) → bool). Per fire: 2-3 flame cards + 2 detaching licks (flame shader),
+ *  a stream of ember cubes, dark smoke puffs lit from below (big fires), a dim halo and a firelight pool. */
 function fireSystem(scene, list) {
   const r = makeRng(77);
-  const flames = [], embers = [], puffs = [];
+  const cards = [], embers = [], puffs = [];
   for (const [x, y, z, s, smoke = s >= 1.3, g = null] of list) {
-    const nf = Math.round(20 * s);
-    for (let i = 0; i < nf; i++) flames.push({ x, y, z, s, g, ph: r.next(), sp: r.range(1.1, 2.0), ox: r.range(-0.7, 0.7), oz: r.range(-0.7, 0.7), h: r.range(1.4, 3.2), sz: r.range(0.32, 0.62), rot: r.range(0, 6.28) });
-    for (let i = 0; i < Math.round(10 * s); i++) embers.push({ x, y, z, s, g, ph: r.next(), sp: r.range(0.18, 0.35), ox: r.range(-0.8, 0.8), oz: r.range(-0.8, 0.8), w: r.range(0, 6.28) });
+    for (let i = 0, n = s >= 0.9 ? 3 : 2; i < n; i++) {
+      const mid = i === 1;
+      cards.push({ x, y, z, s, g, lick: false, seed: r.next(), k: mid || n < 3 ? 1 : 0.6, ox: (i - (n - 1) / 2) * 0.32 + r.range(-0.1, 0.1), oz: r.range(-0.25, 0.25),
+        w: r.range(0.9, 1.25) * (mid ? 1.15 : 0.85), h: r.range(1.7, 2.3) * (mid ? 1.2 : 0.85), ph: r.range(0, 6.28) });
+    }
+    for (let i = 0; i < 2; i++) cards.push({ x, y, z, s, g, lick: true, seed: r.next(), ox: r.range(-0.3, 0.3), oz: r.range(-0.3, 0.3), w: r.range(0.35, 0.5), h: r.range(0.6, 0.9), ph: i * 0.5 + r.range(0, 0.2), sp: r.range(0.9, 1.4) });
+    for (let i = 0; i < Math.round(14 * s); i++) embers.push({ x, y, z, s, g, ph: r.next(), sp: r.range(0.18, 0.35), ox: r.range(-0.8, 0.8), oz: r.range(-0.8, 0.8), w: r.range(0, 6.28) });
     if (smoke) for (let i = 0; i < 30; i++) puffs.push({ x, y, z, s, g, ph: i / 30 + r.range(0, 0.02), sp: r.range(0.075, 0.095), ox: r.range(-0.8, 0.8), oz: r.range(-0.8, 0.8), rot: r.range(0, 6.28), v: r.range(0.8, 1.2) });
   }
-  const cube = new THREE.BoxGeometry(1, 1, 1);
-  // lensClear: flame cubes by the lens (the barricades burn on the road) read as flat pale squares, so cut them inside 3 m
+  const uTime = { value: 0 };
+  const cm = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({ vertexShader: FLAME_VS, fragmentShader: FLAME_FS, uniforms: { uTime },
+    blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, side: THREE.DoubleSide }), cards.length);
+  cm.frustumCulled = false; cm.renderOrder = 2;
+  cm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cards.length * 3), 3);
+  // lensClear: ember cubes by the lens read as flat pale squares, so cut them inside 3 m
   const add = lensClear(new THREE.MeshBasicMaterial({ color: 0xffffff, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false }), 3);
-  const fm = new THREE.InstancedMesh(cube, add, flames.length + embers.length);
+  const fm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), add, embers.length);
   fm.frustumCulled = false;
-  fm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array((flames.length + embers.length) * 3), 3);
+  fm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(embers.length * 3), 3);
   const sm = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), smokeMaterial(), puffs.length);
   sm.frustumCulled = false;
   sm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(puffs.length * 3), 3);
   sm.renderOrder = 1;
-  fm.name = 'flames'; sm.name = 'smoke';
-  scene.add(fm, sm);
-  // per fire: a soft additive halo round the flames (heat + light, feeds the bloom) and a flickering pool of firelight
-  // on the ground under it — both fade out near the lens
+  cm.name = 'flames'; fm.name = 'embers'; sm.name = 'smoke';
+  scene.add(cm, fm, sm);
+  // per fire: a soft additive halo round the flames (heat + light) and a flickering pool of firelight on the ground
+  // under it — both fade out near the lens; the halo is kept dim so a brazier by the hero never blows out the frame
   const glow = glowTexture(), sites = list.map(([x, y, z, s, , g = null]) => ({ x, y, z, s, g, ph: r.range(0, 6.28), py: y - topAt(x, z) < 3.2 ? topAt(x, z) : y }));
   const glowMat = (bb) => {
     const gm = new THREE.MeshBasicMaterial({ map: glow, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide });
@@ -163,7 +215,7 @@ function fireSystem(scene, list) {
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vNear;').replace('#include <project_vertex>', bb ? `
         vec4 mvPosition = modelViewMatrix * vec4( instanceMatrix[3].xyz, 1.0 );
         mvPosition.xy += mat2( instanceMatrix[0].xy, instanceMatrix[1].xy ) * transformed.xy;
-        gl_Position = projectionMatrix * mvPosition; vNear = smoothstep(4.0, 12.0, -mvPosition.z);` : '#include <project_vertex>\nvNear = smoothstep(4.0, 12.0, -mvPosition.z);');
+        gl_Position = projectionMatrix * mvPosition; vNear = smoothstep(5.0, 14.0, -mvPosition.z);` : '#include <project_vertex>\nvNear = smoothstep(4.0, 12.0, -mvPosition.z);');
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vNear;').replace('#include <dithering_fragment>', 'gl_FragColor.rgb *= vNear;');
     };
     return gm;
@@ -173,44 +225,49 @@ function fireSystem(scene, list) {
   for (const k of [hm, pm]) { k.frustumCulled = false; k.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(sites.length * 3), 3); k.renderOrder = 2; scene.add(k); }
   hm.name = 'fire-halo'; pm.name = 'fire-pool';
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
-  const HOT = new THREE.Color(7, 5.2, 2.4), MID = new THREE.Color(5.5, 2.0, 0.45), END = new THREE.Color(1.4, 0.3, 0.08);
-  const SMOKE_LO = new THREE.Color(0x3a2c28), SMOKE_HI = new THREE.Color(0x857680), GLOW = new THREE.Color(0.9, 0.35, 0.08);
+  const SMOKE_LO = new THREE.Color(0x221a18), SMOKE_HI = new THREE.Color(0x5a5056), GLOW = new THREE.Color(0.4, 0.14, 0.03);
   return (t, lit) => {
-    let i = 0;
-    for (const f of flames) {
-      const k = frac(t * f.sp + f.ph), s = f.g && !lit(f.g) ? 0 : f.s;
-      p.set(f.x + f.ox * s * (1 - k * 0.7) + WIND.x * k * k * s * 0.9, f.y + 0.15 + k * f.h * s, f.z + f.oz * s * (1 - k * 0.7) + WIND.z * k * k * s * 0.9);
-      const size = f.sz * s * Math.pow(1 - k, 0.7) * (0.75 + 0.25 * Math.sin(t * 17 + f.rot));
-      q.setFromEuler(e.set(0, f.rot + t * 1.5, 0));
-      fm.setMatrixAt(i, m.compose(p, q, sc.set(size, size * 1.35, size)));
-      if (k < 0.3) c.copy(HOT).lerp(MID, k / 0.3); else c.copy(MID).lerp(END, (k - 0.3) / 0.7);
-      fm.setColorAt(i++, c.multiplyScalar(1 - k * 0.5));
+    uTime.value = t;
+    for (let i = 0; i < cards.length; i++) {
+      const f = cards[i], s = f.g && !lit(f.g) ? 0 : f.s;
+      if (f.lick) {                                                              // a tongue tearing off and rising
+        const k = frac(t * f.sp + f.ph), sz = s * (1 - k * 0.8);
+        p.set(f.x + (f.ox + WIND.x * k * 0.9) * s, f.y + (0.7 + k * 2.1) * s, f.z + (f.oz + WIND.z * k * 0.9) * s);
+        cm.setMatrixAt(i, m.compose(p, q.identity(), sc.set(f.w * sz, f.h * sz, 1)));
+        cm.setColorAt(i, c.setRGB(f.seed, 0.9 * (1 - k) * Math.min(1, k * 6), 0));
+      } else {
+        const fl = 0.9 + 0.1 * Math.sin(t * 9 + f.ph) + 0.06 * Math.sin(t * 21 + f.ph * 3);
+        p.set(f.x + f.ox * s, f.y + 0.05 * s, f.z + f.oz * s);
+        cm.setMatrixAt(i, m.compose(p, q.identity(), sc.set(f.w * s, f.h * s * fl, 1)));
+        cm.setColorAt(i, c.setRGB(f.seed, f.k, 0));                            // side cards dimmer: overlaps stay orange, not white
+      }
     }
-    for (const f of embers) {
-      const k = frac(t * f.sp + f.ph), s = f.g && !lit(f.g) ? 0 : f.s;
+    cm.instanceMatrix.needsUpdate = true; cm.instanceColor.needsUpdate = true;
+    for (let i = 0; i < embers.length; i++) {
+      const f = embers[i], k = frac(t * f.sp + f.ph), s = f.g && !lit(f.g) ? 0 : f.s;
       p.set(f.x + f.ox * s + WIND.x * k * 10 * s + Math.sin(k * 19 + f.w) * 0.5, f.y + 0.8 + k * 13 * s, f.z + f.oz * s + WIND.z * k * 10 * s + Math.cos(k * 15 + f.w) * 0.5);
-      const size = s && 0.09 * (1 - k * 0.6) * (Math.sin(t * 23 + f.w * 5) > -0.3 ? 1 : 0.25);
+      const size = s && 0.08 * (1 - k * 0.6) * (Math.sin(t * 23 + f.w * 5) > -0.3 ? 1 : 0.25);
       fm.setMatrixAt(i, m.compose(p, q.identity(), sc.set(size, size, size)));
-      fm.setColorAt(i++, c.setRGB(8, 3.4, 0.9).multiplyScalar(1 - k));
+      fm.setColorAt(i, c.setRGB(6, 2.2, 0.5).multiplyScalar(1 - k));
     }
     fm.instanceMatrix.needsUpdate = true; fm.instanceColor.needsUpdate = true;
-    puffs.forEach((f, j) => {
-      const k = frac(t * f.sp + f.ph), s = f.g && !lit(f.g) ? 0 : f.s;
+    for (let j = 0; j < puffs.length; j++) {
+      const f = puffs[j], k = frac(t * f.sp + f.ph), s = f.g && !lit(f.g) ? 0 : f.s;
       const drift = k * k * 15 * s;
       p.set(f.x + f.ox * s + WIND.x * drift, f.y + 1.6 * s + k * 17 * s, f.z + f.oz * s + WIND.z * drift);
       const size = s * f.v * (0.7 + 3.6 * k) * Math.min(1, k / 0.06) * (1 - Math.max(0, (k - 0.78) / 0.22));
       q.setFromEuler(e.set(0, 0, f.rot + t * 0.2 * (f.v - 1)));                  // spin in the view plane (billboard)
       sm.setMatrixAt(j, m.compose(p, q, sc.set(size * 1.3, size * 1.3, 1)));
       c.copy(SMOKE_LO).lerp(SMOKE_HI, Math.min(1, k * 1.4));
-      const glow = Math.max(0, 1 - k / 0.18);
+      const glow = Math.max(0, 1 - k / 0.12);                                  // underside lit by the fire
       c.r += GLOW.r * glow; c.g += GLOW.g * glow; c.b += GLOW.b * glow;
       sm.setColorAt(j, c);
-    });
+    }
     sm.instanceMatrix.needsUpdate = true; sm.instanceColor.needsUpdate = true;
     for (let j = 0; j < sites.length; j++) {
       const f = sites[j], s = f.g && !lit(f.g) ? 0 : f.s, fl = 0.8 + 0.12 * Math.sin(t * 11 + f.ph) + 0.08 * Math.sin(t * 23.7 + f.ph * 3);
-      hm.setMatrixAt(j, m.compose(p.set(f.x, f.y + 1.1 * s, f.z), q.identity(), sc.set(3.4 * s * fl, 4.2 * s * fl, 1)));
-      hm.setColorAt(j, c.setRGB(0.95, 0.32, 0.07).multiplyScalar(fl));
+      hm.setMatrixAt(j, m.compose(p.set(f.x, f.y + 1.1 * s, f.z), q.identity(), sc.set(3.8 * s * fl, 4.6 * s * fl, 1)));
+      hm.setColorAt(j, c.setRGB(0.5, 0.17, 0.04).multiplyScalar(fl));
       pm.setMatrixAt(j, m.compose(p.set(f.x, f.py + 0.07, f.z), q.identity(), sc.set(7 * s * fl, 1, 7 * s * fl)));
       pm.setColorAt(j, c.setRGB(0.7, 0.22, 0.05).multiplyScalar(fl));
     }
@@ -393,7 +450,7 @@ export function buildDressing(scene, { castle, fieldFires }) {
     if (r.chance(inFord ? 0.85 : 0.2)) continue;
     const cx = x + r.range(-0.3, 0.3), cz = riverZ(x) + side * r.range(4.6, 8.4), lean = r.range(-0.2, 0.2);
     for (let k = 0, n = r.int(4, 8); k < n; k++) {
-      const xx = cx + r.range(-0.35, 0.35), zz = cz + r.range(-0.35, 0.35), h = r.range(1.0, 2.2);
+      const xx = cx + r.range(-0.35, 0.35), zz = cz + r.range(-0.35, 0.35), h = r.range(0.8, 1.6);
       reeds.push([xx, ground(xx, zz), zz, h, lean + r.range(-0.15, 0.15), r.range(-0.2, 0.2)]);
     }
   }
@@ -527,28 +584,33 @@ export function buildDressing(scene, { castle, fieldFires }) {
   flag(castle.cornerX + 4, CAMP_H + castle.towerH, WALL_Z - 0.5, 4, mats.red);
 
   // ---- reserve armies off the walkable ground (instanced, idle bob): 蜀 behind the 本陣 and on the ford hills, 魏 on
-  // the camp shelf, archers lining the cliffs over the chokepoint, a guard on the summit's back shoulder
-  const troops = { shu: [], wei: [] };
+  // the camp shelf, archers lining the cliffs over the chokepoint, a guard on the summit's back shoulder. One instanced
+  // mesh per formation, so the renderer frustum-culls each block (one mesh spanning the map was always drawn, twice)
+  const troops = [];                                 // [side, [{ x, y, z, yaw, ph }]]
   const formation = (side, cx, cz, face, cols, rows, gap = 1.3) => {
+    const list = []; troops.push([side, list]);
     for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
       const lx = (i - cols / 2) * gap + r.range(-0.2, 0.2), lz = (j - rows / 2) * 1.4 + r.range(-0.2, 0.2);
       const x = cx + lx * Math.cos(face) + lz * Math.sin(face), z = cz - lx * Math.sin(face) + lz * Math.cos(face);
       if (inAt(x, z) > -2) continue;                                            // never on ground the fight can reach
-      troops[side].push({ x, y: topAt(x, z), z, yaw: face + r.range(-0.2, 0.2), ph: r.range(0, 6.28) });
+      list.push({ x, y: topAt(x, z), z, yaw: face + r.range(-0.2, 0.2), ph: r.range(0, 6.28) });
     }
     if (r.chance(0.6)) standard(cx, cz, r.range(1.0, 1.3), side === 'shu' ? mats.shu : mats.wei, undefined, [cx + Math.sin(face) * 9, cz + Math.cos(face) * 9]);
   };
   for (const [x, z, f] of [[-32, -170, 0], [0, -171, 0], [32, -170, 0], [-58, -138, 0.9], [58, -136, -0.9], [-60, -100, 1.3], [60, -96, -1.3]]) formation('shu', x, z, f, r.int(10, 16), r.int(5, 8));
   for (const [x, z, f] of [[30, 124, -1.4], [44, 136, -1.6], [42, 106, -1.2], [60, 118, -1.5], [-58, 124, 1.5], [-6, 227, Math.PI], [20, 229, Math.PI]]) formation('wei', x, z, f, r.int(9, 14), r.int(4, 7));
+  const rims = [[], []];
+  troops.push(['wei', rims[0]], ['wei', rims[1]]);
   for (let z = 44; z < 78; z += 1.6) for (const x of [-15 - (z - 44) * 0.1, 21 - (z - 44) * 0.15]) {   // archers on both rims, facing into the pass
     const ax = x + r.range(-1.2, 1.2);
     if (inAt(ax, z) > -3) continue;
-    troops.wei.push({ x: ax, y: topAt(ax, z), z, yaw: (x < 0 ? Math.PI / 2 : -Math.PI / 2) + r.range(-0.3, 0.3), ph: r.range(0, 6.28) });
+    rims[x < 0 ? 0 : 1].push({ x: ax, y: topAt(ax, z), z, yaw: (x < 0 ? Math.PI / 2 : -Math.PI / 2) + r.range(-0.3, 0.3), ph: r.range(0, 6.28) });
   }
-  const armies = [['shu', figureGeometry(0x3c7a3a, 0x3a3428)], ['wei', figureGeometry()]].map(([k, geo]) => {
-    const m = new THREE.InstancedMesh(geo, lit(), troops[k].length);
+  const figGeo = { shu: figureGeometry(0x3c7a3a, 0x3a3428), wei: figureGeometry() }, armyMat = lit();
+  const armies = troops.filter(([, list]) => list.length).map(([k, list]) => {
+    const m = new THREE.InstancedMesh(figGeo[k], armyMat, list.length);
     m.name = 'reserve-' + k; scene.add(m);
-    return [m, troops[k]];
+    return [m, list];
   });
   const am = new THREE.Matrix4(), aq = new THREE.Quaternion(), ap = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
   const poseArmy = (t) => {
@@ -557,9 +619,21 @@ export function buildDressing(scene, { castle, fieldFires }) {
       m.instanceMatrix.needsUpdate = true;
     }
   };
+  poseArmy(0);
+  for (const [m] of armies) { m.computeBoundingSphere(); m.boundingSphere.radius += 2; }   // + the figure's height and bob
 
-  // reeds (instanced, static): dry gold to olive
-  const reedM = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.9 }), reeds.length);
+  // reeds (instanced, static): dry gold to olive. Stalks within 3 m of the lens → hero line duck to 30 % (nothing
+  // hides the fight, the tufts' rule)
+  const reedMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  reedMat.onBeforeCompile = (sh) => {
+    sh.uniforms.uFocus = FOCUS;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec3 uFocus;').replace('#include <begin_vertex>', `#include <begin_vertex>
+      vec2 rA = cameraPosition.xz, rD = uFocus.xz - rA, rP = instanceMatrix[3].xz;
+      float rT = dot(rP - rA, rD) / max(dot(rD, rD), 1e-4);
+      float rClear = rT > 1.0 ? 1.0 : smoothstep(1.4, 3.0, distance(rP, rA + rD * max(rT, 0.0)));
+      transformed.y = (transformed.y + 0.5) * mix(0.3, 1.0, rClear) - 0.5;`);
+  };
+  const reedM = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), reedMat, reeds.length);
   { const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color();
     reeds.forEach(([x, y, z, h, tx, tz], i) => {
       reedM.setMatrixAt(i, m.compose(p.set(x, y + h / 2 - 0.1, z), q.setFromEuler(e.set(tx, 0, tz)), s.set(0.06, h, 0.06)));
@@ -569,13 +643,14 @@ export function buildDressing(scene, { castle, fieldFires }) {
   scene.add(reedM);
 
   // fallen standards lying in the dirt (flat, never occlude)
-  const fallenMat = new THREE.MeshStandardMaterial({ map: mats.wei.map, color: 0x9a8a80, side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.95 });   // trampled, dusty
+  const fallenTex = bannerTexture('魏', { bg: '#a0583c', fg: '#4a2418', border: '#7a3a26', seed: 11 });   // trampled, sun-faded, dusty
+  const fallenMat = new THREE.MeshStandardMaterial({ map: fallenTex, emissiveMap: fallenTex, emissive: 0xffffff, emissiveIntensity: 0.12, side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.95 });
   for (let i = 0, n = 0; i < 60 && n < 10; i++) {
     const x = r.range(-40, 40), z = r.range(-110, 200), yaw = r.range(0, 6.28);
     if (inAt(x, z) < 3) continue;
     n++;
     const gy = ground(x, z), c = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 4.3, 3, 4), fallenMat);
-    c.rotation.set(-Math.PI / 2, 0, yaw); c.position.set(x, gy + 0.14, z); c.receiveShadow = true;
+    c.rotation.set(-Math.PI / 2, 0, yaw); c.position.set(x, gy + 0.06, z); c.receiveShadow = true;
     scene.add(c);
     poles.push({ s: [0.2, 0.2, 6], p: [x + Math.cos(yaw) * 1.6, gy + 0.12, z - Math.sin(yaw) * 1.6], r: [0, yaw + 0.15, 0], c: 0x3b2a1e });
   }
@@ -620,7 +695,8 @@ export function buildDressing(scene, { castle, fieldFires }) {
     fires: emberSpots,
     /** Barricade meshes by gate id: { m, mat, y } (world.js collapses + chars them as the gate opens). */
     gates: { pass, summit: summitGate },
-    update(t, litGate) {
+    update(t, litGate, focus) {
+      FOCUS.value.copy(focus);
       for (const c of cloths) animateCloth(c, t);
       updateFire(t, litGate);
       poseArmy(t);
