@@ -24,9 +24,9 @@ import { SUN_DIR } from '../world/sky.js';
 const P = {
   // tone curve (Lottes): scene luminance tmMidIn → display tmMidOut, tmContrast = mid slope, tmShoulder < 1 = roll-off
   // reaching 1.0 at tmMax; knee = start of the per-channel shoulder; hotDesat = how fast overflow bleaches to white
-  exposure: 1.3, tmContrast: 3.3, tmShoulder: 0.97, tmMidIn: 0.11, tmMidOut: 0.1, tmMax: 5, knee: 0.75, hotDesat: 0.25,
-  sat: 1.32, lift: 0.006,
-  shadowTint: [0.8, 0.94, 1.24], highTint: [1.14, 1.0, 0.76], tintLo: 0.02, tintHi: 0.36,   // split tone: teal-blue shade, gold light (DW golden hour, not sepia)
+  exposure: 1.3, tmContrast: 3.3, tmShoulder: 0.97, tmMidIn: 0.11, tmMidOut: 0.1, tmMax: 5, knee: 0.75, hotDesat: 0.6,
+  sat: 1.32, lift: 0.002,
+  shadowTint: [0.72, 0.9, 1.3], highTint: [1.14, 1.0, 0.76], tintLo: 0.03, tintHi: 0.4,   // split tone: teal-blue shade, gold light (DW golden hour, not sepia)
   hazeCool: [0.09, 0.11, 0.19], hazeWarm: [0.36, 0.21, 0.12], sunGlow: [0.9, 0.6, 0.35], sunGlowGeo: 0.8, inscatter: [0.02, 0.011, 0.005], sunBurst: [0.1, 0.06, 0.025], inscatterDist: 60,
   hazeStart: 9, hazeDensity: 0.006, hazeMax: 0.06, skyHaze: 0.3, skyGain: 0.5, farGain: 0.45,   // light enough that the wall keeps its bricks
   nearBlur: 26, farBlur: 0.6, bandNear: 1.4, bandFar: 5,          // DoF: CoC in half-res px, bands in metres
@@ -180,10 +180,12 @@ const FinalShader = /* glsl */`
     // colour, so hue survives the top end; then a per-channel soft shoulder takes the overflow, so saturated light walks
     // orange → yellow → white like real fire (not peach-white) and white armour rolls off with its shading
     c *= pow(L, uTmContrast) / (pow(L, uTmContrast * uTmShoulder) * uTmB + uTmC) / L;
-    float pk = max(c.r, max(c.g, c.b));
+    float Lh = dot(c, vec3(0.2126, 0.7152, 0.0722));
     c = min(c, uKnee) + (1.0 - uKnee) * (1.0 - exp(-max(c - uKnee, 0.0) / (1.0 - uKnee)));
     float pk2 = max(c.r, max(c.g, c.b));
-    c = mix(c, vec3(pk2), 1.0 - 1.0 / (uHotDesat * max(pk - pk2, 0.0) + 1.0));   // only the hottest cores bleach
+    // only light that is bright as a whole bleaches (by luminance, not by one channel's overflow): a saturated orange
+    // flame keeps its orange → yellow body instead of washing out to peach, the white-hot core still burns to white
+    c = mix(c, vec3(pk2), 1.0 - 1.0 / (uHotDesat * max(Lh - 0.8, 0.0) + 1.0));
     c = uLift * vec3(1.0, 0.8, 0.75) + min(c, 1.0) * (1.0 - uLift);
     c = sRGBTransferOETF(vec4(max(c, 0.0), 1.0)).rgb;
     // lens: soft vignette + darker foreground band (concept: bottom third darker than the top)

@@ -27,7 +27,7 @@ const CLOUD_ROSE = lin(0xd89c86), CLOUD_SHADE = lin(0x646a8c), CLOUD_LIT = lin(0
 // ground dust: a pale layer hugging the plain (scale height DUST[2] m) that thickens from DUST[0] m out over DUST[1] m up
 // to DUST[3] — the backlit dust the concept's fight stands in: dark paving at the hero's feet, a glowing mid-ground,
 // soldiers' legs fading into it with distance. Walls and towers rise out of it (it is gone by ≈ 3 m up).
-const DUST = [16.0, 50.0, 1.0, 0.1], DUST_LIT = lin(0xe0b080), DUST_SHADE = lin(0x6a6e8a);
+const DUST = [16.0, 50.0, 1.0, 0.055], DUST_LIT = lin(0xcc9a70), DUST_SHADE = lin(0x5e6688);
 // the terrain climbs 28 m: dust and the height thinning below are measured from the ground under the camera, taken as
 // DUST_CAM m below it (the gameplay rig's height over the hero's feet, src/camera/camera.js), so the plateaus get
 // the same knee-deep dust as the valley floor and the valley seen from the summit sinks into it

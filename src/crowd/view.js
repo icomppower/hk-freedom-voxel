@@ -148,6 +148,12 @@ function buildCrowdGeometries() {
     s: q.b.map((v, k) => Math.max(0.01, v - q.a[k] - 0.016)), p: q.a.map((v, k) => (v + q.b[k]) / 2 + (k === 1 ? dy : 0)), c: 0 }));
   g.shadow_trunk = boxesGeometry([...proxy(grunt.hips, -J.waist), ...proxy(grunt.torso), ...proxy(grunt.head, J.neck)]);
   for (const k of ['arm', 'thigh', 'shin']) g['shadow_' + k] = boxesGeometry(proxy(grunt[k]));
+  // distance LOD (scene lane): the same solid boxes, coloured (a painter's base colour, no voxel detail), ≈ 450 tris
+  // per soldier instead of ≈ 4,900. Same rig as the near parts; hips + torso + head ride the torso matrix.
+  const far = (boxes, dy = 0) => boxes.filter((q) => !q.paint).map((q) => ({
+    s: q.b.map((v, k) => v - q.a[k]), p: q.a.map((v, k) => (v + q.b[k]) / 2 + (k === 1 ? dy : 0)), c: typeof q.c === 'function' ? q.c(0, 0, 0, 0, 1) : q.c }));
+  g.far_trunk = boxesGeometry([...far(grunt.hips, -J.waist), ...far(grunt.torso), ...far(grunt.head, J.neck)]);
+  for (const k of ['arm', 'thigh', 'shin']) g['far_' + k] = boxesGeometry(far(grunt[k]));
   Object.assign(g, weaponGeos());
   // officer marker ▼ (voxel rows 7-5-3-1, gold rim around red)
   const tri = [];
@@ -306,6 +312,10 @@ export function createCrowdView(scene, game) {
   };
   const PG = { hips: M.hips, torso: M.torso, head: M.head, arm: M.arm, thigh: M.thigh, shin: M.shin };
   const PO = { hips: M.o_hips, torso: M.o_torso, head: M.o_head, arm: M.o_arm, thigh: M.o_thigh, shin: M.o_shin };
+  // grunts farther than FAR_LOD m from the camera draw the low-poly set (one trunk + limbs), same pose and matrices
+  const FAR_LOD = 28;
+  const PF = { torso: mk(geos.far_trunk, G), arm: mk(geos.far_arm, G * 2), thigh: mk(geos.far_thigh, G * 2), shin: mk(geos.far_shin, G * 2) };
+  let farNow = false;
   const uTime = { value: 0 };
   const flagGeo = new THREE.PlaneGeometry(0.9, 1.5, 4, 6).rotateX(Math.PI / 2).translate(0.5, 0, 1.78);
   const flagMat = new THREE.MeshStandardMaterial({ map: flagTexture(), side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.9 });
@@ -519,10 +529,10 @@ export function createCrowdView(scene, game) {
     // telegraph: the last 14 sf of a blow that will really come (feints don't flare)
     const hotStrike = s === ST.ATTACK && !crowd.feint[i] && t >= CROWD.windup - 14 && t < CROWD.windup;
     if (cap) _c.setRGB(_ch.r * 1.45, _ch.g * 1.1, _ch.b * 0.7); else _c.copy(_ch);                  // captains: bronze armour
-    const P = officer ? PO : PG;
-    push(P.hips, mHips.copy(_root), _c);
+    const far = farNow && !officer, P = officer ? PO : far ? PF : PG;
+    mHips.copy(_root); if (!far) push(P.hips, mHips, _c);
     local(mTorso, mHips, 0, J.waist, 0, C[TO], C[TO + 1], C[TO + 2]); push(P.torso, mTorso, _c);
-    push(P.head, local(mOut, mTorso, 0, J.neck, 0, C[HE], C[HE + 1], C[HE + 2]), _ch);
+    local(mOut, mTorso, 0, J.neck, 0, C[HE], C[HE + 1], C[HE + 2]); if (!far) push(P.head, mOut, _ch);
     if (cap) push(M.crest, mOut, _ch);
     local(mArmR, mTorso, -J.shX, J.shY, 0, C[AR], C[AR + 1], C[AR + 2]); push(P.arm, mArmR, _c);
     local(mArmL, mTorso, J.shX, J.shY, 0, C[AL], C[AL + 1], C[AL + 2]); push(P.arm, mArmL, _c);
@@ -568,6 +578,7 @@ export function createCrowdView(scene, game) {
         const s = crowd.st[i];
         if (s === ST.OFF) { seen[i] = 0; continue; }
         if (camera && !frustum.intersectsSphere(sph.set(sph.center.set(crowd.x[i], crowd.y[i] + 1, crowd.z[i]), 2.5))) { seen[i] = 0; continue; }
+        farNow = !!camera && (crowd.x[i] - camera.position.x) ** 2 + (crowd.z[i] - camera.position.z) ** 2 > FAR_LOD * FAR_LOD;
         // standing soldiers (idle ranks) are recomputed every 4th frame and replayed in between
         if (s === ST.IDLE && seen[i] && crowd.type[i] === 0 && !crowd.flash[i] && ((frameNo + i) & 3)) replay(i);
         else write(i, s, (s === ST.IDLE ? 4 : 1) * dt);
