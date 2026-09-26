@@ -2,11 +2,11 @@
 //  · the fx primitives (fx.js) and the arrows (src/vfx/arrows.js); the camera thump is applied here, after the rig
 //  · aim mode: a dotted flight path of the next arrow (same integrator as the sim: speed, gravity, ground) that turns
 //    gold where it would take a standing officer in the head, plus a ring where it lands
-//  · 真・無雙「百步穿楊」 presentation: warm ember-night dim through the activation and close-up (display-space multiply,
-//    centred on him), cut-frame flash, calligraphy cut-in (無雙 + 老將 seal), a warm screen wash on the release and on
-//    the explosion; layered gold energy: activation = shock ring + sigil rings + motes spiralling up an aura column
-//    round him; close-up = light pooling on the nocked arrow; volley = a turning ground sigil; giant draw = streaks of
-//    light and ground dust pulled into a growing sun on the arrowhead, contracting rings on the aim line; release =
+//  · 真・無雙「百步穿楊」 presentation: ember-night vignette through the activation and close-up (display-space multiply,
+//    centred on him, leaving him lit), cut-frame flash, calligraphy cut-in (無雙 + 老將 seal), a warm screen wash on the release and on
+//    the explosion; layered gold energy: activation = 2-frame hot core + shock ring + stacked gold rings + motes spiralling
+//    up round him; close-up = light pooling on the nocked arrow; volley = a turning ground sigil; giant draw = streaks of
+//    light and ground dust pulled into a growing sun on the arrowhead (capped in screen pixels), contracting rings on the aim line; release =
 //    staggered air rings down the line and a dust wave off his feet (the arrow's flight / explosion: arrows.js).
 import * as THREE from 'three';
 import { on } from '../../core/events.js';
@@ -36,12 +36,15 @@ export function createMusouView(parent, game, camera) {
 
   // ---- aim preview: dots along the predicted flight + landing ring
   const ND = 40;
-  const dots = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), addMat(), ND);
-  dots.frustumCulled = false; dots.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  // fx r1: depth test off + drawn last — in a crowd the path ran behind the soldiers' heads and could not be seen
+  const dots = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), Object.assign(addMat(), { depthTest: false }), ND);
+  dots.frustumCulled = false; dots.instanceMatrix.setUsage(THREE.DynamicDrawUsage); dots.renderOrder = 20;
   for (let i = 0; i < ND; i++) { dots.setMatrixAt(i, ZERO); dots.setColorAt(i, _c.setRGB(1, 1, 1)); }
   scene.add(dots);
-  const land = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.45, 32).rotateX(-Math.PI / 2), addMat());
-  land.visible = false; scene.add(land);
+  const land = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.5, 32).rotateX(-Math.PI / 2), Object.assign(addMat(), { depthTest: false }));
+  land.visible = false; land.renderOrder = 20; scene.add(land);
+  const headMark = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.27, 24), Object.assign(addMat(), { depthTest: false }));   // gold ring on the head it will take
+  headMark.visible = false; headMark.renderOrder = 21; scene.add(headMark);
   /** Officer whose head the point (x, y, z) passes (standing, within 0.5 m and y in the head band), else -1. */
   function headAt(x, y, z) {
     const c = game.crowd;
@@ -55,29 +58,34 @@ export function createMusouView(parent, game, camera) {
   }
   function updateAim() {
     const A = mu.aim;
-    if (!A.active) { if (dots.visible) { dots.visible = false; land.visible = false; } return; }
+    if (!A.active) { if (dots.visible) { dots.visible = false; land.visible = false; headMark.visible = false; } return; }
     dots.visible = true;
     const S = AIM.base, cp = Math.cos(A.pitch);
     let x = hero.x + Math.sin(A.yaw) * ARROW.ahead, y = hero.y + ARROW.heroY, z = hero.z + Math.cos(A.yaw) * ARROW.ahead;
     let vx = Math.sin(A.yaw) * cp * S.speed, vy = Math.sin(A.pitch) * S.speed, vz = Math.cos(A.yaw) * cp * S.speed;
     const life = Math.round(S.range / S.speed * 60), pulse = 0.75 + 0.25 * Math.sin(performance.now() / 90);
-    let n = 0, gold = false;
+    let n = 0, gold = false, hx = 0, hy = 0, hz = 0;
     for (let f = 1; f <= 90 && n < ND; f++) {                   // same integrator as projectiles.js (flat, then spent)
       const spent = f > life;
       vy -= (spent ? 30 : S.g) / 60 * 1; if (spent) { vx *= 0.97; vz *= 0.97; }
       x += vx / 60; y += vy / 60; z += vz / 60;
       if (y <= 0) break;
-      if (!gold && headAt(x, y, z) >= 0) gold = true;
+      if (!gold && headAt(x, y, z) >= 0) { gold = true; hx = x; hy = y; hz = z; }
       if (f % 2 === 0 && f > 2) {
-        const k = 1 - n / ND, s = 0.045 + 0.02 * A.d;
+        const k = 1 - n / ND, s = (0.07 + 0.03 * A.d) * (1 + f / 40);         // grows down range: reads at 20 m
         _m.compose(_p.set(x, y + ground(x, z), z), _q.identity(), _s.setScalar(s));
         dots.setMatrixAt(n, _m);
-        dots.setColorAt(n, gold ? _c.setRGB(2.6 * pulse, 1.8 * pulse, 0.3) : _c.setRGB(0.9 * k + 0.3, 1.1 * k + 0.3, 1.3 * k + 0.3));
+        dots.setColorAt(n, gold ? _c.setRGB(2.6 * pulse, 1.8 * pulse, 0.3) : _c.setRGB(2.2 * k + 0.5, 1.5 * k + 0.35, 0.5 * k + 0.12));
         n++;
       }
     }
     for (let i = n; i < ND; i++) dots.setMatrixAt(i, ZERO);
     dots.instanceMatrix.needsUpdate = true; dots.instanceColor.needsUpdate = true;
+    headMark.visible = gold;
+    if (gold) {
+      headMark.position.set(hx, hy + ground(hx, hz), hz); headMark.quaternion.copy(camera.quaternion);
+      headMark.scale.setScalar(1 + 0.2 * pulse); headMark.material.color.setRGB(3 * pulse, 2 * pulse, 0.4);
+    }
     land.visible = y <= 0.05;
     if (land.visible) { land.position.set(x, 0.06 + ground(x, z), z); land.material.color.setRGB(gold ? 2.4 : 1.2, gold ? 1.7 : 1.1, gold ? 0.3 : 0.8); }
   }
@@ -90,7 +98,8 @@ export function createMusouView(parent, game, camera) {
   css.textContent = `
     .hz-cut { position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0; display: none; font-family: "Xingkai SC", "STXingkai", "Libian SC", "Kaiti SC", "STKaiti", serif; }
     .hz-cut .big { position: absolute; right: 11%; top: 36%; writing-mode: vertical-rl; font-size: 18vh; line-height: 1; color: #fbf1e2; transform-origin: 50% 40%;
-      text-shadow: 0 0 2px #1a0c06, 6px 8px 0 rgba(20,6,2,.55), 0 0 28px rgba(255,150,60,.6); letter-spacing: -1vh; }
+      -webkit-text-stroke: .5vh #1a0905; paint-order: stroke fill;
+      text-shadow: 0 0 .3vh #1a0c06, .6vh .8vh 0 rgba(20,6,2,.75), 0 0 3vh rgba(255,150,60,.55); letter-spacing: -1vh; }
     .hz-cut .seal { position: absolute; right: 21.5%; top: 64%; width: 7vh; height: 7vh; background: #a8261b; color: #f3e2c8; border-radius: 0.8vh;
       font: 3.1vh/3.4vh "Kaiti SC", "STKaiti", serif; writing-mode: vertical-rl; display: flex; align-items: center; justify-content: center;
       box-shadow: 0 0 0 0.35vh rgba(243,226,200,.25) inset, 3px 4px 0 rgba(0,0,0,.4); transform-origin: 50% 50%; }
@@ -126,19 +135,20 @@ export function createMusouView(parent, game, camera) {
       const mul = (v) => Math.round(255 * (1 - d * (1 - v / 255)));
       _p.set(hero.x, 1.4 + ground(hero.x, hero.z), hero.z).project(camera);
       const hx = (clamp01(_p.x * 0.5 + 0.5) * 100).toFixed(1), hy = ((1 - clamp01(_p.y * 0.5 + 0.5)) * 100).toFixed(1);
-      setStyle(dimEl, 'background', `radial-gradient(ellipse 32% 58% at ${hx}% ${hy}%, rgb(${mul(236)},${mul(190)},${mul(150)}) 0%, ` +
-        `rgb(${mul(150)},${mul(96)},${mul(78)}) 55%, rgb(${mul(84)},${mul(52)},${mul(52)}) 100%)`);
+      // fx r1: he stays lit (centre ≈ neutral), the world falls to ember-dark at the edges
+      setStyle(dimEl, 'background', `radial-gradient(ellipse 34% 62% at ${hx}% ${hy}%, rgb(${mul(252)},${mul(240)},${mul(226)}) 0%, ` +
+        `rgb(${mul(186)},${mul(128)},${mul(100)}) 50%, rgb(${mul(70)},${mul(42)},${mul(40)}) 100%)`);
     }
-    const flash = t < 1 ? 0.1 : 0, washR = game.frame - relF < 3 ? 0.3 : 0, washB = game.frame - burstF < 3 ? 0.4 : 0;
+    const flash = t < 1 ? 0.08 : 0, washR = game.frame - relF < 3 ? 0.3 : 0, washB = game.frame - burstF < 3 ? 0.4 : 0;
     const wash = Math.max(flash, washR, washB);
     show(washEl, wash);
     if (wash > 0) setStyle(washEl, 'background', flash ? '#fff' : 'radial-gradient(ellipse at 50% 55%, rgba(255,246,226,1) 0%, rgba(255,200,140,.7) 35%, rgba(230,140,80,.3) 100%)');
   }
   function updateCut(t) {
-    const k = ramp(t, M.closeup, M.closeup + 5) * (1 - ramp(t, M.plant - 4, M.plant + 4));
+    const k = ramp(t, M.closeup, M.closeup + 2) * (1 - ramp(t, M.plant - 4, M.plant + 4));
     show(cut, k);
     if (k <= 0) return;
-    const st = ramp(t, M.closeup, M.closeup + 5), se = ramp(t, M.closeup + 8, M.closeup + 12);
+    const st = ramp(t, M.closeup, M.closeup + 4), se = ramp(t, M.closeup + 8, M.closeup + 12);
     setStyle(cutBig, 'transform', `scale(${(1.6 - 0.6 * st * st).toFixed(3)}) translateY(${((t - M.closeup) * -0.06).toFixed(2)}vh)`);
     setStyle(cutSeal, 'transform', `scale(${(2.2 - 1.2 * se).toFixed(3)}) rotate(-8deg)`);
     setStyle(cutSeal, 'opacity', se.toFixed(3));
@@ -157,23 +167,24 @@ export function createMusouView(parent, game, camera) {
     if (first) {                                                         // activation: shock + sigil
       fx.groundRing(h.x, h.z, 0.5, 8, 0.04, 0.55, 2.6, 1.7, 0.5);
       fx.groundRing(h.x, h.z, 0.3, 4.2, 0.1, 1.1, 1.2, 0.75, 0.2, 0.05);
-      fx.ring(h.x, 1.2, h.z, 0, 0, 0, 0.5, 4, 0.06, 0.3, 2.2, 1.5, 0.5, 0, 1);
-      fx.glow(h.x, 1.2, h.z, 1, 5, 0.25, 3, 2.2, 0.9);
+      fx.ring(h.x, 1.2, h.z, 0, 0, 0, 0.5, 4, 0.04, 0.22, 2.2, 1.5, 0.5, 0, 1);
+      // fx r1: a 2-frame hot core (the 5 m glow + dust burst + aura column stacked into a full-screen orange smear)
+      fx.glow(h.x, 1.2, h.z, 0.6, 2.2, 0.07, 3, 2.4, 1.2);
+      for (let k = 0; k < 5; k++) fx.ring(h.x, 0.3 + k * 0.55, h.z, 0, 1, 0, 0.5, 1.6 + k * 0.35, 0.05, 0.45, 2.4, 1.5, 0.4, k * 0.06);   // stacked gold rings
       fx.light(h.x, 2, h.z, 4, 0xffc060, 3);
-      for (let k = 0; k < 20; k++) {
+      for (let k = 0; k < 12; k++) {
         const a = vrng.range(0, 6.283), v = vrng.range(4, 8);
-        fx.smoke(h.x, 0.2, h.z, 0.4, 1.6, 0.8, 0.52, 0.4, 0.3, 0.5, Math.cos(a) * v, vrng.range(0.3, 1), Math.sin(a) * v, 2.5, 0.3);
+        fx.smoke(h.x, 0.2, h.z, 0.4, 1.2, 0.7, 0.52, 0.4, 0.3, 0.3, Math.cos(a) * v, vrng.range(0.3, 1), Math.sin(a) * v, 2.5, 0.3);
       }
     }
     moteAcc += dt;
     const step = 1 / 60;
-    if (t < M.plant) {                                                   // aura column + motes spiralling up round him
-      const k = t < M.closeup ? 1 : 0.5;
-      fx.line(h.x, 4.2, h.z, 0, 1, 0, 4.4, 1.3 * k, 0.5 * k, 0.33 * k, 0.1 * k, 0.5);
+    if (t < M.plant) {                                                   // motes spiralling up round him
       if (t < M.closeup) {
         spearWorld(pose, hpos, h.yaw, 0, 0.9, nock, bowTop);             // the bow thrust overhead: a star on it
-        fx.dot(bowTop.x, bowTop.y, bowTop.z, 0.7 + 0.2 * Math.sin(t * 0.8), 3, 2.3, 1);
-      } else fx.dot(tip.x, tip.y, tip.z, 0.25 + 0.3 * ramp(t, M.closeup, M.plant), 2.8, 2, 0.8);
+        const px = fx.px(bowTop.x, bowTop.y, bowTop.z);
+        fx.dot(bowTop.x, bowTop.y, bowTop.z, Math.min(0.5 + 0.15 * Math.sin(t * 0.8), 30 * px), 3, 2.3, 1);
+      } else fx.dot(tip.x, tip.y, tip.z, Math.min(0.2 + 0.2 * ramp(t, M.closeup, M.plant), 16 * fx.px(tip.x, tip.y, tip.z)), 2.8, 2, 0.8);
       while (moteAcc >= step) {
         moteAcc -= step;
         for (let k2 = 0; k2 < 3; k2++) {
@@ -183,15 +194,19 @@ export function createMusouView(parent, game, camera) {
         }
       }
       ringAcc += dt;
-      if (ringAcc > 0.35) { ringAcc = 0; fx.groundRing(h.x, h.z, 2.6, 1.2, 0.05, 0.45, 1.4, 0.9, 0.3); }
+      if (ringAcc > 0.3) {                                               // contracting ground sigil + a closing ring at his feet
+        ringAcc = 0; fx.groundRing(h.x, h.z, 2.6, 1.2, 0.05, 0.45, 1.8, 1.1, 0.3);
+        if (t < M.closeup) fx.ring(h.x, 0.2, h.z, 0, 1, 0, 1.4, 0.7, 0.06, 0.5, 2.0, 1.3, 0.35);
+      }
     } else if (t < M.big) {                                              // volley: a turning sigil under his feet
       ringAcc += dt;
       if (ringAcc > 0.25) { ringAcc = 0; fx.groundRing(h.x, h.z, 1.2, 3.2, 0.05, 0.5, 1.2, 0.6, 0.15); }
       moteAcc = 0;
     } else if (t < M.release) {                                          // the giant draw: everything pours into the arrowhead
       const u = ramp(t, M.big, M.release);
-      fx.dot(tip.x, tip.y, tip.z, 0.3 + 1.3 * u * u, 3.4 * (0.5 + u), 2.5 * (0.5 + u), 1.1 * (0.5 + u));
-      fx.dot(tip.x, tip.y, tip.z, 1.5 + 3 * u, 0.6 * u, 0.36 * u, 0.1 * u);
+      const px = fx.px(tip.x, tip.y, tip.z);
+      fx.dot(tip.x, tip.y, tip.z, Math.min(0.3 + 1.3 * u * u, (10 + 26 * u) * px), 3.4 * (0.5 + u), 2.5 * (0.5 + u), 1.1 * (0.5 + u));
+      fx.dot(tip.x, tip.y, tip.z, Math.min(1.5 + 3 * u, (40 + 60 * u) * px), 0.5 * u, 0.28 * u, 0.06 * u);
       fx.line(tip.x + fwx * 0.3, tip.y, tip.z + fwz * 0.3, fwx, 0, fwz, 1.5 + 5 * u * u, 0.06 + 0.1 * u, 2.8 * u, 2 * u, 0.8 * u, 0.6);   // the line it will fly
       while (moteAcc >= step) {
         moteAcc -= step;

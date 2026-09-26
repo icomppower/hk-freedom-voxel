@@ -199,8 +199,9 @@ export function createMusouView(parent, game, camera) {
   let tv = -1, time = 0, startX = 0, startZ = 0;            // tv: musou frame (continues past the end for fades)
   let contactF = -99, burstF = -99;                          // game frames of the payoff events (flashes ignore hitstop)
   on('musou:start', (e) => { tv = 0; startX = e.x; startZ = e.z; });
-  on('musou:hit', (e) => { if (e.stage === 'contact') { contactF = game.frame; burst(e.x, e.y, e.z, 45, 11, 7, 0.12, 0.5); } });
-  on('musou:burst', (e) => { burstF = game.frame; burst(e.x, 0.6, e.z, 30, 18, 9, 0.12, 0.35); });
+  // fx r1: fewer, dimmer light shards at the payoffs (45 + 30 HDR shards bloomed into a cyan cloud over the launch fan)
+  on('musou:hit', (e) => { if (e.stage === 'contact') { contactF = game.frame; burst(e.x, e.y, e.z, 26, 11, 7, 0.11, 0.35); } });
+  on('musou:burst', (e) => { burstF = game.frame; burst(e.x, 0.6, e.z, 18, 18, 9, 0.11, 0.26); });
   on('ko', (e) => { if (mu.active) for (let i = 0; i < 2; i++) shard(e.x, e.y, e.z, e.dx * 5 + vrng.range(-2, 2), vrng.range(2, 7), e.dz * 5 + vrng.range(-2, 2), vrng.range(0.3, 0.55), vrng.range(0.08, 0.14), 0.4, 1.0, 1.5); });
   on('scenario', () => { tv = -1; sh.life.fill(0); for (let i = 0; i < NSH; i++) sh.m.setMatrixAt(i, ZERO); sh.m.instanceMatrix.needsUpdate = true; });
 
@@ -260,7 +261,7 @@ export function createMusouView(parent, game, camera) {
       if (!j) { const k = HEAD_SCALE * (0.5 + 0.5 * ramp(s, 0.04, 0.22)); bases[j].multiply(_l.makeScale(k, k, k)); }
     }
     // shards: trail off the body, burst where segments dissolve
-    const n = Math.round(dt * 60 * 7);
+    const n = Math.round(dt * 60 * 4);
     for (let i = 0; i < n; i++) {
       const j = vrng.int(0, NS);
       if (!vis[j]) continue;
@@ -279,11 +280,11 @@ export function createMusouView(parent, game, camera) {
       // once the contact fill has faded the burst light rides the head: the crowd it surges through lights up teal
       // (one light for both, so the lit materials keep their light count)
       if (glow.intensity < 1) { glow.position.copy(_p); glow.intensity = 12 * (1 - dissolve) * ramp(s, 0.2, 0.3); }
-      const nh = Math.round(dt * 60 * 4);
+      const nh = Math.round(dt * 60 * 3);
       for (let i = 0; i < nh; i++) shard(_p.x + vrng.range(-0.4, 0.4), _p.y + vrng.range(-0.4, 0.4), _p.z + vrng.range(-0.4, 0.4),
         vrng.range(-1.5, 1.5), vrng.range(-0.5, 2), vrng.range(-1.5, 1.5), vrng.range(0.2, 0.4), vrng.range(0.1, 0.2), 0.7, 1.6, 2.2);
     }
-    const nsp = Math.round(dt * 60 * 6);
+    const nsp = Math.round(dt * 60 * 4);
     for (let i = 0; i < nsp; i++) {
       const j = 1 + ((time * 40 + i * 7) | 0) % NS;
       if (!vis[j]) continue;
@@ -291,7 +292,7 @@ export function createMusouView(parent, game, camera) {
       _v.set(Math.cos(th) * rr, Math.sin(th) * rr, 0).applyMatrix4(bases[j]);
       shard(_v.x, _v.y, _v.z, vrng.range(-0.3, 0.3), vrng.range(0, 0.6), vrng.range(-0.3, 0.3), vrng.range(0.25, 0.45), vrng.range(0.05, 0.09), 0.5, 1.4, 2.0);
     }
-    shell.material.uniforms.uK.value = (1 - 0.7 * dissolve) * (0.85 + 0.15 * Math.sin(time * 17));
+    shell.material.uniforms.uK.value = 0.7 * (1 - 0.7 * dissolve) * (0.85 + 0.15 * Math.sin(time * 17));   // (fx r1: 0.7× — a halo, not a fog)
     const jaw = 0.18 + 0.22 * Math.max(0, Math.sin(time * 7)), wave = Math.sin(time * 11);
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i], j = p.seg + 1;

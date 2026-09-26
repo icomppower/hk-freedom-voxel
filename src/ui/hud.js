@@ -215,6 +215,7 @@ export function createHud(root, game, camera) {
           S.mileTop = Math.max(8, Math.round((hy - 0.21) * 100));
           if (hy - 0.21 < 0.08) S.mileDim = 0.4;
         }
+        if (inMusou) { S.mileTop = 7; S.mileDim = 0.85; }                    // fx r1: Musou payoffs fill the centre: fixed safe zone up top
         set(mile, 'top', `${S.mileTop}%`);
       }
       const kt = f - S.koF, slam = clamp01(1 - kt / 7);
