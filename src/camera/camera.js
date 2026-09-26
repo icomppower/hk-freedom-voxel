@@ -94,12 +94,12 @@ export function createCamSim() {
   s.step = (game, inp) => {
     const h = game.hero, musou = h.state === 'musou';
     const held = Math.hypot(inp.mx, inp.my) >= 0.1;
+    const aim = h.kit.aimShot ? h.kit.aimShot(game) : null;          // aiming: the look steers the bow (aim.js), not tilt
     if (inp.orbit || inp.tilt) {                                     // the player's look always wins
-      s.yaw += inp.orbit; s.ctrl += inp.orbit; s.tilt = clamp(s.tilt + inp.tilt, CAM.tiltMin, CAM.tiltMax);
+      s.yaw += inp.orbit; s.ctrl += inp.orbit; if (!aim) s.tilt = clamp(s.tilt + inp.tilt, CAM.tiltMin, CAM.tiltMax);
       s.manualT = CAM.lookHold; s.turn = null;
     } else if (s.manualT > 0) s.manualT--;
-    if (inp.pressed.target && !musou) s.turn = { from: s.yaw, to: targetYaw(game), tilt0: s.tilt, t: 0 };
-    const aim = h.kit.aimShot ? h.kit.aimShot(game) : null;
+    if (inp.pressed.target && !musou && !aim) s.turn = { from: s.yaw, to: targetYaw(game), tilt0: s.tilt, t: 0 };
     if (s.turn) {                                                    // recenter: eased swing, pitch back to default
       const u = smooth(0, 1, ++s.turn.t / CAM.recenterF);
       s.yaw = s.turn.from + wrap(s.turn.to - s.turn.from) * u; s.tilt = s.turn.tilt0 * (1 - u);
@@ -113,7 +113,7 @@ export function createCamSim() {
     }
     s.yaw = wrap(s.yaw);
     const ang = held ? Math.atan2(inp.mx, inp.my) : 0;
-    if (!held || s.lockAng === null || Math.abs(wrap(ang - s.lockAng)) > CAM.lockTol) { s.ctrl = s.yaw; s.lockAng = held ? ang : null; }
+    if (aim || !held || s.lockAng === null || Math.abs(wrap(ang - s.lockAng)) > CAM.lockTol) { s.ctrl = s.yaw; s.lockAng = held ? ang : null; }
     const d = wrap(s.yaw - s.ctrl);
     if (held && d) { const c = Math.cos(d), sn = Math.sin(d), x = inp.mx, y = inp.my; inp.mx = x * c + y * sn; inp.my = y * c - x * sn; }
   };

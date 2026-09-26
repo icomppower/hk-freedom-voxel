@@ -22,10 +22,12 @@ const CONTROLS = [
   ['攻擊', 'Attack', '<kbd>J</kbd> / left click — tap for the full combo', '<kbd>X</kbd> □'],
   ['蓄力', 'Charge', '<kbd>K</kbd> / right click — mid-combo for charge attacks', '<kbd>Y</kbd> △'],
   ['跳躍', 'Jump', '<kbd>Space</kbd>', '<kbd>A</kbd> ×'],
-  ['閃避', 'Dodge', '<kbd>L</kbd> / <kbd>Shift</kbd>', '<kbd>R1</kbd>'],
+  ['閃避', 'Dodge', '<kbd>L</kbd> / <kbd>Shift</kbd>', '<kbd>R1</kbd> <kbd>R2</kbd>'],
   ['無雙', 'Musou', '<kbd>I</kbd> — when the gold gauge is full', '<kbd>B</kbd> ○'],
-  ['視角', 'Camera', '<kbd>Q</kbd><kbd>E</kbd> / drag the mouse', 'right stick'],
-  ['暫停', 'Pause', '<kbd>Esc</kbd>', ''],
+  ['視角', 'Camera', 'mouse (click the field to lock it) / <kbd>Q</kbd><kbd>E</kbd>', 'right stick'],
+  ['鎖定', 'Recenter', '<kbd>R</kbd> — behind you, or onto the nearest officer', '<kbd>L1</kbd> <kbd>L2</kbd>'],
+  ['瞄準', 'Aim (黃忠)', 'hold <kbd>K</kbd> / right click from a standstill — mouse or stick aims, release to loose', 'hold <kbd>Y</kbd> △'],
+  ['暫停', 'Pause', '<kbd>Esc</kbd> (also frees the mouse)', 'Start'],
 ];
 
 export function createTitle(el, flow) {

@@ -6,7 +6,8 @@
 //   story.stats()                          → { kos, time (s), hp, hpMax, maxChain, dmg, rank?, char } (story:end / result)
 //   story.morale                           蜀 share of the HUD morale bar 0-1 (undefined in free mode: HUD falls back)
 //   story.target                           {x, z} the HUD objective arrow points at, or null
-//   story.gateOpen                         the 魏軍營寨 gate (false until 張郃 falls in story mode; free mode: true)
+// Map gates (world/map.js GATES: 'pass' barricade, 'weiCamp' castle gate, 'summit' barricade) are sim state: story mode
+// closes all three at reset, a beat's `gate: id` opens one (clampWalk lets everyone through, world.js burns / swings it).
 // Emits story:say / story:banner / story:objective / story:gate / story:end (payloads: core/events.js). The flow
 // (main.js) leaves the battle for the result screen on story:end; the HUD shows the rest.
 // Also owns game.timeScale (wall-clock pace of the fixed-step loop, main.js): 1, except the victory slow-mo.
@@ -15,8 +16,7 @@
 // its trigger holds and beat k-1 has fired; a `limit` keeps the hero from running past the stage he is on (DW8's
 // barred gates), so the script can't be skipped or soft-locked by running ahead, and going back is always free.
 import { emit, on } from '../core/events.js';
-import { zone } from '../world/map.js';
-import { WALL_Z, GATE_X } from '../world/world.js';
+import { zone, setGate, GATES, WALL_Z, GATE_X } from '../world/map.js';
 import { CHARS } from '../chars/index.js';
 import { BEATS as CH1, OFFICERS as CH1_OFF, SPK } from './ch1.js';
 
@@ -33,7 +33,7 @@ const nearZ = (id) => { const q = zone(id); return q.z - (q.r ?? q.d / 2); };
 
 export function createStory(game) {
   const S = { mode: 'free', chapter: null, char: 'zhaoyun', t: 0, done: false, maxChain: 0, downT: -1 };
-  const st = { morale: undefined, target: null, gateOpen: true };
+  const st = { morale: undefined, target: null };
   const DLG_GAP = 24;                            // sim frames between two queued lines
 
   st.stats = () => {
@@ -89,7 +89,7 @@ export function createStory(game) {
     if (b.limit) { S.limit = b.limit.z ? pos(b.limit.z)[1] : Infinity; S.nag = b.limit.nag || null; }
     if (b.heal && !h.dead) h.hp = Math.min(h.hpMax, h.hp + b.heal * h.hpMax);
     if (b.morale != null) S.mBase = b.morale === 1 ? 1 : S.mBase + b.morale;
-    if (b.gate) { st.gateOpen = true; emit('story:gate', { open: true }); }
+    if (b.gate) { setGate(b.gate, true); emit('story:gate', { id: b.gate, open: true }); }
     if (b.banner) emit('story:banner', { dur: 150, ...b.banner });
     if (b.hush) S.q.length = 0;                                        // stage cleared: queued taunts are stale now
     if (b.obj) { emit('story:objective', { zh: b.obj.zh, en: b.obj.en }); S.go = b.obj.go; }
@@ -101,7 +101,8 @@ export function createStory(game) {
       downT: -1, dmg: 0, beat: 0, beatT: 0, koBase: 0, off: {}, want: {}, dead: {}, q: [], sayUntil: 0, limit: Infinity, nag: null,
       nagT: -999, mBase: 0.4, won: -1, go: null });
     game.timeScale = 1;
-    st.target = null; st.gateOpen = mode === 'free';
+    st.target = null;
+    if (mode === 'story') for (const id in GATES) setGate(id, false);   // spawnPoint() opened them all; the script opens each
     st.morale = mode === 'story' ? 0.4 : undefined;
     if (mode === 'free') game.crowd.spawnArmy();
     // story: the first beat spawns the field on step 1 — after main.js's 'scenario' reset of the HUD, so its objective sticks

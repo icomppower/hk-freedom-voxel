@@ -65,9 +65,9 @@ export function createAim(game, proj) {
     if (h.buf === 'charge') h.buf = null;
     if (h.dodgeBuf) { leave(h); h.dodgeBuf = 0; startDodge(h, inp, game.cam.yaw); return true; }
     if (h.jumpBuf) { leave(h); h.jumpBuf = 0; startJump(h); return true; }
-    // aim: stick turns / raises it, a mouse drag (orbit) turns it with the view
+    // aim: the stick turns / raises it; the look (mouse, Q/E, right stick: orbit + tilt) turns and raises it with the view
     A.yaw += inp.orbit - inp.mx * AIM.turn / 60;
-    A.pitch = Math.max(AIM.pitchMin, Math.min(AIM.pitchMax, A.pitch + inp.my * AIM.pitchRate / 60));
+    A.pitch = Math.max(AIM.pitchMin, Math.min(AIM.pitchMax, A.pitch + inp.my * AIM.pitchRate / 60 - inp.tilt));
     h.yaw = A.yaw; h.vx = h.vz = 0;
     const F = AIM.frames;
     A.t++;

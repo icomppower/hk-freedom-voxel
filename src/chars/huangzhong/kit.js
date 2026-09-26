@@ -17,4 +17,5 @@ export const HUANGZHONG_KIT = {
   model: createHzModel, secondary: createHzSecondary, ghosts: createDodgeGhosts, applyRoll,
   trail: null,                    // the bow-blade ribbon is drawn by model.js (the limb is off the weapon line)
   createMusou, createMusouView,
+  aimShot: (game) => game.musou.aimShot?.() ?? null,   // camera.js: over-the-shoulder aim shot (aim.js)
 };

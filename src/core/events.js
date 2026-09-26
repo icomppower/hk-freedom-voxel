@@ -36,7 +36,7 @@
 //                                                                       hero speaks); side 'shu' (default) | 'wei'; dur: sim frames
 //  story:banner  story    {html, en, dur, big?}                         system banner (HUD band; html may use <em>; big: slain/boss)
 //  story:objective story  {zh, en}                                      current objective (HUD, top left; empty zh clears it)
-//  story:gate    story    {open}                                        the 魏軍營寨 gate opens (張郃 defeated); game.story.gateOpen
+//  story:gate    story    {id, open}                                    a map gate opens (world/map.js GATES id)
 //  story:end     story    {win, stats}                                  battle over → flow goes to the result screen.
 //                                                                       stats: {kos, time (s), hp, hpMax, maxChain, dmg, char, rank?}
 //  arrow:fire    projectiles {x,y,z, yaw, n, heavy, fire, big, sky, move}  a shot leaves the bow (n arrows; big 1 heavy, 2 Musou giant)

@@ -19,7 +19,8 @@
 //   waves  reinforcement columns on/off   limit  { z: P | null, nag: line }   the hero can't pass that z (sequence gate)
 //   hush   drop dialogue still queued (a stage just fell: its officer's taunts are stale)
 //   heal f (fraction of max HP; DW's 肉包 on a stage clear)   morale ±d   retire (free idle grunts far behind)
-//   gate   open the 魏軍營寨 gate (story:gate)   win   the chapter's victory beat (slow-mo, then the result screen)
+//   gate   open a map gate: 'pass' | 'weiCamp' | 'summit' (world/map.js GATES; all closed at a story start; story:gate)
+//   win    the chapter's victory beat (slow-mo, then the result screen)
 // A position P = [zone id, fx, fz]: fractions of the zone's half width / half depth (radius) from its centre, so the
 // script follows the map lane's zone table instead of hard geometry; ['gate', dx, dz] = metres from the camp gate.
 // Line = { who, zh, en } or { who, huangzhong: [zh, en], zhaoyun: [zh, en] } (branch on the hero).
@@ -45,6 +46,7 @@ const OFF = {
   guard: { name: { zh: '親衛隊長', en: 'GUARD CAPTAIN' }, hp: 320 },
 };
 
+const SUMMIT_GATE = ['summit', -0.65, -0.53];   // the 'summit' barricade across the ramp (≈ -20, 176)
 const NAG = { who: 'fazheng', zh: '將軍且慢！前方尚未肅清，不可孤軍深入。', en: 'Wait, General! The way ahead isn\'t secured — don\'t go in alone.' };
 const NAG_GATE = { who: 'fazheng', zh: '營門緊閉，須先擊破守將張郃！', en: 'The gate is barred. Defeat Zhang He, who guards it!' };
 
@@ -89,7 +91,7 @@ export const BEATS = [
     banner: { html: '<em>漢水渡口</em> 攻佔！', en: 'Han River ford captured — the army\'s spirit rises', dur: 180 },
     heal: 0.35, morale: 0.12, waves: false, retire: true, hush: true,
     obj: { zh: '突破山道', en: 'Break through the mountain pass', go: ['pass', 0, 0.2] },
-    limit: { z: ['pass', 0, 0.8], nag: NAG },
+    limit: { z: ['pass', 0, 0.68], nag: NAG },                      // just short of the 'pass' barricade (z 59.5)
     say: [{ who: 'fazheng', zh: '渡口已下！山道狹窄，魏軍必有埋伏，務必小心。', en: 'The ford is ours! The pass is narrow. Wei will have an ambush waiting.' }],
   },
 
@@ -116,7 +118,7 @@ export const BEATS = [
   {
     when: { down: 'duxi' },
     banner: { html: '<em>伏兵</em> 擊退！', en: 'The ambush is broken', dur: 150 },
-    heal: 0.3, morale: 0.12, retire: true, hush: true,
+    heal: 0.3, morale: 0.12, retire: true, hush: true, gate: 'pass',
     obj: { zh: '擊破張郃 開啟營門', en: 'Defeat Zhang He and open the camp gate', go: 'zhanghe' },
     officers: { zhanghe: { at: ['gate', 0, -9] } },
     squads: [{ at: ['gate', -13, -14], n: 18 }, { at: ['gate', 13, -14], n: 18 }],
@@ -137,10 +139,10 @@ export const BEATS = [
   },
   {
     when: { down: 'zhanghe' },
-    gate: true, limit: { z: null }, heal: 0.3, morale: 0.15, retire: true, hush: true, waves: false,
+    gate: 'weiCamp', limit: { z: null }, heal: 0.3, morale: 0.15, retire: true, hush: true, waves: false,
     banner: { html: '<em>魏軍營寨</em> 城門開啟！', en: 'The Wei camp gate is open!', dur: 180 },
     obj: { zh: '登頂擊破夏侯淵', en: 'Take the summit and defeat Xiahou Yuan', go: ['gate', 0, 10] },   // through the gate first
-    squads: [{ at: ['camp', -0.5, 0.35], n: 20 }, { at: ['camp', 0.5, 0.5], n: 20 }, { at: ['camp', 0, 0.85], n: 16 }],
+    squads: [{ at: ['camp', -0.5, 0.35], n: 20 }, { at: ['camp', 0.5, 0.5], n: 20 }, { at: ['camp', -0.6, 0.62], n: 16 }],   // courtyard ×2, foot of the ramp
     say: [
       { who: 'zhanghe', zh: '……可惡，此營守不住了。全軍，撤！', en: '...Curse it, the camp is lost. All troops, fall back!' },
       { who: 'fazheng', zh: '張郃敗走，夏侯淵已成孤軍！將軍，登上山頂，一戰定乾坤！', en: 'Zhang He has fled. Xiahou Yuan stands alone! Take the summit and end this!' },
@@ -150,8 +152,15 @@ export const BEATS = [
     when: { at: ['gate', 0, 6] },
     officers: { yuan: { at: ['summit', 0, 0.2] } },
     squads: [{ at: ['summit', -0.55, -0.45], n: 18 }, { at: ['summit', 0.55, -0.4], n: 18 }],
-    obj: { zh: '擊破敵總大將 夏侯淵', en: 'Defeat the enemy commander, Xiahou Yuan', go: 'yuan' },
+    obj: { zh: '攻破山頂柵', en: 'Break through the summit barricade', go: SUMMIT_GATE },
     say: [{ who: 'soldier', zh: '擋住他！絕不能讓他靠近夏侯將軍！', en: 'Hold him! Don\'t let him near General Xiahou!' }],
+  },
+  {
+    // the camp's defenders thinned, 40 s passed, or he is up the ramp at the barricade 8 s in: the summit barricade burns
+    when: [{ kos: 45 }, { wait: 40 * 60 }, { at: ['summit', 0, -0.9], wait: 8 * 60 }],
+    gate: 'summit',
+    banner: { html: '<em>山頂柵</em> 攻破！', en: 'The summit barricade is down — the road to the top is open', dur: 160 },
+    obj: { zh: '擊破敵總大將 夏侯淵', en: 'Defeat the enemy commander, Xiahou Yuan', go: 'yuan' },
   },
 
   // ---- 定軍山頂: 夏侯淵 (boss), the drums at half HP

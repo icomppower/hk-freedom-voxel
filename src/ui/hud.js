@@ -24,7 +24,7 @@ export function createHud(root, game, camera) {
     <div class="h-intro"><div class="zh"></div><i class="seal"></i><div class="en"></div>
       <div class="sub"></div>
       <div class="keys"><kbd>WASD</kbd> 移動 move · <kbd>J</kbd> 攻擊 attack · <kbd>K</kbd> 蓄力 charge<br>
-        <kbd>Space</kbd> 跳躍 jump · <kbd>L</kbd> 閃避 dodge · <kbd>I</kbd> 無雙 musou · <kbd>Q</kbd><kbd>E</kbd> 視角 · <kbd>H</kbd> 說明</div></div>
+        <kbd>Space</kbd> 跳躍 jump · <kbd>L</kbd> 閃避 dodge · <kbd>I</kbd> 無雙 musou · <kbd>R</kbd> 鎖定 recenter · <kbd>H</kbd> 說明</div></div>
     <div class="h-target"><i class="seal">將</i><b></b><span></span><div class="bar"><em></em><i></i></div><strong>擊破</strong></div>
     <div class="h-map"><div class="morale"><i></i><span>蜀</span><span>魏</span></div><canvas width="200" height="200"></canvas><i class="seal">${MAP.name.zh}</i></div>
     <div class="h-offs">${'<div class="off"><i class="ld"></i><div class="mk">▼▼</div><div class="bd"><b></b><span></span><div class="bar"><em></em><i></i></div></div></div>'.repeat(nOff)}</div>
