@@ -108,7 +108,11 @@ function smokeMaterial() {
   g.putImageData(img, 0, 0);
   const map = new THREE.CanvasTexture(cv);
   map.magFilter = THREE.NearestFilter; map.minFilter = THREE.NearestFilter; map.generateMipmaps = false;
-  const mat = new THREE.MeshBasicMaterial({ map, transparent: true, opacity: 0.62, depthWrite: false });
+  return billboard(new THREE.MeshBasicMaterial({ map, transparent: true, opacity: 0.62, depthWrite: false }));
+}
+
+/** Instanced camera-facing quads: instance matrix = position + rotation/scale in the view plane. */
+function billboard(mat) {
   mat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', `
       vec4 mvPosition = modelViewMatrix * vec4( instanceMatrix[3].xyz, 1.0 );
@@ -116,6 +120,15 @@ function smokeMaterial() {
       gl_Position = projectionMatrix * mvPosition;`);
   };
   return mat;
+}
+
+/** Soft radial glow (white, alpha 0 at the rim) for additive fire halos and ground light pools. */
+function glowTexture() {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const g = cv.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.55)'); gr.addColorStop(0.6, 'rgba(255,255,255,0.14)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(cv);
 }
 
 /** list: [x, y, z, scale, smoke = scale ≥ 1.3, gate id]: a gate-linked fire only burns once that gate is open (the
@@ -141,6 +154,24 @@ function fireSystem(scene, list) {
   sm.renderOrder = 1;
   fm.name = 'flames'; sm.name = 'smoke';
   scene.add(fm, sm);
+  // per fire: a soft additive halo round the flames (heat + light, feeds the bloom) and a flickering pool of firelight
+  // on the ground under it — both fade out near the lens
+  const glow = glowTexture(), sites = list.map(([x, y, z, s, , g = null]) => ({ x, y, z, s, g, ph: r.range(0, 6.28), py: y - topAt(x, z) < 3.2 ? topAt(x, z) : y }));
+  const glowMat = (bb) => {
+    const gm = new THREE.MeshBasicMaterial({ map: glow, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide });
+    gm.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vNear;').replace('#include <project_vertex>', bb ? `
+        vec4 mvPosition = modelViewMatrix * vec4( instanceMatrix[3].xyz, 1.0 );
+        mvPosition.xy += mat2( instanceMatrix[0].xy, instanceMatrix[1].xy ) * transformed.xy;
+        gl_Position = projectionMatrix * mvPosition; vNear = smoothstep(4.0, 12.0, -mvPosition.z);` : '#include <project_vertex>\nvNear = smoothstep(4.0, 12.0, -mvPosition.z);');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vNear;').replace('#include <dithering_fragment>', 'gl_FragColor.rgb *= vNear;');
+    };
+    return gm;
+  };
+  const flat = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const hm = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), glowMat(true), sites.length), pm = new THREE.InstancedMesh(flat, glowMat(false), sites.length);
+  for (const k of [hm, pm]) { k.frustumCulled = false; k.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(sites.length * 3), 3); k.renderOrder = 2; scene.add(k); }
+  hm.name = 'fire-halo'; pm.name = 'fire-pool';
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
   const HOT = new THREE.Color(7, 5.2, 2.4), MID = new THREE.Color(5.5, 2.0, 0.45), END = new THREE.Color(1.4, 0.3, 0.08);
   const SMOKE_LO = new THREE.Color(0x3a2c28), SMOKE_HI = new THREE.Color(0x857680), GLOW = new THREE.Color(0.9, 0.35, 0.08);
@@ -176,6 +207,14 @@ function fireSystem(scene, list) {
       sm.setColorAt(j, c);
     });
     sm.instanceMatrix.needsUpdate = true; sm.instanceColor.needsUpdate = true;
+    for (let j = 0; j < sites.length; j++) {
+      const f = sites[j], s = f.g && !lit(f.g) ? 0 : f.s, fl = 0.8 + 0.12 * Math.sin(t * 11 + f.ph) + 0.08 * Math.sin(t * 23.7 + f.ph * 3);
+      hm.setMatrixAt(j, m.compose(p.set(f.x, f.y + 1.1 * s, f.z), q.identity(), sc.set(3.4 * s * fl, 4.2 * s * fl, 1)));
+      hm.setColorAt(j, c.setRGB(0.95, 0.32, 0.07).multiplyScalar(fl));
+      pm.setMatrixAt(j, m.compose(p.set(f.x, f.py + 0.07, f.z), q.identity(), sc.set(7 * s * fl, 1, 7 * s * fl)));
+      pm.setColorAt(j, c.setRGB(0.7, 0.22, 0.05).multiplyScalar(fl));
+    }
+    for (const k of [hm, pm]) { k.instanceMatrix.needsUpdate = true; k.instanceColor.needsUpdate = true; }
   };
 }
 
@@ -439,6 +478,42 @@ export function buildDressing(scene, { castle, fieldFires }) {
     for (let k = 0, n = r.int(5, 12); k < n; k++) {
       const x = cx + r.range(-1.6, 1.6), z = cz + r.range(-1.6, 1.6), gy = ground(x, z);
       props.push({ s: [0.035, 0.85, 0.035], p: [x, gy + 0.3, z], r: [tilt, dir, 0], c: 0x4a3524 }, { s: [0.09, 0.14, 0.02], p: [x + Math.sin(dir) * Math.sin(tilt) * 0.4, gy + 0.3 + Math.cos(tilt) * 0.4, z + Math.cos(dir) * Math.sin(tilt) * 0.4], r: [tilt, dir, 0], c: 0xd8cfc0 });
+    }
+  }
+
+  // the fallen: dropped shields (red 魏 / sand 蜀 rims), broken spears and helmets flat in the dirt, never upright
+  for (let c = 0, n = 0; c < 400 && n < 120; c++) {
+    const x = r.range(-44, 44), z = r.range(-118, 215);
+    if (inAt(x, z) < 1 || routeDist(x, z) < 1.5 || Math.abs(z - riverZ(x)) < 5.5) continue;
+    n++;
+    const gy = ground(x, z), yaw = r.range(0, 6.28), L = local(props, x, gy, z, yaw), kind = r.int(0, 2);
+    if (kind === 0) {
+      const face = r.chance(0.6) ? 0x6e2418 : 0x9a8058;
+      L(0, 0.05, 0, [0.9, 0.08, 0.7], shade(face, r.range(0.8, 1.05)), [r.range(-0.2, 0.2), 0, r.range(-0.1, 0.1)]);
+      L(0, 0.05, 0, [0.7, 0.085, 0.9], shade(face, r.range(0.8, 1.05)), [r.range(-0.2, 0.2), 0, r.range(-0.1, 0.1)]);
+      L(0, 0.1, 0, [0.2, 0.06, 0.2], 0x8a7a50);                                // boss
+    } else if (kind === 1) {
+      const len = r.range(1.2, 2.6);
+      L(0, 0.05, 0, [0.06, 0.06, len], 0x4a3222, [0, 0, 0]);
+      L(0, 0.05, len / 2 + 0.12, [0.1, 0.04, 0.26], 0xa8adb2);                 // spearhead catches the sun
+    } else L(0, 0.14, 0, [0.34, 0.26, 0.38], shade(0x3a3434, r.range(0.8, 1.2)), [r.range(-0.6, 0.6), 0, r.range(-0.6, 0.6)]);
+  }
+  // torch posts just outside the walk edge along the ford and the pass: small flames lining the route into the dusk
+  for (let i = 0; i < ROUTE.length - 1; i++) {
+    const [ax, az] = ROUTE[i], [bx, bz] = ROUTE[i + 1];
+    if (az > 70 || az < -118) continue;
+    const len = Math.hypot(bx - ax, bz - az), nx = (bz - az) / len, nz = -(bx - ax) / len;
+    for (let d = 4; d < len; d += 13) for (const sd of [-1, 1]) {
+      for (let off = 4; off < 60; off += 1) {                                    // walk outward to the edge
+        const x = ax + (bx - ax) * d / len + nx * sd * off, z = az + (bz - az) * d / len + nz * sd * off, f = inAt(x, z);
+        if (f > -0.6) continue;
+        if (f > -2.5 && Math.abs(z - riverZ(x)) > 7) {
+          const gy = topAt(x, z);
+          props.push({ s: [0.18, 2.6, 0.18], p: [x, gy + 1.3, z], c: 0x3a2618 }, { s: [0.5, 0.3, 0.5], p: [x, gy + 2.7, z], c: 0x2a2624 });
+          fires.push([x, gy + 2.85, z, 0.4, false]);
+        }
+        break;
+      }
     }
   }
 

@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { boxesGeometry, shade } from '../core/voxel.js';
 import { makeRng } from '../core/rng.js';
+import { voxelGrain } from './terrain.js';
 
 const lit = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, flatShading: true });
 const STONE = 0x9c7c72, MORTAR = 0x2e2220,   // warm brown stone: the backlit face lands on the concept's wall (#5a423c–#654c4a) once shaded
@@ -82,7 +83,7 @@ export function pagoda(b, x, y, z, w, d, tiers = 2, s = 1) {
     yy += 1.6 * s;
     if (t === tiers - 1) {
       P({ s: [rw * 0.5, 0.5 * s, 0.6 * s], p: [0, yy + 0.1 * s, 0], c: 0x2c2a30 });                        // ridge
-      for (const sx of [-1, 1]) P({ s: [0.5 * s, 1.1 * s, 0.5 * s], p: [sx * rw * 0.25, yy + 0.6 * s, 0], c: 0x2c2a30 });
+      for (const sx of [-1, 1]) P({ s: [0.5 * s, 1.1 * s, 0.5 * s], p: [sx * rw * 0.25, yy + 0.6 * s, 0], c: 0xa07c34 });   // gilt ridge ornaments catch the low sun
     }
     ww *= 0.72; dd *= 0.72;
   }
@@ -177,9 +178,24 @@ export function buildCastle(scene, { wallZ, gateX }) {
     for (const sx of [-0.45, 0.45]) b.push({ s: [0.14, len, 0.14], p: [lx + sx, yc, zc], r: [-lean, 0, 0], c: 0x4a3222 });
     for (let k = 0.6; k < len - 0.3; k += 0.55) b.push({ s: [0.9, 0.08, 0.08], p: [lx, Math.cos(lean) * k, z0 - 0.3 - Math.sin(lean) * k], c: 0x3a2618 });
   }
-  const wall = new THREE.Mesh(boxesGeometry(b), lit());
+  const wall = new THREE.Mesh(boxesGeometry(b), voxelGrain(lit(), 0.2, 0.14));
   wall.castShadow = true; wall.receiveShadow = true;
   scene.add(wall);
+
+  // paper lanterns under the eaves (gatehouse, corner tower, bastion pavilion): self-lit bodies that glow through the
+  // haze and catch the bloom — warm points of light on the dark backlit wall
+  const lb = [], lantern = (x, y, z, s = 1) => {
+    lb.push({ s: [0.04, 0.7 * s, 0.04], p: [x, y + 0.75 * s, z], c: 0x1a120c }, { s: [0.62 * s, 0.8 * s, 0.62 * s], p: [x, y, z], c: 0xff7a3a },
+      { s: [0.5 * s, 0.9 * s, 0.5 * s], p: [x, y, z], c: 0xff9a4a }, { s: [0.44 * s, 0.1 * s, 0.44 * s], p: [x, y + 0.45 * s, z], c: 0x2a1a0e },
+      { s: [0.44 * s, 0.1 * s, 0.44 * s], p: [x, y - 0.45 * s, z], c: 0x2a1a0e }, { s: [0.08, 0.35 * s, 0.08], p: [x, y - 0.65 * s, z], c: 0x7c2b1d });
+  };
+  for (const dx of [-8, -3.2, 3.2, 8]) lantern(gateX + dx, H + 3.1, z0 - 0.1, 1.1);
+  for (const dx of [-3.4, 3.4]) lantern(gateX + dx, gh + 0.6, z0 - 0.6, 0.9);            // either side of the gate arch
+  for (const dx of [-3, 3]) lantern(cx + dx, TH + 2.3, z0 - 1, 0.9);
+  for (const dx of [-2, 2]) lantern(-54 + dx, H + 3.1, z0 - 1.6, 0.8);
+  const lanterns = new THREE.Mesh(boxesGeometry(lb), new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(4, 4, 4) }));
+  lanterns.name = 'lanterns';
+  scene.add(lanterns);
 
   // door leaves: pivots on the hinges, planks + iron bands + studs; open = swung 90° inward flat against the passage
   const doors = [-1, 1].map((sx) => {

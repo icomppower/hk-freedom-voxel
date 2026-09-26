@@ -4,6 +4,7 @@
 //                     in-scatter; alpha = view distance
 //   dof    → dofRT    half res: single-pass gather bokeh; alpha = how much a blurred foreground covers this pixel
 //   bloom             UnrealBloom on dofRT, source-hued, HDR threshold: only sun / fire / spear arc bloom
+//   rays   → raysRT   half res: god rays, radial blur of the sky round the sun (skipped while the sun is off screen)
 //   final  → screen   sharp/blurred mix per pixel (CoC from full-res depth), bloom, horizontal highlight streaks,
 //                     chromatic fringe, split-tone grade (scene-linear), hue-preserving S-curve + per-channel soft
 //                     shoulder (fire stays orange/yellow, white armour keeps its shading), bottom darkening,
@@ -22,14 +23,15 @@ import { SUN_DIR } from '../world/sky.js';
 const P = {
   // tone curve (Lottes): scene luminance tmMidIn → display tmMidOut, tmContrast = mid slope, tmShoulder < 1 = roll-off
   // reaching 1.0 at tmMax; knee = start of the per-channel shoulder; hotDesat = how fast overflow bleaches to white
-  exposure: 1.22, tmContrast: 3.3, tmShoulder: 0.97, tmMidIn: 0.11, tmMidOut: 0.1, tmMax: 5, knee: 0.75, hotDesat: 0.25,
-  sat: 1.22, lift: 0.006,
-  shadowTint: [0.9, 0.93, 1.12], highTint: [1.12, 1.0, 0.74], tintLo: 0.02, tintHi: 0.4,   // split tone: mauve-blue shade, peach-gold light
-  hazeCool: [0.1, 0.11, 0.17], hazeWarm: [0.34, 0.2, 0.15], sunGlow: [0.9, 0.6, 0.35], sunGlowGeo: 0.8, inscatter: [0.02, 0.011, 0.005], sunBurst: [0.1, 0.06, 0.025], inscatterDist: 60,
+  exposure: 1.3, tmContrast: 3.3, tmShoulder: 0.97, tmMidIn: 0.11, tmMidOut: 0.1, tmMax: 5, knee: 0.75, hotDesat: 0.25,
+  sat: 1.32, lift: 0.006,
+  shadowTint: [0.86, 0.96, 1.16], highTint: [1.1, 1.0, 0.8], tintLo: 0.02, tintHi: 0.4,   // split tone: teal-blue shade, gold light (DW golden hour, not sepia)
+  hazeCool: [0.09, 0.11, 0.19], hazeWarm: [0.36, 0.21, 0.12], sunGlow: [0.9, 0.6, 0.35], sunGlowGeo: 0.8, inscatter: [0.02, 0.011, 0.005], sunBurst: [0.1, 0.06, 0.025], inscatterDist: 60,
   hazeStart: 9, hazeDensity: 0.006, hazeMax: 0.06, skyHaze: 0.3, skyGain: 0.5, farGain: 0.45,   // light enough that the wall keeps its bricks
   nearBlur: 26, farBlur: 0.6, bandNear: 1.4, bandFar: 5,          // DoF: CoC in half-res px, bands in metres
-  bloom: 0.6, bloomRadius: 0.1, bloomThreshold: 1.5, bloomKnee: 0.5, bloomCool: 1.5, hdrClamp: 2.5,
-  sharpen: 0.35, streak: 0.05, rowNoise: 0.018, ca: 1.3, grain: 0.03, levels: 40, dither: 0.8, vignette: 0.18, bottom: 0.25,
+  bloom: 0.75, bloomRadius: 0.1, bloomThreshold: 1.5, bloomKnee: 0.5, bloomCool: 1.5, hdrClamp: 2.5,
+  rays: 0.9, rayTint: [1.0, 0.7, 0.4], rayDecay: 0.965, rayReach: 0.85,   // god rays: gain, colour, falloff per tap, reach (fraction of the way to the sun)
+  sharpen: 0.35, streak: 0.05, rowNoise: 0.01, ca: 1.3, grain: 0.025, levels: 72, dither: 0.6, vignette: 0.3, bottom: 0.25,
 };
 const uName = (k) => 'u' + k[0].toUpperCase() + k.slice(1);
 const pUniforms = () => Object.fromEntries(Object.entries(P).map(([k, v]) => [uName(k), { value: Array.isArray(v) ? new THREE.Vector3(...v) : v }]));
@@ -100,8 +102,30 @@ const DofShader = /* glsl */`
     gl_FragColor = vec4(col / tot, clamp(fg / tot * 4.0, 0.0, 1.0));
   }`;
 
+// God rays (half res): radial blur of the sunlit sky toward the sun's screen position. Only sky pixels near the sun
+// feed it, so every silhouette in front of the low sun (towers, walls, ridges, soldiers) cuts a dark shaft into the
+// light. Skipped entirely while the sun is off screen.
+const RaysShader = /* glsl */`
+  uniform sampler2D tAtmos; uniform vec2 uSunUv, uAspect; uniform float uRayDecay, uRayReach, uTime;
+  varying vec2 vUv;
+  float src(vec2 uv) {
+    vec4 s = texture2D(tAtmos, uv);
+    if (s.a < 4000.0 || uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
+    float r = length((uv - uSunUv) * uAspect);
+    return (0.35 + dot(s.rgb, vec3(0.3, 0.5, 0.2))) * exp(-r * 4.0);
+  }
+  void main() {
+    vec2 d = (uSunUv - vUv) * (uRayReach / 36.0);
+    float j = fract(sin(dot(gl_FragCoord.xy + fract(uTime) * 61.0, vec2(12.9898, 78.233))) * 43758.5453);
+    vec2 uv = vUv + d * j;
+    float acc = 0.0, w = 1.0;
+    for (int i = 0; i < 36; i++) { acc += src(uv) * w; w *= uRayDecay; uv += d; }
+    gl_FragColor = vec4(vec3(acc / 36.0), 1.0);
+  }`;
+
 const FinalShader = /* glsl */`
-  uniform sampler2D tSharp, tDof, tBloom; uniform vec2 uRes; uniform float uTime, uFlash;
+  uniform sampler2D tSharp, tDof, tBloom, tRays; uniform vec2 uRes; uniform float uTime, uFlash, uRayGain;
+  uniform vec3 uRayTint;
   uniform float uExposure, uTmContrast, uTmShoulder, uTmB, uTmC, uKnee, uHotDesat, uSat, uLift, uTintLo, uTintHi, uSharpen, uStreak, uRowNoise, uCa, uGrain, uLevels, uDither, uVignette, uBottom;
   uniform vec3 uShadowTint, uHighTint;
   varying vec2 vUv;
@@ -136,6 +160,7 @@ const FinalShader = /* glsl */`
       st += (max(texture2D(tDof, vUv + vec2(o, 0.0)).rgb - 1.0, 0.0) + max(texture2D(tDof, vUv - vec2(o, 0.0)).rgb - 1.0, 0.0)) * w;
     }
     c += st * uStreak * vec3(1.0, 0.86, 0.7);
+    c += texture2D(tRays, vUv).rgb * uRayTint * uRayGain;
     c *= 1.0 + (hash(vec2(floor(gl_FragCoord.y * 0.5), floor(uTime * 12.0))) - 0.5) * uRowNoise;
     // golden-hour grade in scene-linear (before the curve, so its shoulder also rolls off the tinted highlights):
     // split tone — cool mauve-blue shade, peach-gold light; blue-dominant pixels (spear arc, tassel, teal trim) keep
@@ -179,6 +204,7 @@ export function createPost({ canvas, width, height }) {
   // nearest: the half-res DoF must not average a hero-plane distance with the background behind it
   const atmosRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
   const dofRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: false });
+  const raysRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: false });
   const bloom = new UnrealBloomPass(new THREE.Vector2(320, 180), P.bloom, P.bloomRadius, P.bloomThreshold);
   bloom.blendMaterial.visible = false;          // don't add onto dofRT: the final pass adds the bloom to both branches
   // prefilter: soft knee instead of a hard cut (no popping), and blue-dominant light (the spear arc, the one cool
@@ -206,10 +232,12 @@ export function createPost({ canvas, width, height }) {
     uSunDir: { value: SUN_DIR }, uCamPos: { value: new THREE.Vector3() },
   }));
   const dof = new FullScreenQuad(mat(DofShader, { tAtmos: { value: atmosRT.texture }, uTexel: { value: new THREE.Vector2() }, ...dofU }));
+  const rays = new FullScreenQuad(mat(RaysShader, { tAtmos: { value: atmosRT.texture }, uSunUv: { value: new THREE.Vector2() }, uAspect: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 } }));
+  const sunNdc = new THREE.Vector3(), camFwd = new THREE.Vector3();
   // Lottes curve constants: tmMidIn → tmMidOut and tmMax → 1
   const ta = P.tmContrast, ad = ta * P.tmShoulder, mi = P.tmMidIn, mo = P.tmMidOut, hm = P.tmMax, den = (hm ** ad - mi ** ad) * mo;
   const fin = new FullScreenQuad(mat(FinalShader, {
-    tSharp: { value: atmosRT.texture }, tDof: { value: dofRT.texture }, tBloom: { value: bloom.renderTargetsHorizontal[0].texture },
+    tSharp: { value: atmosRT.texture }, tDof: { value: dofRT.texture }, tBloom: { value: bloom.renderTargetsHorizontal[0].texture }, tRays: { value: raysRT.texture }, uRayGain: { value: 0 },
     uRes: { value: new THREE.Vector2(1280, 720) }, uTime: { value: 0 }, uFlash: { value: 0 },
     uTmB: { value: (hm ** ta * mo - mi ** ta) / den }, uTmC: { value: (hm ** ad * mi ** ta - hm ** ta * mi ** ad * mo) / den }, ...dofU,
   }));
@@ -217,7 +245,8 @@ export function createPost({ canvas, width, height }) {
   function setSize(w, h) {
     renderer.setSize(w, h, false);
     const hw = Math.round(w / 2), hh = Math.round(h / 2);
-    sceneRT.setSize(w, h); atmosRT.setSize(w, h); dofRT.setSize(hw, hh);
+    sceneRT.setSize(w, h); atmosRT.setSize(w, h); dofRT.setSize(hw, hh); raysRT.setSize(hw, hh);
+    rays.material.uniforms.uAspect.value.set(w / h, 1);
     bloom.setSize(hw, hh);
     fin.material.uniforms.uRes.value.set(w, h);
     dof.material.uniforms.uTexel.value.set(1 / hw, 1 / hh);
@@ -246,7 +275,19 @@ export function createPost({ canvas, width, height }) {
 
       bloom.render(renderer, null, dofRT, 1 / 60, false);
 
+      // god rays: sun's screen position; fade out as it leaves the frame or goes behind the camera
       const g = fin.material.uniforms;
+      sunNdc.copy(SUN_DIR).multiplyScalar(800).add(camera.position).project(camera);
+      const facing = camera.getWorldDirection(camFwd).dot(SUN_DIR);
+      const off = Math.max(Math.abs(sunNdc.x), Math.abs(sunNdc.y));
+      const rg = facing > 0 ? P.rays * THREE.MathUtils.smoothstep(facing, 0.2, 0.6) * (1 - THREE.MathUtils.smoothstep(off, 1.0, 1.8)) : 0;
+      g.uRayGain.value = rg;
+      if (rg > 0) {
+        const ru = rays.material.uniforms;
+        ru.uSunUv.value.set(sunNdc.x * 0.5 + 0.5, sunNdc.y * 0.5 + 0.5); ru.uTime.value = time;
+        renderer.setRenderTarget(raysRT); rays.render(renderer);
+      }
+
       g.uTime.value = time; g.uFlash.value = flash;
       renderer.setRenderTarget(null); fin.render(renderer);
     },
