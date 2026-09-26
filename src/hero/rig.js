@@ -10,6 +10,10 @@
 //
 // Spear local axes: shaft along +Z (tip at +Z), origin at the rear grip. yaw 0 = forward, +90 = to the hero's left,
 // elev + = tip up (elev > 90 tips back over the head), roll spins the blade around the shaft.
+// Bow (Huang Zhong, src/chars/huangzhong): the same joint is the bow — origin = the bow grip (left hand, gripL 0), +Z =
+// the arrow line toward the target, limbs along local ±Y; the right hand draws along the line behind it (gripR < 0 = the
+// draw length) or swings free (rfree/armR, the mirror of lfree/armL). Zhao Yun never sets rfree (0 = both hands on the
+// shaft as before).
 import * as THREE from 'three';
 
 export const DIM = {
@@ -33,9 +37,11 @@ export const CH = {
   spin: 38,                       // whole-body visual yaw about the hero position (spin attacks; 360 == 0)
   plant: 39,                      // 0 = feet turn with `spin` (root space) · 1 = feet in the hero-facing frame: a spin turns
                                   // the body over planted feet instead of skating them round (attack clips use 1)
+  rfree: 40,                      // 0 = right hand on the weapon line, 1 = right arm FK (armR) — the bow's string hand
+  armR: 41,                       // right arm FK: shoulder rx, ry, rz (mirrored: + = away from the body), elbow bend
 };
-export const POSE_SIZE = 40;
-const ANGLES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18, 19, 23, 24, 28, 29, 30, 34, 35, 36, 37, 38];
+export const POSE_SIZE = 45;
+const ANGLES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18, 19, 23, 24, 28, 29, 30, 34, 35, 36, 37, 38, 41, 42, 43, 44];
 const IS_ANGLE = new Uint8Array(POSE_SIZE); for (const i of ANGLES) IS_ANGLE[i] = 1;
 const D2R = Math.PI / 180;
 
@@ -46,6 +52,7 @@ export const STANCE = {
   hips: [0, 0.9, 0], hipsR: [0, -25, 0], spine: [6, 6, 0], chest: [4, 8, 0], head: [2, 6, 0],
   footL: [0.17, 0.08, 0.3, 0, 15], footR: [-0.2, 0.08, -0.26, 0, -30],
   spear: [-0.24, 0.98, 0.0, 30, 30, 0], gripR: 0, gripL: 0.5, lfree: 0, armL: [0, 0, 0, 0], spin: 0, plant: 0,
+  rfree: 0, armR: [0, 0, 0, 0],
 };
 
 /** Build a pose from a spec (angles in degrees). Missing fields come from `base` (default STANCE). */
@@ -56,7 +63,7 @@ export function P(spec = {}, base = STANCE) {
   put(CH.hips, s.hips); put(CH.hipsR, s.hipsR); put(CH.spine, s.spine); put(CH.chest, s.chest); put(CH.head, s.head);
   put(CH.footL, s.footL); put(CH.footR, s.footR); put(CH.spear, s.spear);
   o[CH.gripR] = s.gripR; o[CH.gripL] = s.gripL; o[CH.lfree] = s.lfree; put(CH.armL, s.armL); o[CH.spin] = s.spin;
-  o[CH.plant] = s.plant || 0;
+  o[CH.plant] = s.plant || 0; o[CH.rfree] = s.rfree || 0; put(CH.armR, s.armR || STANCE.armR);
   for (const i of ANGLES) o[i] *= D2R;
   return o;
 }
@@ -303,34 +310,33 @@ export function createRig() {
       j.weapon.getWorldPosition(_O);
       spearDir.set(0, 0, 1).applyQuaternion(spearQ);
 
-      // --- arms: right hand on the shaft; left on the shaft or FK (blended by lfree)
+      // --- arms: each hand on the shaft or FK (blended by lfree / rfree; the right arm's FK is mirrored)
       let gR = 0;             // right hand's actual shaft offset (the left keeps clear of it)
-      const lfree = pose[33];
       for (const s of ['R', 'L']) {
-        const sx = s === 'R' ? -1 : 1;
+        const sx = s === 'R' ? -1 : 1, free = s === 'R' ? pose[40] : pose[33], a0 = s === 'R' ? 41 : 34;
         const up = j['upperArm' + s], fo = j['foreArm' + s], ha = j['hand' + s];
         up.getWorldPosition(_S);
         const want = s === 'R' ? pose[31] : pose[32];
         let g = reachOnShaft(_S, _O, spearDir, want, reach);
         if (s === 'R') gR = g;
-        else if (Math.abs(g - gR) < 0.12) g = gR + (want >= gR ? 0.12 : -0.12);   // keep the hands apart on the shaft
+        else if (pose[40] < 0.5 && Math.abs(g - gR) < 0.12) g = gR + (want >= gR ? 0.12 : -0.12);   // keep the hands apart on the shaft
         gripW.copy(_O).addScaledVector(spearDir, g);
         // elbow pole: out, down and back (chest space)
         _pole.set(sx * 0.7, -0.6, -0.5).applyQuaternion(chestQ);
-        if (s === 'L' && lfree > 0.001) {
-          _e.set(pose[34], pose[35], pose[36]);
+        if (free > 0.001) {
+          _e.set(pose[a0], pose[a0 + 1] * sx, pose[a0 + 2] * sx);
           _q.setFromEuler(_e); _q2.copy(chestQ).multiply(_q);
           fkHand.set(0, -DIM.upper, 0).applyQuaternion(_q2).add(_S);
-          _q.setFromAxisAngle(_v2.set(1, 0, 0), -pose[37]); _q2.multiply(_q);
+          _q.setFromAxisAngle(_v2.set(1, 0, 0), -pose[a0 + 3]); _q2.multiply(_q);
           fkHand.add(_v3.set(0, -DIM.fore, 0).applyQuaternion(_q2));
-          gripW.lerp(fkHand, lfree);
-          _pole.lerp(_v2.set(sx * 0.5, -0.2, -0.8).applyQuaternion(_q2), lfree);
+          gripW.lerp(fkHand, free);
+          _pole.lerp(_v2.set(sx * 0.5, -0.2, -0.8).applyQuaternion(_q2), free);
         }
         solve2(up, fo, gripW, _pole, DIM.upper, DIM.fore, _v3.copy(_pole).negate());
         // hand: fist wraps the shaft (local Z along the spear)
         fo.getWorldQuaternion(_q2);
         _q.copy(spearQ);
-        if (s === 'L' && lfree > 0.001) _q.slerp(_q2, lfree);
+        if (free > 0.001) _q.slerp(_q2, free);
         ha.quaternion.copy(_q2.invert().multiply(_q));
         ha.updateMatrixWorld(true);
       }

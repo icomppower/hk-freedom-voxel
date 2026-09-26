@@ -13,7 +13,7 @@ const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3
 const _c = new THREE.Vector3(), _d = new THREE.Vector3();
 const B = (a, b, c) => ({ a, b, c });
 
-function chain(scene, mat, joint, { anchor, rest, n, len, seg, stiff = 0.12, drag = 0.08, wind = 1, face = [0, 0, -1], hit = [], cone = 100, sway = 0 }) {
+export function chain(scene, mat, joint, { anchor, rest, n, len, seg, stiff = 0.12, drag = 0.08, wind = 1, face = [0, 0, -1], hit = [], cone = 100, sway = 0 }) {
   const meshes = [];
   for (let i = 0; i < n; i++) {
     const m = new THREE.Mesh(seg(i, n), mat);

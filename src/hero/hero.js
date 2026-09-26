@@ -64,6 +64,7 @@ export function createHero(game) {
     if (h.state === 'musou') game.musou.stepHero(inp);
     // musou part r3: one full gauge segment is enough (game.musou.ready; one Musou spends one of the 3 segments)
     else if (h.musouBuf && game.musou.ready() && h.grounded && h.state !== 'hurt') { h.musouBuf = 0; game.musou.start(inp); }
+    else if (game.musou.stepSpecial?.(inp)) { /* the kit ran the hero this frame (Huang Zhong's aim mode) */ }
     else if (!stepCombo(h, inp, game)) stepLocomotion(h, inp, game.cam.yaw);
     if (stepPhysics(h) && h.state === 'jump') setState(h, 'land');
     [h.x, h.z] = clampWalk(h.x, h.z);                        // walkable area (src/world/map.js)

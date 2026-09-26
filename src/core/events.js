@@ -37,6 +37,9 @@
 //  story:objective story  {zh, en}                                      current objective (HUD, top left; empty zh clears it)
 //  story:end     story    {win, stats}                                  battle over → flow goes to the result screen.
 //                                                                       stats: {kos, time (s), hp, maxChain, rank?, ...}
+//  arrow:fire    projectiles {x,y,z, yaw, n, heavy, fire, big, sky, move}  a shot leaves the bow (n arrows; big 1 heavy, 2 Musou giant)
+//  arrow:burst   projectiles {x,z, r, fire, heavy, big, count}           a burst arrow explodes (fire arrow, jump shots, Musou giant)
+//  arrow:headshot projectiles {i, x,y,z}                                 an aim-mode arrow takes a standing officer in the head
 const subs = new Map();
 let rec = null;                   // collect(): subscriptions made while a factory runs
 
