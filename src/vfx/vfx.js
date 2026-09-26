@@ -11,6 +11,10 @@
 //    keep the sector toward the camera clear. Musou burst = teal-white ray burst + whiteout + rock eruption.
 //  - Every KO breaks the soldier apart: voxel-clump debris in his palette plus helmet / torso / shield blocks (bounce,
 //    settle, persist), warm voxel dust, embers, charge glint.
+//  - Layering pass (DW8 bar): the ribbon gets an additive HDR glow under its stepped core and sheds glitter off the tip;
+//    each contact adds a razor cut mark across the body + a shock pulse ring, heavy contacts / officer KOs an impact
+//    point light; every finisher slam tears a glowing ground-crack decal (draped on the terrain) and throws a shock wall;
+//    a banked Musou shows as a gold flame aura under the hero, for every character.
 import * as THREE from 'three';
 import { on } from '../core/events.js';
 import { vrng } from '../core/rng.js';
@@ -62,6 +66,8 @@ const NEEDLE_COOL = [[1.2, 1.9, 2.8], [1.7, 2.2, 2.8], [0.6, 1.4, 2.6]];
 // contact burst / needle colours for charge & heavy hits: ice blue in near-display values (same reason as NEEDLE_WARM)
 const BURST_COOL = [0.06, 0.2, 0.45], HOT_COOL = [[0.06, 0.2, 0.45], [0.1, 0.3, 0.55], [0.15, 0.4, 0.7], [1.2, 1.6, 2.0]];
 const FLASH_WARM = [0.38, 0.08, 0.015], FLASH_COOL = [0.8, 1.5, 2.6], TEAL = [0.35, 1.6, 2.2];
+// cut marks / pulse rings (additive): the cut is the one white-hot line of the contact, the pulse a thin coloured wave
+const GLITTER = [1.3, 1.9, 2.8], SLASH_WARM = [2.6, 1.5, 0.6], SLASH_COOL = [0.9, 1.7, 3.0], PULSE_WARM = [1.4, 0.55, 0.12], PULSE_COOL = [0.35, 0.8, 1.8];
 
 // ------------------------------------------------------------------ shaders
 // Dust: camera-facing, pixel-stepped billows (retro sprite dust), normal alpha blending. Each puff is a lumpy ball
@@ -150,6 +156,19 @@ const TRAIL_FS = /* glsl */`
     vec3 blue = mix(vec3(0.12, 0.36, 1.0), vec3(0.02, 0.7, 0.85), hue);
     float rimLo = 12.5 - graze;                                    // flat spin: the rim takes 2 bands
     vec4 o;
+    if (uEdge > 2.5) {
+      // glow pass (additive, smooth — under the stepped core): an HDR halo hugging the cutting edge with a soft falloff
+      // into the ribbon, brightest on the newest part of the swing and tapering to nothing toward the tail, so the arc
+      // blooms like a blade of light instead of a flat sticker; plus a faint wide haze over the whole swept area
+      float edgeG = exp(-pow((v - 0.9) / (0.16 + 0.1 * graze), 2.0));
+      float haze = pow(v, 2.0) * 0.22;
+      float along = pow(life, 1.6) * (0.6 + 0.4 * head);
+      vec3 gc = mix(vec3(0.22, 0.5, 1.5), vec3(0.1, 1.0, 1.2), hue);
+      vec3 col = gc * (edgeG * 0.75 + haze) * along * g * mix(1.0, 0.7, graze) * (0.5 + 0.5 * vVeil);
+      if (max(col.r, max(col.g, col.b)) < 0.004) discard;
+      gl_FragColor = vec4(col, 0.0);
+      return;
+    }
     if (uEdge > 0.5) {
       // core: bold near-white band under the rim on the newest part of the arc, blue fringe beneath it, HDR rim on top
       float coreLo = 8.5 - 2.0 * graze;
@@ -205,15 +224,16 @@ const BEAM_FS = /* glsl */`
     if (k < 0.5) along = pow(y, 1.3) * (1.0 - smoothstep(0.93, 1.0, y) * 0.6);          // thrust streak: hot head
     else if (k < 1.5) along = pow(1.0 - y, 0.8) * smoothstep(0.0, 0.08, y);              // ray: hot base
     else if (k < 2.5) along = pow(1.0 - y, 1.7) * smoothstep(0.0, 0.04, y);              // pillar: hot at the ground
-    else along = smoothstep(0.0, 0.3, y) * pow(1.0 - y, 1.1);                             // shaft: the fan's roots don't stack
-    // across profile per kind: streak = bold lance, ray = thin needle of light, pillar = soft column
-    float c0 = k < 0.5 ? 0.12 : k < 1.5 ? 0.08 : 0.14, c1 = k < 0.5 ? 0.3 : k < 1.5 ? 0.26 : 0.42;
-    float core = 1.0 - smoothstep(c0, c1, x);
-    float glow = (1.0 - x) * (1.0 - x) * (k < 0.5 ? 0.45 : k < 1.5 ? 0.22 : 0.45);
-    float gain = k < 0.5 ? 1.0 : k < 1.5 ? 0.6 : 0.75;
+    else if (k < 3.5) along = smoothstep(0.0, 0.3, y) * pow(1.0 - y, 1.1);               // shaft: the fan's roots don't stack
+    else along = pow(max(0.0, sin(vUv.y * 3.1416)), 0.7);                                  // slash mark / bolt: tapered at both ends
+    // across profile per kind: streak = bold lance, ray = thin needle of light, pillar = soft column, slash = razor line
+    float c0 = k < 0.5 ? 0.12 : k < 1.5 ? 0.08 : k < 3.5 ? 0.14 : 0.07, c1 = k < 0.5 ? 0.3 : k < 1.5 ? 0.26 : k < 3.5 ? 0.42 : 0.2;
+    float core = 1.0 - smoothstep(c0, max(c0 + 0.01, c1 * (k > 3.5 ? along : 1.0)), x);
+    float glow = (1.0 - x) * (1.0 - x) * (k < 0.5 ? 0.45 : k < 1.5 ? 0.22 : k < 3.5 ? 0.45 : 0.7);
+    float gain = k < 0.5 ? 1.0 : k < 1.5 ? 0.6 : k < 3.5 ? 0.75 : 1.2;
     float fade = (1.0 - u) * (1.0 - u);
-    vec3 col = vCol * glow + mix(vCol, vec3(1.8, 1.95, 2.1), k > 1.5 ? 0.1 : 0.6) * core;   // columns keep their hue (gold / ice), no cream wash
-    if (k > 2.5) col *= 0.45 + 0.55 * fract(sin((floor(vUv.x * 4.0) + vF.y * 17.0) * 91.7) * 43758.5);   // shaft: streaky, voxel-stepped
+    vec3 col = vCol * glow + mix(vCol, vec3(1.8, 1.95, 2.1), k > 1.5 && k < 3.5 ? 0.1 : 0.6) * core;   // columns keep their hue (gold / ice), no cream wash
+    if (k > 2.5 && k < 3.5) col *= 0.45 + 0.55 * fract(sin((floor(vUv.x * 4.0) + vF.y * 17.0) * 91.7) * 43758.5);   // shaft: streaky, voxel-stepped
     gl_FragColor = vec4(col * along * fade * gain * vNear, 1.0);
   }`;
 
@@ -234,6 +254,22 @@ const STAR_FS = /* glsl */`
   float h1(float n) { return fract(sin(n * 91.7) * 43758.5453); }
   void main() {
     float u = vF.x, a = vF.y * 6.2832;
+    if (vF.z > 1.5) {
+      // impact pulse: a thin camera-facing shock ring racing out of the contact (ease-out), hot rim + faint inner haze,
+      // broken into a few arcs so it reads as a pressure wave, not a UI circle; additive (alpha 0)
+      vec2 p = vP;
+      float r = length(p), th = atan(p.y, p.x) + a;
+      float R = 0.2 + 0.8 * (1.0 - (1.0 - u) * (1.0 - u) * (1.0 - u));
+      float wR = 0.03 + 0.06 * (1.0 - u);
+      float rim = exp(-pow((r - R) / wR, 2.0));
+      float haze = smoothstep(R, 0.0, r) * 0.18 * (1.0 - u);
+      float gaps = 0.55 + 0.45 * smoothstep(-0.2, 0.6, sin(th * 5.0) + 0.4 * sin(th * 11.0 + 2.0));
+      float fade = (1.0 - u) * (1.0 - u);
+      vec3 col = (vCol * rim * gaps * 0.7 + mix(vCol, vec3(2.0), 0.5) * pow(rim, 6.0) * gaps * 0.6 + vCol * haze) * fade;
+      if (max(col.r, max(col.g, col.b)) < 0.004) discard;
+      gl_FragColor = vec4(col, 0.0);
+      return;
+    }
     if (vF.z > 0.5) {
       // contact burst (benchmark DW8XL f372: 1-2 H radial explosion round a white core, gone in ≈ 8 sf): 13 seeded
       // spikes of random length, white-hot at the root and red-orange at the tip, shooting out and detaching from the
@@ -290,6 +326,72 @@ const RING_FS = /* glsl */`
     gl_FragColor = vec4(uColor * (band * 0.22 + edge * 0.9) * fade, 1.0);
   }`;
 
+// Ground crack decal: a conforming grid on the terrain. Jagged radial fissures (wobbling, random length, thinning
+// outward) + a broken fracture ring + a scorched centre, grown out over ≈ 0.12 s; the fissures glow hot (uGlow) and cool
+// to dark over the first ≈ 0.6 s, then everything fades. Premultiplied over: dark cracks darken the ground, the glow adds.
+const CRACK_VS = /* glsl */`varying vec2 vUv; void main() { vUv = uv * 2.0 - 1.0; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const CRACK_FS = /* glsl */`
+  uniform float uU, uGrow, uSeed; uniform vec3 uGlow; varying vec2 vUv;
+  float h(float n) { return fract(sin(n * 91.7 + uSeed * 13.1) * 43758.5453); }
+  void main() {
+    vec2 p = vUv; float r = length(p);
+    if (r > 1.0 || r > uGrow * 1.05) discard;
+    float th = atan(p.y, p.x);
+    const float N = 9.0;
+    float sec = floor((th / 6.2832 + 0.5) * N), best = 1.0;
+    for (int j = -1; j <= 1; j++) {
+      float s = mod(sec + float(j) + N, N);
+      float ang = (s + 0.5) / N * 6.2832 - 3.1416 + (h(s) - 0.5) * 0.45;
+      float wig = 0.1 * sin(r * 13.0 + h(s + 3.0) * 6.28) + 0.05 * sin(r * 29.0 + h(s + 5.0) * 6.28);
+      float d = abs(mod(th - ang - wig + 3.1416, 6.2832) - 3.1416) * r;
+      d += step(0.5 + 0.5 * h(s + 7.0), r);                          // each fissure has its own length
+      // one fork per fissure
+      float fa = ang + (h(s + 9.0) - 0.5) * 0.9, f0 = 0.3 + 0.3 * h(s + 11.0);
+      float df = abs(mod(th - fa - wig * 1.4 + 3.1416, 6.2832) - 3.1416) * r + step(r, f0) + step(f0 + 0.3, r);
+      best = min(best, min(d, df));
+    }
+    float w = 0.03 * (1.0 - r) + 0.005;
+    float crack = 1.0 - smoothstep(w * 0.45, w, best);
+    float rd = abs(r - (0.32 + 0.04 * sin(th * 7.0 + uSeed * 5.0)));
+    crack = max(crack, (1.0 - smoothstep(0.006, 0.016, rd)) * step(0.45, fract(th * 1.1 + uSeed)) * 0.85);
+    float scorch = (1.0 - smoothstep(0.0, 0.42, r)) * 0.45;
+    float fade = 1.0 - smoothstep(0.5, 1.0, uU), edge = 1.0 - smoothstep(0.85, 1.0, r);
+    float a = max(crack * 0.8, scorch) * fade * edge;
+    float hot = pow(max(0.0, 1.0 - uU * 4.0), 2.0);
+    vec3 glow = uGlow * crack * hot * (1.3 - r) + uGlow * scorch * hot * 0.12;   // (a hot scorch disc bloomed into a fog)
+    if (a < 0.01 && hot <= 0.0) discard;
+    gl_FragColor = vec4(vec3(0.045, 0.032, 0.028) * a + glow, a);
+  }`;
+// Shock wall: an open cylinder racing out of a slam (radius eases out, height sinks), hot at the ground and gone at the
+// top, streaked; additive; fades inside ≈ 4 m of the lens so a wave passing the camera never fills the frame.
+const WALL_VS = /* glsl */`
+  varying vec2 vUv; varying float vNear;
+  void main() { vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vNear = smoothstep(1.5, 4.5, -mv.z); gl_Position = projectionMatrix * mv; }`;
+const WALL_FS = /* glsl */`
+  uniform float uU, uSeed; uniform vec3 uColor; varying vec2 vUv; varying float vNear;
+  void main() {
+    float y = vUv.y, th = vUv.x * 6.2832;
+    // sparse bright ribbons of pressure over a faint skirt (a solid band read as a fog wall under bloom)
+    float streak = 0.18 + 0.82 * pow(max(0.0, sin(th * 17.0 + uSeed * 7.0) * sin(th * 5.0 - uSeed * 3.0)), 2.0);
+    float top = 0.4 + 0.6 * fract(sin(floor(th * 10.0) * 12.9 + uSeed) * 437.5);   // ragged, voxel-stepped crown
+    float prof = pow(1.0 - y, 2.6) * (1.0 - smoothstep(top * 0.85, top, y)) + exp(-y * 30.0) * 0.6;
+    float fade = (1.0 - uU) * (1.0 - uU);
+    vec3 col = uColor * prof * streak * fade * vNear;
+    gl_FragColor = vec4(col, 1.0);
+  }`;
+// Aura disc under the hero: a flickering ring of flame tongues + soft inner glow (musou gauge ready / Musou).
+const AURA_FS = /* glsl */`
+  uniform float uT, uK; uniform vec3 uColor; varying vec2 vUv;
+  void main() {
+    float r = length(vUv), th = atan(vUv.y, vUv.x);
+    float ring = exp(-pow((r - 0.62) / (0.08 + 0.03 * sin(th * 3.0 + uT * 2.0)), 2.0));
+    float tongue = pow(0.5 + 0.5 * sin(th * 11.0 - uT * 4.0 + 1.6 * sin(th * 4.0 + uT * 2.6)), 3.0);
+    float inner = (1.0 - smoothstep(0.0, 0.7, r)) * 0.1;
+    float lick = tongue * smoothstep(0.62, 0.7, r) * (1.0 - smoothstep(0.7, 0.62 + 0.3 * tongue + 0.1, r));   // tongues lick outward
+    float a = (ring * (0.4 + 0.8 * tongue) + lick * 0.7 + inner) * (1.0 - smoothstep(0.85, 1.0, r));
+    gl_FragColor = vec4(uColor * a * uK * (0.85 + 0.15 * sin(uT * 9.0)), 1.0);
+  }`;
+
 // ------------------------------------------------------------------ particle pool
 /** Pool of instanced cubes. kind: 0 needle spark, 1 debris (tumbles, bounces, settles), 2 dust, 3 ember/mote, 4 glow shard */
 // Ages are frame-exact (sim frames since spawn / last update), so a capture that renders every 2nd frame shows the
@@ -329,6 +431,7 @@ function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = 
       }
     } else if (k === 2) { const f = 1 - 2.6 * dt; p.vx[i] *= f; p.vz[i] *= f; p.vy[i] *= 1 - 1.8 * dt; }
     else if (k === 3) { p.vx[i] += (0.7 + Math.sin(p.life[i] * 2.3 + i) * 0.9) * dt; p.vz[i] += Math.cos(p.life[i] * 1.7 + i) * 0.6 * dt; p.vy[i] *= 1 - 0.3 * dt; }
+    else if (k === 5) { p.vy[i] += 2.5 * dt; const f = 1 - 3 * dt; p.vx[i] *= f; p.vz[i] *= f; }   // flame tongue: buoyant
     else { p.vy[i] -= 6 * dt; const f = 1 - 2.5 * dt; p.vx[i] *= f; p.vz[i] *= f; }
     p.x[i] += p.vx[i] * dt; p.y[i] += p.vy[i] * dt; p.z[i] += p.vz[i] * dt;
     p.rot[i] += p.rv[i] * dt;
@@ -361,6 +464,10 @@ function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = 
         const w = p.size[i] * (0.6 + (1 - u) * 0.9);
         _s.set(w, w * 0.8, w);
         if (fadeAttr) fadeAttr.array[i] = 0.8 * p.a[i] * Math.min(1, u * 1.4) * Math.min(1, (1 - u) * 12 + 0.25);
+      } else if (k === 5) {
+        _q.setFromAxisAngle(_d.set(0, 1, 0), p.rot[i]);
+        const w = p.size[i] * Math.min(1, u * 2.2) * Math.min(1, (1 - u) * 8);
+        _s.set(w, w * (1.6 + 2 * (1 - u)), w);
       } else if (k === 3) {
         _q.setFromAxisAngle(_d.set(0.6, 1, 0.3).normalize(), p.rot[i]);
         const w = p.size[i] * Math.min(1, u * 3) * (0.65 + 0.35 * Math.sin(p.life[i] * 23 + i));
@@ -426,15 +533,80 @@ export function createVfx(scene, game, world) {
     m.material.uniforms.uU.value = 0;
   };
 
+  // ---- ground crack decals: conforming 20×20 grids, re-draped onto the terrain at each spawn
+  const CG = 20, cracks = [];
+  for (let i = 0; i < 6; i++) {
+    const g = new THREE.PlaneGeometry(2, 2, CG, CG).rotateX(-Math.PI / 2);
+    g.attributes.position.setUsage(THREE.DynamicDrawUsage);
+    const m = new THREE.Mesh(g, new THREE.ShaderMaterial({ vertexShader: CRACK_VS, fragmentShader: CRACK_FS,
+      uniforms: { uU: { value: 0 }, uGrow: { value: 0 }, uSeed: { value: 0 }, uGlow: { value: new THREE.Color() } },
+      transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+      blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor }));
+    m.visible = false; m.frustumCulled = false; m.renderOrder = -1;
+    m.userData.base = Float32Array.from(g.attributes.position.array);
+    scene.add(m); cracks.push(m);
+  }
+  let crackNext = 0;
+  /** Ground crack decal of radius r at (x, z); glow = hot fissure colour (HDR), dur s. */
+  const crack = (x, z, r, glow, dur = 3.2) => {
+    const m = cracks[crackNext]; crackNext = (crackNext + 1) % cracks.length;
+    const pos = m.geometry.attributes.position, b = m.userData.base, gy = ground(x, z);
+    for (let v = 0; v < pos.count; v++) {
+      const lx = b[v * 3] * r, lz = b[v * 3 + 2] * r;
+      pos.array[v * 3] = lx; pos.array[v * 3 + 1] = ground(x + lx, z + lz) - gy + 0.03; pos.array[v * 3 + 2] = lz;
+    }
+    pos.needsUpdate = true;
+    m.position.set(x, gy, z);                                          // (no spin: the drape is baked unrotated; uSeed varies the pattern)
+    m.userData.f0 = now(); m.userData.dur = dur; m.visible = true;
+    const u = m.material.uniforms; u.uSeed.value = vrng.range(0, 100); u.uGlow.value.setRGB(glow[0], glow[1], glow[2]); u.uU.value = 0; u.uGrow.value = 0;
+  };
+
+  // ---- shock walls (open cylinders racing out of a slam)
+  const wallGeo = new THREE.CylinderGeometry(1, 1, 1, 48, 1, true).translate(0, 0.5, 0), walls = [];
+  for (let i = 0; i < 4; i++) {
+    const m = new THREE.Mesh(wallGeo, new THREE.ShaderMaterial({ vertexShader: WALL_VS, fragmentShader: WALL_FS,
+      uniforms: { uU: { value: 0 }, uSeed: { value: 0 }, uColor: { value: new THREE.Color() } },
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    m.visible = false; m.frustumCulled = false;
+    scene.add(m); walls.push(m);
+  }
+  let wallNext = 0;
+  const wall = (x, z, r, hgt, dur, rgb, delay = 0) => {
+    const m = walls[wallNext]; wallNext = (wallNext + 1) % walls.length;
+    m.position.set(x, ground(x, z) - 0.05, z); m.userData = { f0: now() + delay * 60, dur, r, h: hgt }; m.visible = true; m.scale.set(0.01, 0.01, 0.01);
+    m.material.uniforms.uColor.value.setRGB(rgb[0], rgb[1], rgb[2]); m.material.uniforms.uSeed.value = vrng.range(0, 100); m.material.uniforms.uU.value = 0;
+  };
+
+  // ---- impact lights: a pooled warm / cold point light pops on heavy contacts, KOs of officers, slams, Musou payoffs
+  // (always in the scene at 0 so the lit materials compile with them at boot)
+  const lights = [];
+  // ponytail: one light (every lit fragment pays for each light in the scene); a second slot if flashes visibly clash
+  for (let i = 0; i < 1; i++) { const l = new THREE.PointLight(0xffffff, 0, 10, 2); l.userData = { f0: 0, dur: 1, I: 0 }; scene.add(l); lights.push(l); }
+  const lightFlash = (x, y, z, rgb, I, dur = 0.18, dist = 10) => {
+    let l = lights[0];
+    for (const c of lights) if (c.intensity < l.intensity) l = c;                 // reuse the dimmest
+    if (l.intensity > I) return;
+    l.position.set(x, y + ground(x, z), z); l.color.setRGB(rgb[0], rgb[1], rgb[2]); l.distance = dist;
+    l.userData.f0 = now(); l.userData.dur = dur; l.userData.I = I; l.intensity = I;
+  };
+
+  // ---- musou aura: gold flame ring under the hero while a Musou is banked
+  const aura = new THREE.Mesh(new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ vertexShader: RING_VS, fragmentShader: AURA_FS,
+    uniforms: { uT: { value: 0 }, uK: { value: 0 }, uColor: { value: new THREE.Color() } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
+  aura.frustumCulled = false; aura.visible = false; scene.add(aura);
+  let auraK = 0, auraAcc = 0;
+  const AURA_GOLD = [1.6, 0.75, 0.16];
+
   // ---- beams: thrust streaks, rays, pillars
   const beamGeo = new THREE.BufferGeometry();
   beamGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, 0, 0, 1, 0, 0, 1, 1, 0, -1, 1, 0], 3));
   beamGeo.setIndex([0, 1, 2, 0, 2, 3]);
-  const beams = makeQuadPool(scene, 160, beamGeo, BEAM_VS, BEAM_FS);
+  const beams = makeQuadPool(scene, 256, beamGeo, BEAM_VS, BEAM_FS);
   const BN = beams.n, B = { sx: new Float32Array(BN), sy: new Float32Array(BN), sz: new Float32Array(BN), dx: new Float32Array(BN),
     dy: new Float32Array(BN), dz: new Float32Array(BN), len: new Float32Array(BN), wid: new Float32Array(BN), t: new Float32Array(BN),
     dur: new Float32Array(BN), kind: new Uint8Array(BN), on: new Uint8Array(BN) };
-  const STREAK = 0, RAY = 1, PILLAR = 2, SHAFT_K = 3;
+  const STREAK = 0, RAY = 1, PILLAR = 2, SHAFT_K = 3, SLASH = 4;
   const beam = (kind, sx, sy, sz, dx, dy, dz, len, wid, dur, rgb, delay = 0) => {
     const i = beams.next; beams.next = (beams.next + 1) % BN;
     const l = Math.hypot(dx, dy, dz) || 1;
@@ -456,6 +628,10 @@ export function createVfx(scene, game, world) {
         a1 = 0.25 + 0.75 * Math.min(1, 1 - (1 - Math.min(1, u / 0.3)) ** 3);
         a0 = Math.max(0, (u - 0.3) / 0.7) ** 1.3 * 0.85;
         w *= 1 - 0.5 * u;
+      } else if (B.kind[i] === SLASH) {              // cut mark: rips across in 2 frames, thins to a hair, gone
+        a1 = Math.min(1, u / 0.18);
+        a0 = Math.max(0, (u - 0.45) / 0.55) * 0.6;
+        w *= 1.15 - u;
       } else {                                        // rays / pillars grow fast, thin out
         a1 = Math.min(1, 1 - (1 - Math.min(1, u / 0.22)) ** 3);
         w *= B.kind[i] >= PILLAR ? 0.7 + 0.5 * Math.min(1, u * 4) - 0.4 * u : 1 - 0.7 * u;
@@ -473,7 +649,7 @@ export function createVfx(scene, game, world) {
   };
 
   // ---- star flashes (contact cores, charge glint). Slot 0 is the glint that tracks the spear tip.
-  const stars = makeQuadPool(scene, 72, new THREE.PlaneGeometry(2, 2), STAR_VS, STAR_FS, true);
+  const stars = makeQuadPool(scene, 128, new THREE.PlaneGeometry(2, 2), STAR_VS, STAR_FS, true);
   const SN = stars.n, St = { x: new Float32Array(SN), y: new Float32Array(SN), z: new Float32Array(SN), size: new Float32Array(SN),
     t: new Float32Array(SN), dur: new Float32Array(SN), on: new Uint8Array(SN) };
   stars.next = 1;
@@ -508,13 +684,13 @@ export function createVfx(scene, game, world) {
   const tidx = [];
   for (let i = 0; i < MAXV / 2 - 1; i++) { const a = i * 2; tidx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
   tgeo.setIndex(tidx);
-  // veil pass, core pass (drawn after every other effect), depth pass (see TRAIL_FS)
+  // veil pass, core pass (drawn after every other effect), depth pass, additive glow under the core (see TRAIL_FS)
   const heroA = { value: new THREE.Vector3(0, -1, -5) }, heroB = { value: new THREE.Vector3(0, 1, -5) };   // hero axis, view space
-  for (const edge of [0, 1, 2]) {
+  for (const edge of [0, 1, 2, 3]) {
     const m = new THREE.Mesh(tgeo, new THREE.ShaderMaterial({ vertexShader: TRAIL_VS, fragmentShader: TRAIL_FS,
       uniforms: { uEdge: { value: edge }, uHeroA: heroA, uHeroB: heroB }, defines: edge === 2 ? { DEPTH_PASS: 1 } : {}, transparent: true, depthWrite: edge === 2, colorWrite: edge !== 2,
       side: THREE.DoubleSide, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor }));   // premultiplied over
-    m.frustumCulled = false; m.renderOrder = edge ? 9 + edge : 0;
+    m.frustumCulled = false; m.renderOrder = [0, 10, 11, 9][edge];
     if (!edge) m.onBeforeRender = (r, sc, cam) => {   // render camera, read by rocks/dustColumn and the ribbon's depth pull
       const h = game.hero, gy = ground(h.x, h.z);
       camPos.copy(cam.position); camPos.y -= gy;                   // sim space, like every effect position
@@ -677,6 +853,15 @@ export function createVfx(scene, game, world) {
       needleBurst(x, y, z, n, e.dx, e.dz, (e.heavy ? 20 : 16) * near, cool ? HOT_COOL : NEEDLE_WARM, (e.heavy ? 0.065 : 0.055) * (tier ? 0.8 : 1) * near, tier ? 1.1 : 1.5, hot);
       if (tier < 2) star(e.x, e.y, e.z, (e.heavy ? 1.8 : 1.6) * (tier ? 0.55 : 1) * near * vrng.range(0.85, 1.15), e.heavy ? 0.15 : 0.13, cool ? BURST_COOL : FLASH_WARM, -1, 1);
       else if (hitN % 3 === 0) star(e.x, e.y, e.z, 0.6 * vrng.range(0.9, 1.1), 0.1, cool ? FLASH_COOL : FLASH_WARM);
+      // layered contact (DW8): a razor cut mark ripping across the body (perpendicular to the blow, random tilt) and a
+      // shock pulse ring on the first struck soldiers of a frame; the heaviest contact of a tick pops an impact light
+      if (hitN <= 3) {
+        const L = (e.heavy ? 2.8 : 2.2) * near * vrng.range(0.85, 1.15), tilt = vrng.range(-0.75, 0.75);
+        const ax = -e.dz, az = e.dx, al = Math.hypot(ax, tilt, az) || 1;
+        beam(SLASH, x - ax / al * L * 0.5, y - tilt / al * L * 0.5, z - az / al * L * 0.5, ax, tilt, az, L, (e.heavy ? 0.5 : 0.4) * near, e.heavy ? 0.24 : 0.2, cool ? SLASH_COOL : SLASH_WARM);
+      }
+      if (hitN === 1) star(x, y, z, (e.heavy ? 1.1 : 0.55) * near, e.heavy ? 0.2 : 0.15, cool ? PULSE_COOL : PULSE_WARM, -1, 2);
+      if (hitN === 1 && (e.heavy || e.killed)) lightFlash(x, y, z, cool ? [0.55, 0.8, 1] : [1, 0.62, 0.3], e.heavy ? 40 : 18, e.heavy ? 0.22 : 0.14);
     }
     if (vrng.chance(mh ? 0.08 : e.heavy ? 0.7 : 0.35)) chunks(e.x, e.y - 0.2, e.z, 1, e.dx, e.dz, 3, e.officer ? OFFICER : SOLDIER, 0.07, 0.14, [2, 5], [1, 1.6]);
   });
@@ -691,6 +876,9 @@ export function createVfx(scene, game, world) {
     chunks(e.x, e.y, e.z, Math.round((e.officer ? 14 : mk ? 4 : 9) * near), e.dx, e.dz, 4.2, pal, (mk ? 0.08 : 0.11) * near, (mk ? 0.13 : 0.22) * near, [1.8, 4.2], [1.2, 2]);
     if (!mk && near > 0.7) for (const [c, s0, s1, dy] of e.officer ? OFFICER_BODY : SOLDIER_BODY) chunks(e.x, e.y + dy, e.z, 1, e.dx, e.dz, 3.4, [c], s0 * near, s1 * near, [2.2, 4], [1.1, 1.6]);
     needleBurst(e.x, e.y, e.z, 3, e.dx, e.dz, 9, NEEDLE_WARM, 0.05);
+    // the blow carries through him: a spray of sparks thrown along the knockback, and officers go down with a flash
+    if (!mk) needleBurst(e.x, e.y, e.z, Math.round(6 * near), e.dx * 2.2, e.dz * 2.2, 11, NEEDLE_WARM, 0.05, 1.4, hot);
+    if (e.officer) { star(e.x, e.y, e.z, 2.6, 0.3, PULSE_WARM, -1, 2); lightFlash(e.x, e.y, e.z, [1, 0.55, 0.25], 45, 0.3); ring(e.x, e.z, 3, 0.4, [1.6, 0.9, 0.4]); }
     if (vrng.chance(0.5)) embers(e.x, e.y - 0.4, e.z, 2, 0.3);
     dustPuff(e.x, e.z, 2, 1.4, 0.55, 0.15, 0.4);
   });
@@ -708,6 +896,7 @@ export function createVfx(scene, game, world) {
   // C3 gold pillar ring (after the dark smoke arc, see afterStep), C5 fan of blue-white shafts from the ground,
   // C6 rock eruption inside a 2.5 H dust wall, jump charge a small quake; the rest is shaped by the hitbox.
   const GOLD = [1.5, 0.72, 0.2], SHAFT = [0.28, 0.52, 0.92];
+  const CRACK_WARM = [2.6, 1.0, 0.25], CRACK_COOL = [0.5, 1.2, 2.8], WALL_WARM = [1.2, 0.6, 0.2], WALL_COOL = [0.35, 0.7, 1.4];
   on('attack:swing', (e) => {
     const h = game.hero, m = h.kit.moves[e.move], hit = m && m.hits[e.win];
     if (!m) return;
@@ -726,6 +915,9 @@ export function createVfx(scene, game, world) {
       dustRing(h.x, h.z, 26, 0.8, R * 1.8, 0.7, 0.6);
       ring(h.x, h.z, R * 1.2, 0.45, [1.9, 1.3, 0.7]);
       star(h.x, 0.5, h.z, 1.6, 0.14, [2.2, 1.6, 1.0]);
+      crack(h.x, h.z, 4.4, CRACK_WARM);
+      wall(h.x, h.z, R * 1.5, 2.4, 0.5, WALL_WARM);
+      lightFlash(h.x, 1.2, h.z, [1, 0.6, 0.3], 50, 0.35, 14);
       flash(0.14);
     } else if (hit.pillars) {                               // C3 ring of gold pillars, 3+ H tall, disc ≈ 1.4 H
       columns(h.x, h.z, hit.pillars, 2.6, 6.2, 1.0, 0.62, GOLD, 0.04, e.yaw);
@@ -733,6 +925,9 @@ export function createVfx(scene, game, world) {
       dustRing(h.x, h.z, 22, 0.5, R * 1.6, 0.6, 0.6);
       dustColumn(h.x, h.z, 12, 1.6, 3.2, 3.2, [0.8, 1.1], 0.55);
       rocks(h.x, h.z, 14, 2.8, 0.14, 0.34, [4, 8], 3.5);
+      crack(h.x, h.z, 3.6, [2.6, 1.5, 0.4]);
+      wall(h.x, h.z, R * 1.4, 2.8, 0.55, [1.3, 0.75, 0.2]);
+      lightFlash(h.x, 1.5, h.z, [1, 0.75, 0.35], 45, 0.4, 14);
       flash(0.12);
     } else if (e.move === 'c5') {                           // fan of broad blue-white shafts ≈ 2.5 H from the ground, rock chips
       columns(h.x, h.z, 9, 0.7, 5.2, 0.95, 0.3, SHAFT, 0.62, e.yaw, SHAFT_K);
@@ -741,6 +936,9 @@ export function createVfx(scene, game, world) {
       dustRing(h.x, h.z, 20, 0.5, R * 1.7, 0.55, 0.6);
       rocks(h.x, h.z, 16, 2.2, 0.12, 0.32, [4.5, 9], 4);
       shards(h.x, 0.6, h.z, 12, 7, [1.0, 1.7, 2.6]);
+      crack(h.x, h.z, 3.0, CRACK_COOL);
+      wall(h.x, h.z, R * 1.3, 2, 0.4, WALL_COOL);
+      lightFlash(h.x, 1.2, h.z, [0.55, 0.8, 1], 55, 0.3, 12);
       flash(0.12);
     } else if (hit.shape === 'circle') {                    // N6 / jump charge / C6 plunge / other heavy circles: slam quake
       if (charge && e.move !== 'jc') rayBurst(h.x, 0.15, h.z, 10, R * 0.9, FLASH_COOL, [0.75, 1.35], 0.38, 0.45);
@@ -749,6 +947,9 @@ export function createVfx(scene, game, world) {
       dustColumn(h.x, h.z, 10, 0.8, 2.4, 2.4, [0.7, 1.0], 0.55);
       rocks(h.x, h.z, 14, 2.2, 0.13, 0.32, [4, 8], 3.5);
       if (charge) shards(h.x, 0.6, h.z, 14, 7, [1.0, 1.7, 2.6]);
+      crack(h.x, h.z, Math.max(2.4, R * 0.9), CRACK_COOL);
+      wall(h.x, h.z, R * 1.35, charge ? 1.8 : 1.3, 0.4, WALL_COOL);
+      lightFlash(h.x, 1, h.z, [0.55, 0.8, 1], 50, 0.28, 12);
       flash(0.12);
     } else if (hit.shape === 'line') {
       for (let k = 0; k < 4; k++) {
@@ -759,6 +960,8 @@ export function createVfx(scene, game, world) {
       }
       ring(h.x + fx * 2.5, h.z + fz * 2.5, 3.2, 0.35, [1.8, 1.3, 0.7]);
       rocks(h.x + fx * 2.5, h.z + fz * 2.5, 12, 1.8, 0.13, 0.3, [4, 8], 3);
+      crack(h.x + fx * 2.5, h.z + fz * 2.5, 2.6, CRACK_WARM);
+      lightFlash(h.x + fx * 2.5, 1.2, h.z + fz * 2.5, [1, 0.62, 0.3], 50, 0.3, 12);
       flash(0.1);
     } else {
       const ang = (hit.ang || 180) * Math.PI / 180, dir = e.yaw + (hit.dir || 0) * Math.PI / 180;
@@ -766,6 +969,7 @@ export function createVfx(scene, game, world) {
       ring(h.x, h.z, R * 1.15, 0.35, [0.8, 1.2, 1.9]);
       dustRing(h.x, h.z, 14, 0.5, R * 1.5, 0.5, 0.55);
       rocks(h.x + fx, h.z + fz, 10, 1.6, 0.12, 0.28, [4, 7.5], 3);
+      if (charge) { wall(h.x, h.z, R * 1.2, 1.0, 0.32, WALL_COOL); lightFlash(h.x + fx, 1, h.z + fz, [0.55, 0.8, 1], 35, 0.22); }
     }
     embers(h.x, 0.3, h.z, 8, 1.5);
   });
@@ -778,9 +982,14 @@ export function createVfx(scene, game, world) {
     if (e.charge) ring(e.x, e.z, 2.4, Math.max(0.2, e.tell / 60), [0.7, 1.1, 2.0]);
   });
 
+  // Musou payoff layers take the character's colour: Zhao Yun's azure dragon, Huang Zhong's fire volley
+  const MU_COOL = { crack: [0.4, 1.5, 2.6], wall: [0.12, 0.5, 0.75], light: [0.5, 0.9, 1] }, MU_FIRE = { crack: [2.8, 1.1, 0.25], wall: [0.8, 0.34, 0.09], light: [1, 0.6, 0.3] };
+  const muPal = () => (game.hero.char && game.hero.char.id === 'huangzhong' ? MU_FIRE : MU_COOL);
   on('musou:start', (e) => {
     // no screen flash here: src/musou/view.js owns the activation flash + dim (musou part)
     ring(e.x, e.z, 7, 0.5, TEAL);
+    wall(e.x, e.z, 4.5, 1.8, 0.5, muPal().wall);
+    lightFlash(e.x, 1.4, e.z, muPal().light, 40, 0.5, 12);
     star(tipNow.x, tipNow.y, tipNow.z, 1.0, 0.5, [1.0, 1.9, 2.8], 0);
     shards(e.x, 1.0, e.z, 20, 4, [0.6, 1.6, 2.4], 0.06);
     dustRing(e.x, e.z, 16, 0.4, 5, 0.45, 0.45);
@@ -791,6 +1000,12 @@ export function createVfx(scene, game, world) {
     // musou part r2: ~2 ticks land per frame and every streak runs from Zhao Yun along the rush line — right over the
     // dragon that now surges out of the spear — so they piled into a white bar that hid it and the launch fan: streaks
     // only on the contact thrust and every other sweep, slimmer; sparks elsewhere
+    if (e.stage === 'contact' && e.n <= 1) {           // the first mass hit tears the ground open
+      const P = muPal();
+      crack(e.x, e.z, 4.5, P.crack, 3.6);
+      wall(e.x, e.z, 7, 1.8, 0.45, P.wall);
+      lightFlash(e.x, 1.5, e.z, P.light, 30, 0.4, 14);
+    }
     if (!(e.stage === 'contact' || (e.stage === 'rush' && e.n % 6 === 0))) { needleBurst(e.x, e.y, e.z, 3, fx, fz, 12, NEEDLE_COOL, 0.05); return; }
     beam(STREAK, h.x + fz * side + fx * 0.6, y, h.z - fx * side + fz * 0.6, fx, 0, fz, 6, 0.4, 0.2, TEAL);
     beam(STREAK, h.x - fz * side * 2 + fx * 0.9, y + 0.3, h.z + fx * side * 2 + fz * 0.9, fx, 0.02, fz, 4.2, 0.3, 0.16, [1.2, 1.9, 2.4], 0.02);
@@ -804,6 +1019,10 @@ export function createVfx(scene, game, world) {
     // kick (was 0.3 held 0.35 s), fewer / slimmer / dimmer rays and sparks, so the bodies stay readable.
     flash(0.12, 4);                                    // ≈ 2 frames: the cream mix held a veil over the launched tiers
     rayBurst(e.x, 0.2, e.z, 12, 10, [0.2, 0.85, 1.15], [0.2, 1.3], 0.8, 0.45);
+    const P = muPal();
+    crack(e.x, e.z, 6, P.crack, 4);
+    wall(e.x, e.z, 11, 2.2, 0.5, P.wall);
+    lightFlash(e.x, 2, e.z, P.light, 40, 0.5, 18);
     rayBurst(e.x, 0.2, e.z, 4, 7, [0.9, 1.0, 1.1], [0.9, 1.45], 0.6, 0.4);
     // musou part r3: the 13 m teal + 8 m gold ground rings passed under the finisher camera and filled the lower half of
     // the frame with additive haze for ≈ 0.3 s; the musou view's waist-high lightning band now carries the ring wave
@@ -818,7 +1037,9 @@ export function createVfx(scene, game, world) {
   });
   on('scenario', () => {
     sparks.clear(); hot.clear(); debris.clear(); dust.clear(); samples.length = 0; for (const r of rings) r.visible = false;
-    B.on.fill(0); St.on.fill(0); vfx.flash = 0; lastTick = -1;
+    B.on.fill(0); St.on.fill(0); vfx.flash = 0; lastTick = -1; auraK = 0;
+    for (const m of [...cracks, ...walls]) m.visible = false;
+    for (const l of lights) l.intensity = 0;
     for (const q of [beams, stars]) { for (let i = 0; i < q.n; i++) q.mesh.setMatrixAt(i, ZERO); q.mesh.instanceMatrix.needsUpdate = true; }
   });
 
@@ -883,6 +1104,16 @@ export function createVfx(scene, game, world) {
     _sd.subVectors(tipNow, baseNow).normalize();
     smp.t.copy(tipNow).addScaledVector(_sd, 1.2 * k); smp.b.copy(baseNow).addScaledVector(_sd, -0.45 * k);
     samples.push(smp);
+    // glitter shed by the blade edge: fine light specks peel off the tip and drift, so a swing leaves sparkle in the air
+    if (prev && smp.g > 0.5 && game.hitstop === 0) {
+      const vx = (tipNow.x - prev.rt.x) * 60, vy = (tipNow.y - prev.rt.y) * 60, vz = (tipNow.z - prev.rt.z) * 60;
+      for (let i = 0; i < 2; i++) {
+        const f = vrng.next(), c = musou ? TEAL : GLITTER;
+        sparks.spawn(prev.rt.x + (tipNow.x - prev.rt.x) * f, prev.rt.y + (tipNow.y - prev.rt.y) * f, prev.rt.z + (tipNow.z - prev.rt.z) * f,
+          vx * 0.08 + vrng.range(-0.8, 0.8), vy * 0.08 + vrng.range(-0.3, 1.2), vz * 0.08 + vrng.range(-0.8, 0.8),
+          vrng.range(0.25, 0.5), vrng.range(0.025, 0.045), 4, c[0], c[1], c[2]);
+      }
+    }
   };
 
   const cr = (p0, p1, p2, p3, u, out) => {
@@ -972,6 +1203,42 @@ export function createVfx(scene, game, world) {
       const u = (now() - r.userData.f0) / 60 / r.userData.dur;
       if (u >= 1) { r.visible = false; continue; }
       r.material.uniforms.uU.value = u;
+    }
+    for (const m of cracks) {
+      if (!m.visible) continue;
+      const t = (now() - m.userData.f0) / 60, u = t / m.userData.dur;
+      if (u >= 1) { m.visible = false; continue; }
+      m.material.uniforms.uU.value = u; m.material.uniforms.uGrow.value = Math.min(1, t / 0.12);
+    }
+    for (const m of walls) {
+      if (!m.visible) continue;
+      const u = (now() - m.userData.f0) / 60 / m.userData.dur;
+      if (u >= 1) { m.visible = false; continue; }
+      const k = Math.max(0, u), R = m.userData.r * (0.08 + 0.92 * (1 - (1 - k) ** 3)), H = m.userData.h * (u < 0 ? 0.01 : 1 - 0.55 * k);
+      m.scale.set(R, H, R);
+      m.material.uniforms.uU.value = k;
+    }
+    for (const l of lights) {
+      if (l.intensity <= 0) continue;
+      const u = (now() - l.userData.f0) / 60 / l.userData.dur;
+      l.intensity = u >= 1 ? 0 : l.userData.I * (1 - u) * (1 - u);
+    }
+    // musou aura: gold flame ring + rising tongues while a Musou is banked; eased in / out. Off during the Musou itself:
+    // its close cinematic cameras turned the motes at his feet into lens-sized bokeh (the kit's musou view owns that light)
+    const ready = h.state !== 'musou' && game.musou.ready && game.musou.ready();
+    auraK += ((ready && !h.dead ? 1 : 0) - auraK) * Math.min(1, dt * 4);
+    aura.visible = auraK > 0.01;
+    if (aura.visible) {
+      const col = AURA_GOLD, gy = ground(h.x, h.z);
+      aura.position.set(h.x, gy + 0.05, h.z); aura.scale.setScalar(1.5 + 0.1 * Math.sin(now() * 0.11));
+      const u = aura.material.uniforms; u.uT.value = now() / 60; u.uK.value = auraK * 0.8; u.uColor.value.setRGB(col[0], col[1], col[2]);
+      auraAcc += dt * 55 * auraK;
+      while (auraAcc > 1) {
+        auraAcc--;
+        const a = vrng.range(0, 6.283), r = vrng.range(0.35, 0.85), b = vrng.range(0.7, 1.2);
+        sparks.spawn(h.x + Math.cos(a) * r, h.y + vrng.range(0, 0.3), h.z + Math.sin(a) * r, Math.cos(a) * 0.3, vrng.range(0.6, 1.6), Math.sin(a) * 0.3,
+          vrng.range(0.45, 0.85), vrng.range(0.06, 0.12), 5, col[0] * b, col[1] * b, col[2] * b);
+      }
     }
     vfx.flash = Math.max(0, vfx.flash - dt * flashDecay);
     buildTrail();

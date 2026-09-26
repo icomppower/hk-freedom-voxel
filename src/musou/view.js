@@ -146,6 +146,25 @@ export function createMusouView(parent, game, camera) {
   const dragon = instanced(scene, shadedBox(), new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }), parts.length);
   const local = parts.map((p) => new THREE.Matrix4().compose(_p.set(...p.off), _q.setFromUnitVectors(FWD, p.dir ? _v.set(...p.dir).normalize() : FWD), _s.set(...p.size)));
   parts.forEach((p, i) => dragon.setColorAt(i, _c.setRGB(...p.col)));
+  // glow shell: every dragon voxel again, 1.3× larger, additive rim light (view-facing faces faint, grazing faces hot), so
+  // the azure body carries a living halo and reads as a spirit of light against the crowd instead of flat blue boxes
+  const shell = instanced(scene, new THREE.BoxGeometry(1, 1, 1), new THREE.ShaderMaterial({
+    uniforms: { uCol: { value: new THREE.Color(0.2, 0.75, 1.2) }, uK: { value: 1 } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    vertexShader: `varying float vRim, vNear;
+      void main() {
+        vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        vec3 n = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal);
+        vRim = 1.0 - abs(dot(n, normalize(cameraPosition - wp.xyz)));
+        vec4 mv = viewMatrix * wp; vNear = smoothstep(2.5, 6.0, -mv.z);   // coils at the finisher lens stay plain voxels
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `uniform vec3 uCol; uniform float uK; varying float vRim, vNear;
+      void main() { gl_FragColor = vec4(uCol * (0.04 + 0.7 * vRim * vRim * vRim) * uK * vNear, 1.0); }` }), parts.length);
+  const SHELL = new THREE.Matrix4().makeScale(1.3, 1.3, 1.15);
+  // finisher lightning: jagged bolts striking down onto the ring wave (stretched light voxels, re-rolled every 3 frames)
+  const NB = 5, BSEG = 9;
+  const bolts = instanced(scene, new THREE.BoxGeometry(1, 1, 1), addMat(), NB * BSEG);
   const bases = Array.from({ length: NS + 1 }, () => new THREE.Matrix4());
   const vis = new Uint8Array(NS + 1), born = new Uint8Array(NS + 1);
   const P3 = [0, 0, 0], Q3 = [0, 0, 0], W3 = [0, 0, 0], V3 = [0, 0, 0];
@@ -186,7 +205,8 @@ export function createMusouView(parent, game, camera) {
   on('scenario', () => { tv = -1; sh.life.fill(0); for (let i = 0; i < NSH; i++) sh.m.setMatrixAt(i, ZERO); sh.m.instanceMatrix.needsUpdate = true; });
 
   function hideAll() {
-    add.visible = fx.visible = dragon.visible = false;
+    add.visible = fx.visible = dragon.visible = shell.visible = bolts.visible = false;
+    glow.intensity = 0;
     for (const el of [cut, dimEl, washEl]) show(el, 0);
   }
 
@@ -226,8 +246,8 @@ export function createMusouView(parent, game, camera) {
 
   function updateDragon(t, dt) {
     const s = (t - MUSOU.contact) / 60;
-    if (s < 0 || s > 1.2) { dragon.visible = false; return; }
-    dragon.visible = true;
+    if (s < 0 || s > 1.2) { dragon.visible = shell.visible = false; return; }
+    dragon.visible = shell.visible = true;
     const A = dragonArc(s);
     const dissolve = ramp(s, 1.0, (MUSOU.end - MUSOU.contact) / 60);           // tail → head, done at control return
     const alive = Math.round((NS + 1) * (1 - dissolve));                          // j = 0 head, 1..NS body
@@ -253,16 +273,36 @@ export function createMusouView(parent, game, camera) {
       _p.setFromMatrixPosition(bases[j]);
       for (let i = 0; i < 2; i++) shard(_p.x, _p.y, _p.z, vrng.range(-4, 4), vrng.range(0, 5), vrng.range(-4, 4), vrng.range(0.3, 0.55), vrng.range(0.08, 0.16), 0.4, 1.1, 1.7);
     }
+    // head wake + spiral streamers: bright shards stream off the head and wind round the body (DW8 dragon musou)
+    if (vis[0]) {
+      _p.setFromMatrixPosition(bases[0]);
+      // once the contact fill has faded the burst light rides the head: the crowd it surges through lights up teal
+      // (one light for both, so the lit materials keep their light count)
+      if (glow.intensity < 1) { glow.position.copy(_p); glow.intensity = 12 * (1 - dissolve) * ramp(s, 0.2, 0.3); }
+      const nh = Math.round(dt * 60 * 4);
+      for (let i = 0; i < nh; i++) shard(_p.x + vrng.range(-0.4, 0.4), _p.y + vrng.range(-0.4, 0.4), _p.z + vrng.range(-0.4, 0.4),
+        vrng.range(-1.5, 1.5), vrng.range(-0.5, 2), vrng.range(-1.5, 1.5), vrng.range(0.2, 0.4), vrng.range(0.1, 0.2), 0.7, 1.6, 2.2);
+    }
+    const nsp = Math.round(dt * 60 * 6);
+    for (let i = 0; i < nsp; i++) {
+      const j = 1 + ((time * 40 + i * 7) | 0) % NS;
+      if (!vis[j]) continue;
+      const th = time * 14 + j * 0.8 + i * 3.1, rr = 0.9 * GIRTH;
+      _v.set(Math.cos(th) * rr, Math.sin(th) * rr, 0).applyMatrix4(bases[j]);
+      shard(_v.x, _v.y, _v.z, vrng.range(-0.3, 0.3), vrng.range(0, 0.6), vrng.range(-0.3, 0.3), vrng.range(0.25, 0.45), vrng.range(0.05, 0.09), 0.5, 1.4, 2.0);
+    }
+    shell.material.uniforms.uK.value = (1 - 0.7 * dissolve) * (0.85 + 0.15 * Math.sin(time * 17));
     const jaw = 0.18 + 0.22 * Math.max(0, Math.sin(time * 7)), wave = Math.sin(time * 11);
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i], j = p.seg + 1;
-      if (!vis[j]) { dragon.setMatrixAt(i, ZERO); continue; }
+      if (!vis[j]) { dragon.setMatrixAt(i, ZERO); shell.setMatrixAt(i, ZERO); continue; }
       let L = local[i];
       if (p.dyn === 'jaw') { _q.setFromAxisAngle(_x.set(1, 0, 0), jaw); L = _l.compose(_p.set(p.off[0], p.off[1] - jaw * 0.15, p.off[2]), _q, _s.set(...p.size)); }
       else if (p.dyn === 'whisker') { _q.setFromUnitVectors(FWD, _v.set(p.dir[0], p.dir[1] + wave * 0.4 * Math.sign(p.dir[0]), p.dir[2]).normalize()); L = _l.compose(_p.set(...p.off), _q, _s.set(...p.size)); }
       dragon.setMatrixAt(i, _m.multiplyMatrices(bases[j], L));
+      shell.setMatrixAt(i, _m.multiply(SHELL));
     }
-    dragon.instanceMatrix.needsUpdate = true;
+    dragon.instanceMatrix.needsUpdate = true; shell.instanceMatrix.needsUpdate = true;
   }
 
   function updateFx(t) {
@@ -339,6 +379,34 @@ export function createMusouView(parent, game, camera) {
     fx.visible = any;
     fx.instanceMatrix.needsUpdate = true;
     fx.instanceColor.needsUpdate = true;
+    // lightning bolts striking the wave front from the sky (the finisher's first ≈ 0.6 s)
+    const boltK = w0 >= 0 ? 1 - ramp(w0, 22, 40) : 0, fb = Math.floor(t / 3);
+    bolts.visible = boltK > 0;
+    if (bolts.visible) {
+      for (let b = 0; b < NB; b++) {
+        const on = hash01(b, fb, 37) < 0.75;
+        const a = hash01(b, fb, 31) * 6.283, gx = hero.x + Math.cos(a) * R, gz = hero.z + Math.sin(a) * R;
+        const tx = gx + (hash01(b, fb, 32) - 0.5) * 3, ty = 9 + 3 * hash01(b, fb, 33), tz = gz + (hash01(b, fb, 34) - 0.5) * 3;
+        const nk = ramp(Math.hypot(gx - cam.x, gz - cam.z), 3, 7);
+        let px = tx, py = ty, pz = tz;
+        for (let k = 1; k <= BSEG; k++) {
+          const f = k / BSEG, jit = k < BSEG ? 0.7 * Math.sin(f * Math.PI) : 0;
+          const qx = tx + (gx - tx) * f + (hash01(b, fb, 40 + k) - 0.5) * 2 * jit, qy = ty * (1 - f), qz = tz + (gz - tz) * f + (hash01(b, fb, 60 + k) - 0.5) * 2 * jit;
+          const i = b * BSEG + k - 1;
+          if (!on || nk <= 0) bolts.setMatrixAt(i, ZERO);
+          else {
+            _v.set(qx - px, qy - py, qz - pz); const len = _v.length();
+            _q.setFromUnitVectors(FWD, _v.multiplyScalar(1 / len));
+            const w = 0.07 * nk * (1.3 - 0.5 * f);
+            bolts.setMatrixAt(i, _m.compose(_p.set((px + qx) / 2, (py + qy) / 2, (pz + qz) / 2), _q, _s.set(w, w, len * 1.05)));
+            const e = boltK * (0.8 + 0.4 * hash01(b, fb, 38));
+            bolts.setColorAt(i, _c.setRGB(1.2 * e, 2.0 * e, 2.6 * e));
+          }
+          px = qx; py = qy; pz = qz;
+        }
+      }
+      bolts.instanceMatrix.needsUpdate = true; bolts.instanceColor.needsUpdate = true;
+    }
   }
 
   function updateGrade(t) {
@@ -414,7 +482,7 @@ export function createMusouView(parent, game, camera) {
     update(dt) {
       time += dt;
       scene.position.y = ground(hero.x, hero.z);                // sim space → the terrain under him (world/map.js)
-      if (warm > 0 && tv < 0) { warm--; addU.uRays.value = 0; add.visible = fx.visible = dragon.visible = sh.m.visible = true; return; }
+      if (warm > 0 && tv < 0) { warm--; addU.uRays.value = 0; add.visible = fx.visible = dragon.visible = shell.visible = bolts.visible = sh.m.visible = true; return; }
       if (mu.active) tv = mu.t;
       else if (tv >= 0) { tv += dt * 60; if (tv > MUSOU.end + 50) tv = -1; }
       if (sh.m.visible) updateShards(dt);

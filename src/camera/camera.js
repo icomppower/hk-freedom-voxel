@@ -53,7 +53,7 @@ const CAM = {
   tiers: [[0, 0, 0, 0], [22, 12, 0.2, 4 * DEG], [42, 30, 0.35, 8 * DEG]],
   aimRate: 8,                               // kit aim shot ease (1/s)
   clearIn: 14, clearOut: 2.5,               // boom clearance: pull in fast at a wall, ease back out slowly (1/s)
-  kickMaxPx: 4,                             // shake ceiling at 720p (bench: ≤ 4 px, finishers only)
+  kickMaxPx: 6,                             // shake ceiling at 720p (finishers / Musou; normal sweeps a light 1 px tap)
   cutJump: 40,                              // hero moved faster than this (m/s, ≥ 1 m) between two renders: teleport → cut
 };
 
@@ -141,10 +141,10 @@ export function createCameraRig(game, width, height) {
     kicks.push({ f: game.frame, px, dirX, dirY, len });
     if (kicks.length > 4) kicks.shift();
   };
-  on('hits', (e) => { if (e.heavy) kick(Math.min(3, 1.6 + e.count * 0.12), 0.25, 1, 6); });   // finishers only
+  on('hits', (e) => { if (e.heavy) kick(Math.min(4.5, 2.2 + e.count * 0.15), 0.25, 1, 7); else if (e.count >= 3 && e.move !== 'musou') kick(1, 0.4, 1, 4); });
   on('hero:hurt', (e) => kick(e.armored ? 0.6 : 1.5, 1, 0.3, e.armored ? 4 : 6));
   on('land', (e) => e.hard && kick(2, 0, 1, 6));
-  on('musou:burst', () => kick(4, 0.3, 1, 10));
+  on('musou:burst', () => kick(6, 0.3, 1, 12));
   on('musou:start', () => { cine = { phase: -1 }; });
   on('musou:end', () => { cine = null; blend = BLEND; });                  // eased blend back to the gameplay rig
   on('scenario', () => { kicks.length = 0; cine = null; blend = 0; snap = true; tier = 0; aimK = 0; });   // new battle
