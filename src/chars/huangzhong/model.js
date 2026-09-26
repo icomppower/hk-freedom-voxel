@@ -4,8 +4,8 @@
 // and full beard (the long end hangs as a chain); a big lacquered recurve 勁弓 whose back carries a steel blade edge
 // (the melee "sword" of the DW bow moveset) with gold dragon-tip finials; a red quiver of white-fletched arrows on the
 // right hip. Secondary (render-only): dark red cape, crimson apron, beard, topknot tails, pauldrons, plus the bowstring
-// (drawn through the right hand when it holds the nock), the nocked arrow (flaming for fire shots) and the bow-blade
-// slash ribbon (drawn only while the limb tip sweeps fast relative to his body).
+// (drawn through the right hand when it holds the nock) and the nocked arrow (flaming for fire shots). The bow-blade slash
+// ribbon is vfx.js's (kit.trail: the upper limb along the weapon frame's y).
 import * as THREE from 'three';
 import { vox, V, HV, C, bodyParts, heroLook } from '../../hero/model.js';
 import { chain } from '../../hero/secondary.js';
@@ -167,7 +167,7 @@ export function createHzSecondary(scene, rig, mat) {
   for (const sx of [-1, 1]) add(j.head, { anchor: [sx * 1.5 * HV, 15 * HV, -3 * HV], rest: [sx * 0.3, -0.4, -1], n: 3, len: 0.08, stiff: 0.03, drag: 0.06,
     wind: 2.2, cone: 110, sway: 0.5, seg: tailSeg, hit: ['head'] });
 
-  // bowstring (2 thin segments via the nock), nocked arrow, fire glow at its head, slash ribbon
+  // bowstring (2 thin segments via the nock), nocked arrow, fire glow at its head (the slash ribbon: vfx.js, kit.trail)
   const strMat = new THREE.MeshBasicMaterial({ color: 0xf4ead8 });
   const unit = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);    // unit box from y 0 → 1 (scaled along a segment)
   const str = [0, 1].map(() => { const m = new THREE.Mesh(unit, strMat); m.matrixAutoUpdate = false; m.frustumCulled = false; scene.add(m); return m; });
@@ -177,20 +177,14 @@ export function createHzSecondary(scene, rig, mat) {
   arrow.matrixAutoUpdate = false; scene.add(arrow);
   const flame = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.2), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.3, 0.3), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
   flame.matrixAutoUpdate = false; scene.add(flame);
-  const TN = 12, rib = new THREE.BufferGeometry(), rp = new Float32Array(TN * 2 * 3), rc = new Float32Array(TN * 2 * 3), ri = [];
-  for (let i = 0; i < TN - 1; i++) { const a = i * 2; ri.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
-  rib.setAttribute('position', new THREE.BufferAttribute(rp, 3)); rib.setAttribute('color', new THREE.BufferAttribute(rc, 3)); rib.setIndex(ri);
-  const ribbon = new THREE.Mesh(rib, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
-  ribbon.frustumCulled = false; scene.add(ribbon);
-  const trail = [];                                                    // { a: blade root, b: blade tip (world), age }
   const cols = {};
   for (const k of ['head', 'chest', 'hips', 'thighL', 'thighR', 'kneeL', 'kneeR']) cols[k] = { c: new THREE.Vector3(), r: 0 };
   const setCol = (k, joint, x, y, z, r) => { cols[k].c.set(x, y, z).applyMatrix4(joint.matrixWorld); cols[k].r = r; };
   const back = new THREE.Vector3(), _q = new THREE.Quaternion(), _d = new THREE.Vector3(), DOWN = new THREE.Vector3(0, -1, 0);
   const hand = new THREE.Vector3(), loc = new THREE.Vector3(), t0 = new THREE.Vector3(), t1 = new THREE.Vector3(), nock = new THREE.Vector3();
   const m4 = new THREE.Matrix4(), inv = new THREE.Matrix4(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
-  const tipL = new THREE.Vector3(), prevTip = new THREE.Vector3(), rootInv = new THREE.Matrix4();
-  let t = 0, havePrev = false;
+  const m4b = new THREE.Matrix4(), m4c = new THREE.Matrix4();
+  let t = 0;
   /** Segment mesh from a to b (world), thickness w. */
   const seg = (m, a, b, w) => {
     _y.subVectors(b, a); const len = _y.length(); _y.normalize();
@@ -200,7 +194,7 @@ export function createHzSecondary(scene, rig, mat) {
   };
   const FIRE = new Set(['c6', 'jc']);
   return {
-    reset() { for (const c of chains) c.reset(); trail.length = 0; havePrev = false; },
+    reset() { for (const c of chains) c.reset(); },
     update(dt) {
       t += dt;
       for (const s of ['L', 'R']) {
@@ -226,36 +220,17 @@ export function createHzSecondary(scene, rig, mat) {
         nock.set(0, 0, loc.z).applyMatrix4(W);
         seg(str[0], nock, t0, 0.011 * sc); seg(str[1], t1, nock, 0.011 * sc);
         // nocked arrow along the line from the nock (bow-local frame)
-        m4.copy(W).multiply(new THREE.Matrix4().makeTranslation(0, 0, loc.z - 0.02));
+        m4.copy(W).multiply(m4b.makeTranslation(0, 0, loc.z - 0.02));
         arrow.matrix.copy(m4); arrow.matrixWorldNeedsUpdate = true;
         const g = live.game, h = g && g.hero, fire = h && ((h.state === 'attack' && FIRE.has(h.move)) || h.state === 'musou');
         flame.visible = !!fire;
         if (fire) {
           const k = 1 + 0.25 * Math.sin(t * 40);
-          flame.matrix.copy(W).multiply(new THREE.Matrix4().makeTranslation(0, 0, loc.z + 0.98 * sc)).multiply(new THREE.Matrix4().makeScale(k, k, k));
+          flame.matrix.copy(W).multiply(m4b.makeTranslation(0, 0, loc.z + 0.98 * sc)).multiply(m4c.makeScale(k, k, k));
           flame.matrixWorldNeedsUpdate = true;
         }
       } else { str[0].visible = true; seg(str[0], t1, t0, 0.011 * sc); flame.visible = false; }
       str[1].visible = drawn; arrow.visible = drawn;
-
-      // slash ribbon: upper-limb blade (root-relative speed > 7 m/s: a cut, not the run swing)
-      rootInv.copy(j.root.matrixWorld).invert();
-      t0.set(0, 0.28, 0).applyMatrix4(W); t1.set(0, (BOW.R + 3) * BOW.v, 0.05).applyMatrix4(W);
-      tipL.copy(t1).applyMatrix4(rootInv);
-      const fast = havePrev && dt > 0 && tipL.distanceTo(prevTip) / dt > 7 && !drawn;
-      prevTip.copy(tipL); havePrev = true;
-      for (const s of trail) s.age += dt;
-      while (trail.length && trail[trail.length - 1].age > 0.12) trail.pop();
-      if (fast && dt > 0) { trail.unshift({ a: t0.clone(), b: t1.clone(), age: 0 }); if (trail.length > TN) trail.pop(); }
-      ribbon.visible = trail.length > 1;
-      if (ribbon.visible) {
-        for (let i = 0; i < TN; i++) {
-          const s = trail[Math.min(i, trail.length - 1)], f = Math.max(0, 1 - s.age / 0.12) * (1 - i / TN);
-          rp.set([s.a.x, s.a.y, s.a.z, s.b.x, s.b.y, s.b.z], i * 6);
-          rc.set([0.5 * f, 0.3 * f, 0.1 * f, 2.2 * f, 1.8 * f, 1.2 * f], i * 6);
-        }
-        rib.attributes.position.needsUpdate = true; rib.attributes.color.needsUpdate = true; rib.computeBoundingSphere();
-      }
     },
   };
 }

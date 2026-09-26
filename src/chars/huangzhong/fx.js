@@ -4,7 +4,8 @@
 //   glow    camera-facing soft sprite, additive: hot core + halo (flash cores, flame, embers, motes, fireball)
 //   streak  camera-facing ribbon between a head and a tail, additive, soft across and tapered to the tail: velocity
 //           aligned (sparks, falling rain) or fixed (muzzle rays, arrow core / glow trails, beams)
-//   smoke   camera-facing lumpy puff, premultiplied "over" (fire smoke, dust, rain impact field) — shaded from above
+//   smoke   camera-facing lumpy puff, premultiplied "over" (fire smoke, dust, rain impact field) — shaded from above,
+//           optionally delayed (explosion smoke rolls in behind the fireball)
 //   ring    oriented ring quad, additive: ground shock rings, air-burst rings on the arrow line, charge rings, markers
 //   decal   flat ground scorch: dark lumpy disc with glowing ember cracks that cool (premultiplied, lit-agnostic)
 //   debris  lit voxel chunks with gravity, one bounce, then sink (earth thrown up by explosions)
@@ -212,14 +213,15 @@ export function createFx(parent, camera) {
   };
 
   // ---------------------------------------------------------------- smoke / dust (premultiplied over)
-  const NK = 500, K = pool(NK, ['x', 'y', 'z', 'vx', 'vy', 'vz', 's0', 's1', 'r', 'g', 'b', 'a0', 'drag', 'rise', 'seed']);
+  const NK = 900, K = pool(NK, ['x', 'y', 'z', 'vx', 'vy', 'vz', 's0', 's1', 'r', 'g', 'b', 'a0', 'drag', 'rise', 'seed', 'dl']);
   const [kGeo, kA] = quadGeo(NK, { aPos: 4, aCol: 4, aSeed: 1 });
   const kMesh = shaderMesh(root, kGeo, SMOKE_VS, SMOKE_FS, 'over');
   kMesh.renderOrder = 2;
-  /** Puff: size s0 → s1, colour rgb (display-ish, ≤ 1), opacity a0 (fades in fast, out slowly), rise (m/s² buoyancy). */
-  fx.smoke = (x, y, z, s0, s1, life, r, g, b, a0, vx = 0, vy = 0, vz = 0, drag = 1.5, rise = 0) => {
+  /** Puff: size s0 → s1, colour rgb (display-ish, ≤ 1), opacity a0 (fades in fast, out slowly), rise (m/s² buoyancy),
+   *  delay s before it appears (explosion smoke rolls in after the fireball). */
+  fx.smoke = (x, y, z, s0, s1, life, r, g, b, a0, vx = 0, vy = 0, vz = 0, drag = 1.5, rise = 0, delay = 0) => {
     const i = K.take();
-    K.x[i] = x; K.y[i] = y; K.z[i] = z; K.vx[i] = vx; K.vy[i] = vy; K.vz[i] = vz; K.s0[i] = s0; K.s1[i] = s1;
+    K.x[i] = x; K.y[i] = y; K.z[i] = z; K.vx[i] = vx; K.vy[i] = vy; K.vz[i] = vz; K.s0[i] = s0; K.s1[i] = s1; K.dl[i] = delay;
     K.r[i] = r; K.g[i] = g; K.b[i] = b; K.a0[i] = a0; K.drag[i] = drag; K.rise[i] = rise; K.seed[i] = vrng.range(0, 6.283); K.life[i] = K.max[i] = life;
     return i;
   };
@@ -283,6 +285,9 @@ export function createFx(parent, camera) {
     if (px < kickA * Math.exp(-kickT * 3 / kickLen)) return;
     kickA = px; kickT = 0; kickLen = len; kickDX = dx; kickDY = dy;
   };
+
+  /** World size (m) of one 720p pixel at (x, y, z) (y above the ground): cap sprites near the lens to a screen size. */
+  fx.px = (x, y, z) => Math.hypot(camera.position.x - x, camera.position.y - y - ground(x, z), camera.position.z - z) * 2 * Math.tan(camera.fov * Math.PI / 360) / 720;
 
   fx.clear = () => { G.clear(); S.clear(); K.clear(); R.clear(); D.clear(); Bp.clear(); lk[0].k = lk[1].k = 0; kickA = 0; };
 
@@ -352,6 +357,7 @@ export function createFx(parent, camera) {
     const kp = kA.aPos.array, kc = kA.aCol.array, ks = kA.aSeed.array;
     for (let i = 0; i < NK; i++) {
       if (K.life[i] <= 0) continue;
+      if (K.dl[i] > 0) { K.dl[i] -= dt; continue; }
       K.life[i] -= dt;
       if (K.life[i] <= 0) continue;
       const u = 1 - K.life[i] / K.max[i], dr = Math.exp(-K.drag[i] * dt);

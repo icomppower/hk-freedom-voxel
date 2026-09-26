@@ -1,8 +1,10 @@
 // Arrow VFX (render-only; reads the projectile pool src/combat/projectiles.js, its events and the hero's move state,
 // never writes sim state). Built on the Huang Zhong fx primitives (src/chars/huangzhong/fx.js). Layers per stage:
 //  · draw / charge (the frames before every shot, and aim mode): light gathers on the arrowhead (motes converging, a
-//    growing gold core), contracting charge rings on the charge shots, a full-draw ping in aim mode
-//  · release (arrow:fire): muzzle flash (hot core + warm halo), forward star rays, string glint, an air-burst ring on the
+//    small gold point core capped in screen pixels — never a disc at the aim lens), contracting charge rings on the charge
+//    shots, a full-draw ping in aim mode
+//  · release (arrow:fire): muzzle flash (hot core + warm halo), a tracer down the flight line, a forward spark cone,
+//    muzzle smoke, forward star rays, string glint, an air-burst ring on the
 //    arrow line (two on heavy shots), a spray line per arrow of a fan, dust kicked back from his feet + camera thump +
 //    light flash on heavy shots, a flare column on the skyward rain volley
 //  · flight: the voxel arrow + a bright core streak + a soft glow trail + fading afterimages; heavy arrows cut air rings
@@ -10,12 +12,13 @@
 //    giant carries a sun core, a double spiral aura, a flame shell, torn-up dust under its path and a light trail that
 //    lingers after it explodes
 //  · impact (arrow:hit): hit flash, spark burst along the flight, dust puff, a pierce streak out of the body, and the
-//    spent arrow stays pinned in the soldier for ≈ 0.7 s; a ground bite = dust + chips + a small ring, the arrow stands
+//    spent arrow stays pinned in the soldier for ≈ 1.5 s; a ground bite = dust + chips + a small ring, the arrow stands
 //    in the ground at its flight angle and sinks away
-//  · rain (arrow:rain): a red-gold marker circle where it will fall and a sky flare over it
-//  · bursts (arrow:burst): small = flash, ring, dust (+ mini fireball and scorch when fire); big (C6) = core flash,
-//    fireball, smoke column, ground + air shock rings, sparks, embers, thrown earth, scorch decal with cooling embers,
-//    light pulse, camera thump; the Musou giant's explosion scales it up and adds a light pillar
+//  · rain (arrow:rain): a red-gold marker circle where it will fall, pulsing rings until it lands, a sky flare over it
+//  · bursts (arrow:burst): small = flash, ring, dust (+ mini fireball and scorch when fire); big (C6) = explode(): 2-4
+//    frame white core, red-orange fireball + flame tongues, fire-lit billows, a delayed dark stem + mushroom cap, ground
+//    shock ring + shock front, dust skirt, sparks, embers, thrown earth, scorch decal, light, thump; the Musou giant's is
+//    the same ×1.9 with a thin hot light pillar
 //  · headshot: gold star burst, rings and flash over the officer's head
 // Positions stay in sim space (y = height above ground); ground(x, z) is added when composing.
 import * as THREE from 'three';
@@ -31,10 +34,12 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vect
 const FWD = new THREE.Vector3(0, 0, 1), ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 const B = (a, b, c) => ({ a, b, c });
 // palette (linear HDR): Huang Zhong's gold / fire, off Zhao Yun's teal
-const CORE = [3.4, 2.7, 1.6], CORE_HEAVY = [3.8, 2.9, 1.5], CORE_FIRE = [3.6, 1.6, 0.4], GLOW = [0.55, 0.36, 0.15], GLOW_FIRE = [0.8, 0.3, 0.06];
+// fire stays under the grade's per-channel shoulder (R ≈ 2.4, G ≤ 1): hotter values bleached to a pale yellow line
+const CORE = [3.4, 2.7, 1.6], CORE_HEAVY = [3.8, 2.9, 1.5], CORE_FIRE = [2.4, 0.95, 0.18], GLOW = [0.55, 0.36, 0.15], GLOW_FIRE = [0.85, 0.28, 0.04];
 const GOLD = [2.4, 1.6, 0.55], SPARK = [3.2, 2.1, 0.8], EARTH = [[0.2, 0.13, 0.09], [0.26, 0.18, 0.12], [0.16, 0.1, 0.07], [0.32, 0.23, 0.15]];
-const DUSTC = [0.52, 0.4, 0.3];
-const NPIN = 64;
+const DUSTC = [0.52, 0.4, 0.3], EARTH_DUST = [0.3, 0.22, 0.16];
+const FB_HOT = [2.8, 1.6, 0.45], FB_BODY = [2.1, 0.66, 0.1], FB_EDGE = [1.0, 0.26, 0.05];   // fireball lumps (linear HDR)
+const NPIN = 64, PIN_T = 1.5;                                  // pinned arrows stay 1.5 s (sink over the last 0.25)
 
 export function createArrowView(scene, game, proj, fx) {
   const root = new THREE.Group();
@@ -89,12 +94,58 @@ export function createArrowView(scene, game, proj, fx) {
   function fireball(x, y, z, r, n, life) {
     const R = Math.min(r, 5);
     for (let k = 0; k < n; k++) {
-      const a = vrng.range(0, 6.283), rr = R * 0.3 * Math.sqrt(vrng.next()), up = vrng.range(0.1, 1), hot = vrng.next() ** 2;
-      const sp = R * vrng.range(0.9, 2.2), s = vrng.range(0.18, 0.32) * R;
-      fx.glow(x + Math.cos(a) * rr, y + up * R * 0.25, z + Math.sin(a) * rr, s * 0.5, s, life * vrng.range(0.55, 1.1),
-        1.5 + hot * 1.6, 0.45 + hot * 1.3, 0.06 + hot * 0.45, Math.cos(a) * sp, up * sp * 0.8 + 1.5, Math.sin(a) * sp, 4, 3, 0.2);
+      // fx r1: flame lumps are "over"-blended HDR puffs in the smoke pool (lit from above like the dust), not additive
+      // glows: additive fire on sunlit sand summed to a cream-white blob. Yellow-hot heart lumps, orange body, deep red
+      // outer ones (R:G >= 2.5, so the grade keeps them orange instead of bleaching them to pale yellow)
+      const a = vrng.range(0, 6.283), rr = R * 0.3 * Math.sqrt(vrng.next()), up = vrng.range(0.1, 1), q = vrng.next();
+      const sp = R * vrng.range(0.9, 2.2), s = vrng.range(0.2, 0.34) * R;
+      const c = q < 0.2 ? FB_HOT : q < 0.7 ? FB_BODY : FB_EDGE;
+      fx.smoke(x + Math.cos(a) * rr, y + up * R * 0.25, z + Math.sin(a) * rr, s * 0.45, s * 1.1, life * vrng.range(0.55, 1.1),
+        c[0], c[1], c[2], 0.95, Math.cos(a) * sp, up * sp * 0.8 + 1.5, Math.sin(a) * sp, 4, 3);
     }
-    fx.glow(x, y + 0.5, z, R * 0.15, R * 0.35, life * 0.35, 3.4, 2.6, 1.3);   // the white-hot heart
+    fx.glow(x, y + 0.5, z, R * 0.12, R * 0.3, Math.min(0.07, life * 0.2), 3.4, 3.0, 2.4);   // the white-hot heart: 2-4 frames
+    fx.glow(x, y + 0.5, z, R * 0.3, R * 0.8, life * 0.5, 0.7, 0.22, 0.03);                  // orange bloom round the ball
+  }
+  /** Explosion (C6 fire arrow S = 1, the Musou giant S = 1.9): white core flash (2-4 frames) -> red-orange voxel fireball
+   *  with flame tongues licking up -> fire-lit brown billows rolling out -> a dark smoke stem and a mushroom cap rolling in
+   *  behind it (delayed, so the fire never sits in a muddy disc); bright ground shock ring + dust skirt racing out, a
+   *  camera-facing shock front, thrown earth, sparks, embers, a scorch decal with cooling ember cracks, light, thump. */
+  function explode(x, z, r, S) {
+    fx.glow(x, 0.9 * S, z, 1.4 * S, 5 * S, 0.07, 3.2, 3.0, 2.6);                         // core flash
+    fx.glow(x, 0.9 * S, z, 2 * S, 4.5 * S, 0.18, 0.9, 0.34, 0.05);                       // orange halo (brief: no wash)
+    fireball(x, 0.5 * S, z, r * (S > 1 ? 0.75 : 0.9), Math.round(26 * S), 0.62 * Math.sqrt(S));
+    for (let k = 0; k < 12 * S; k++) {                                                    // flame tongues
+      const a = vrng.range(0, 6.283), d = vrng.range(0.2, 1.3) * S;
+      fx.spark(x + Math.cos(a) * d, 0.4, z + Math.sin(a) * d, Math.cos(a) * 2, vrng.range(7, 13) * Math.sqrt(S), Math.sin(a) * 2,
+        1.6 * S, 0.14 * S, vrng.range(0.28, 0.42), 2.2, 0.75, 0.1, 2.5, -6, 0.6);
+    }
+    for (let k = 0; k < 12 * S; k++) {                                                    // fire-lit billows rolling out
+      const a = vrng.range(0, 6.283), v = vrng.range(2, 5) * S;
+      fx.smoke(x + Math.cos(a) * 0.6 * S, vrng.range(0.3, 1.2) * S, z + Math.sin(a) * 0.6 * S, 0.8 * S, vrng.range(1.6, 2.4) * S, vrng.range(0.9, 1.3),
+        0.36, 0.17, 0.07, 0.66, Math.cos(a) * v, vrng.range(0.4, 1.5), Math.sin(a) * v, 2.2, 0.3, vrng.range(0.05, 0.12));
+    }
+    // dark smoke stays in the gameplay frame (the camera looks down: a tall column rose out of the top of the screen
+    // within 0.5 s): a low lumpy stem and a cap rolling out at ≈ 2.4 S m, dark grey-brown, lit from above by the shader
+    for (let k = 0; k < 12 * S; k++) {                                                    // dark stem
+      const a = vrng.range(0, 6.283), rr = vrng.range(0, 1.1) * S, g = vrng.range(0.07, 0.11);
+      fx.smoke(x + Math.cos(a) * rr, vrng.range(0.4, 2.2) * S, z + Math.sin(a) * rr, 1.1 * S, vrng.range(2.0, 2.6) * S, vrng.range(2.4, 3.4),
+        g * 1.2, g, g * 0.82, 0.86, Math.cos(a) * 0.8, vrng.range(0.5, 1.4) * S, Math.sin(a) * 0.8, 1.4, 0.4, vrng.range(0.12, 0.35));
+    }
+    for (let k = 0; k < 12 * S; k++) {                                                    // cap: rolls out over the stem
+      const a = vrng.range(0, 6.283), v = vrng.range(1.2, 2.6) * S, g = vrng.range(0.08, 0.12);
+      fx.smoke(x + Math.cos(a) * 0.8 * S, 2.4 * S + vrng.range(-0.3, 0.5) * S, z + Math.sin(a) * 0.8 * S, 1.3 * S, vrng.range(2.4, 3.2) * S, vrng.range(2.6, 3.6),
+        g * 1.2, g, g * 0.82, 0.82, Math.cos(a) * v, vrng.range(0.3, 0.9) * Math.sqrt(S), Math.sin(a) * v, 1.3, 0.3, vrng.range(0.22, 0.45));
+    }
+    fx.groundRing(x, z, 0.5, r * 1.6, 0.03, 0.34, 2.6, 1.4, 0.4);                           // shock ring: fast, bright
+    fx.groundRing(x, z, 0.3, r * 1.05, 0.06, 0.8, 1.0, 0.42, 0.1, 0.05);                    // slower hot inner ring
+    fx.ring(x, 1.2 * S, z, 0, 0, 0, 0.6 * S, r * 0.9, 0.03, 0.18, 1.6, 1.2, 0.7, 0, 1);      // shock front (camera-facing)
+    dust(x, 0.3, z, Math.round(12 * S), 7 * S, 0.6 * S, 1.6 * S, 1.0, 0.45, EARTH_DUST);      // dust skirt (dark earth, low)
+    sparks(x, 0.8, z, Math.round(28 * S), 0, 0.6, 0, 1.1, 20 * Math.sqrt(S), 0.9, CORE_FIRE, 0.4);
+    embers(x, 0.6, z, Math.round(40 * S), 6 * S, 11 * Math.sqrt(S), 1.6);
+    thrown(x, z, Math.round(16 * S), 6 * S, 10 * Math.sqrt(S), 0.12, 0.28 * Math.sqrt(S));
+    fx.scorch(x, z, r * 0.9, 9 * S, 1.4);
+    fx.light(x, 1.8 * S, z, 6 * S, 0xff7020, 3.5);
+    fx.kick(3.2 * Math.sqrt(S), 0.32 * Math.sqrt(S), 0.25, 1);
   }
   function smokeColumn(x, z, r, n, life) {
     for (let k = 0; k < n; k++) {
@@ -115,9 +166,14 @@ export function createArrowView(scene, game, proj, fx) {
     const cp = Math.cos(e.pitch || 0), dx = Math.sin(e.yaw) * cp, dy = Math.sin(e.pitch || 0), dz = Math.cos(e.yaw) * cp;
     const k = e.big > 1 ? 2.6 : e.heavy || e.big ? 1.5 : 1, mu = e.move === 'musou' && e.big < 2;
     const x = e.x + dx * 0.25, y = e.y + dy * 0.25, z = e.z + dz * 0.25;
-    flash(x, y, z, (mu ? 0.5 : 0.7) * k, e.fire ? 0.9 : 1, 0.07 + 0.02 * k);
+    flash(x, y, z, (mu ? 0.75 : 0.9) * k, e.fire ? 0.9 : 1, 0.1 + 0.02 * k);
+    // fx r1: a tracer ripping down the flight line (reads the shot at gameplay speed), a forward spark cone, muzzle smoke
+    const tl = (mu ? 4 : 6) * Math.min(k, 1.6), tc = e.fire ? CORE_FIRE : CORE;
+    fx.streak(x + dx * tl, y + dy * tl, z + dz * tl, dx, dy, dz, tl, 0.14 * Math.min(k, 1.6), 0.15, tc[0] * 0.8, tc[1] * 0.8, tc[2] * 0.8, 0.5, dx * 30, dy * 30, dz * 30);
+    sparks(x, y, z, mu ? 2 : Math.round(5 * k), dx, dy, dz, 0.3, 16, 0.45, e.fire ? CORE_FIRE : SPARK, 0.16);
+    fx.smoke(x, y, z, 0.2, (mu ? 0.5 : 0.95) * Math.min(k, 1.6), 0.6, 0.5, 0.42, 0.34, mu ? 0.2 : 0.42, dx * 2.5, 0.4, dz * 2.5, 3, 0.4);
     // forward star rays
-    const rays = mu ? 2 : Math.round(4 + 3 * k);
+    const rays = mu ? 3 : Math.round(4 + 3 * k);
     for (let r = 0; r < rays; r++) {
       const ox = dx + vrng.range(-0.35, 0.35), oy = dy + vrng.range(-0.3, 0.3), oz = dz + vrng.range(-0.35, 0.35), l = Math.hypot(ox, oy, oz);
       const len = vrng.range(0.6, 1.4) * k;
@@ -157,7 +213,8 @@ export function createArrowView(scene, game, proj, fx) {
   on('arrow:hit', (e) => {
     if (game.frame !== hitFrame) { hitFrame = game.frame; hitN = 0; }
     const full = ++hitN <= 6, k = e.big > 1 ? 1.8 : e.big ? 1.4 : 1;
-    fx.glow(e.x, e.y, e.z, 0.2, (full ? 0.9 : 0.5) * k, 0.09, 3.2, 2.4, 1.3);
+    fx.glow(e.x, e.y, e.z, 0.25, (full ? 1.2 : 0.6) * k, 0.09, 3.2, 2.4, 1.3);
+    if (full) fx.glow(e.x, e.y, e.z, 0.6 * k, 1.8 * k, 0.16, 0.9, 0.45, 0.12);   // warm halo round the contact
     if (full) {
       sparks(e.x, e.y, e.z, Math.round(7 * k), e.dx, e.dy, e.dz, 0.8, 12 * k, 0.5, e.fire ? CORE_FIRE : SPARK);
       sparks(e.x, e.y, e.z, 3, -e.dx, 0.4, -e.dz, 0.9, 5, 0.3);                     // a few kicked back at the shooter
@@ -168,7 +225,7 @@ export function createArrowView(scene, game, proj, fx) {
     else if (e.big < 2) {                                                          // pinned in the body
       const j = pin.next; pin.next = (pin.next + 1) % NPIN;
       pin.e[j] = e.e; pin.ox[j] = e.x - c.x[e.e] + e.dx * 0.3; pin.oy[j] = e.y - c.y[e.e] + e.dy * 0.3; pin.oz[j] = e.z - c.z[e.e] + e.dz * 0.3;
-      pin.dx[j] = e.dx; pin.dy[j] = e.dy; pin.dz[j] = e.dz; pin.t[j] = 0; pin.s[j] = e.big ? 1.6 : 1;
+      pin.dx[j] = e.dx; pin.dy[j] = e.dy; pin.dz[j] = e.dz; pin.t[j] = 0; pin.s[j] = e.big ? 1.7 : 1.25;
     }
   });
 
@@ -178,53 +235,26 @@ export function createArrowView(scene, game, proj, fx) {
     fx.groundRing(e.x, e.z, e.r * 0.5, e.r, 0.035, life, 1.6, 0.55, 0.12);
     fx.groundRing(e.x, e.z, e.r * 0.2, e.r * 0.45, 0.06, life, 1.0, 0.35, 0.08);
     fx.groundRing(e.x, e.z, e.r * 1.4, e.r * 0.9, 0.05, e.delay + 0.1, 1.4, 0.8, 0.3);       // closing in: "here it comes"
-    fx.glow(e.x, 9, e.z, 1.2, 4, 0.5, 2.6, 1.7, 0.6);
-    fx.glow(e.x, 9, e.z, 3, 7, 0.9, 0.5, 0.3, 0.1);
+    for (let k = 0; k < 6; k++) fx.groundRing(e.x, e.z, e.r * 1.15, e.r * 0.25, 0.09, 0.22, 2.2, 0.9, 0.2, k * 0.12);   // pulses through the crowd
+    fx.glow(e.x, 6.5, e.z, 1.2, 4, 0.5, 2.6, 1.5, 0.45);                                     // sky flare at the apex
+    fx.glow(e.x, 6.5, e.z, 3, 7, 0.9, 0.6, 0.3, 0.08);
   });
 
   // ---------------------------------------------------------------- bursts
   on('arrow:burst', (e) => {
     const x = e.x, z = e.z, r = e.r;
-    if (e.big > 1) {                                          // the Musou giant's explosion
-      fx.glow(x, 1.5, z, 2, 7, 0.18, 4, 3, 1.6);
-      fx.glow(x, 1.5, z, 4, 11, 0.4, 0.6, 0.34, 0.1);
-      fireball(x, 0.8, z, r, 40, 0.95);
-      smokeColumn(x, z, r * 0.7, 22, 3.2);
-      fx.groundRing(x, z, 1, r * 1.8, 0.025, 0.55, 2.4, 1.6, 0.7);
-      fx.groundRing(x, z, 0.5, r * 1.2, 0.04, 0.9, 1.0, 0.5, 0.15, 0.06);
-      fx.ring(x, 1.6, z, 0, 0, 0, 1, r * 1.1, 0.02, 0.26, 1.6, 1.4, 1.0, 0, 1);
-      fx.streak(x, 22, z, 0, 1, 0, 24, 3.2, 0.55, 3.2, 2.2, 0.9, 0.35);            // light pillar
-      fx.streak(x, 18, z, 0, 1, 0, 18, 7, 0.8, 0.6, 0.35, 0.1, 0.3);
-      sparks(x, 1, z, 48, 0, 0.5, 0, 1.2, 30, 1.2, SPARK, 0.4);
-      embers(x, 0.8, z, 80, 9, 14, 1.8);
-      thrown(x, z, 36, 9, 14, 0.14, 0.34);
-      dust(x, 0.3, z, 24, 10, 1.2, 3.2, 1.4, 0.55);
-      fx.scorch(x, z, r * 0.8, 10, 1.2);
-      fx.light(x, 2.5, z, 10, 0xff8a38, 2.5);
-      fx.kick(4, 0.45, 0.3, 1);
+    if (e.big > 1) {                                          // the Musou giant: the explosion x1.9 + a thin hot light pillar
+      explode(x, z, r, 1.9);
+      fx.streak(x, 16, z, 0, 1, 0, 16, 0.9, 0.35, 3.0, 2.0, 0.8, 0.35);
+      fx.streak(x, 14, z, 0, 1, 0, 14, 2.6, 0.5, 0.5, 0.24, 0.05, 0.3);
       return;
     }
-    if (r > 3) {                                               // C6 fire arrow: the full explosion
-      fx.glow(x, 1, z, 1, 3.2, 0.1, 3.6, 2.6, 1.3);
-      fireball(x, 0.6, z, r, 26, 0.7);
-      smokeColumn(x, z, r * 0.8, 14, 2.4);
-      fx.groundRing(x, z, 0.5, r * 1.5, 0.028, 0.36, 2.2, 1.3, 0.5);
-      fx.groundRing(x, z, 0.3, r * 1.05, 0.05, 0.7, 0.8, 0.42, 0.14, 0.05);
-      fx.ring(x, 1.2, z, 0, 0, 0, 0.6, r * 0.8, 0.025, 0.2, 1.5, 1.3, 0.9, 0, 1);
-      sparks(x, 0.8, z, 26, 0, 0.6, 0, 1.1, 20, 0.9, CORE_FIRE, 0.35);
-      embers(x, 0.6, z, 44, 6, 11, 1.4);
-      thrown(x, z, 16, 6, 10, 0.12, 0.28);
-      dust(x, 0.3, z, 14, 6, 0.8, 2.2, 1.0, 0.5);
-      fx.scorch(x, z, r * 0.85, 8, 1);
-      fx.light(x, 1.8, z, 6, 0xff7a28, 4);
-      fx.kick(3.2, 0.3, 0.25, 1);
-      return;
-    }
+    if (r > 3) { explode(x, z, r, 1); return; }               // C6 fire arrow
     // small bursts: jump attack (dust), jump-charge fan and Musou volley (fire)
-    fx.glow(x, 0.5, z, 0.3, r * 0.55, 0.09, 2.6, e.fire ? 1.5 : 2, e.fire ? 0.5 : 1.1);
+    fx.glow(x, 0.5, z, 0.3, r * 0.7, 0.08, 2.8, e.fire ? 1.4 : 2, e.fire ? 0.4 : 1.1);
     fx.groundRing(x, z, 0.2, r * 1.15, 0.05, 0.26, e.fire ? 1.8 : 1.2, e.fire ? 0.9 : 0.95, e.fire ? 0.3 : 0.7);
     if (e.fire) {
-      fireball(x, 0.3, z, r * 0.8, 7, 0.4);
+      fireball(x, 0.3, z, r * 0.9, 9, 0.42);
       smokeColumn(x, z, r * 0.7, 3, 1.4);
       embers(x, 0.4, z, 8, 3, 6, 0.9);
       fx.scorch(x, z, r * 0.55, 3.5, 0.7, 0.7);
@@ -276,8 +306,12 @@ export function createArrowView(scene, game, proj, fx) {
     spearWorld(pose, hpos, hero.yaw, -0.55, 0.22, nock, tip);                  // bow line: nock ← grip → arrowhead
     const ty = tip.y, dx = tip.x - nock.x, dy = tip.y - nock.y, dz = tip.z - nock.z, dl = Math.hypot(dx, dy, dz) || 1;
     const k = charge ? 1 : 0.6;
-    fx.dot(tip.x, ty, tip.z, (0.12 + 0.4 * u * u) * k, 2.6 * u, 1.8 * u, 0.6 * u);
-    fx.dot(tip.x, ty, tip.z, (0.35 + 0.55 * u) * k, 0.3 * u, 0.19 * u, 0.06 * u);
+    // fx r1: a small intense point with a soft halo, capped in screen pixels — sized in metres, the over-the-shoulder aim
+    // camera (≈ 3 m away) blew it up into a hard-edged yellow disc over his head and the target; the draw strength reads
+    // from the string glow, the converging motes and the contracting rings instead
+    const px = fx.px(tip.x, ty, tip.z), ak = aiming ? 0.6 : 1;
+    fx.dot(tip.x, ty, tip.z, Math.min((0.1 + 0.2 * u * u) * k, (5 + 6 * u) * px), 2.4 * u * ak, 1.6 * u * ak, 0.5 * u * ak);
+    fx.dot(tip.x, ty, tip.z, Math.min((0.3 + 0.4 * u) * k, (14 + 12 * u) * px), 0.22 * u * ak, 0.13 * u * ak, 0.04 * u * ak);
     // motes converge on the head
     moteAcc += dt * (charge ? 70 : 30) * u;
     while (moteAcc >= 1) {
@@ -290,15 +324,15 @@ export function createArrowView(scene, game, proj, fx) {
       chargeAcc += dt;
       if (chargeAcc > 0.09) {
         chargeAcc = 0;
-        fx.ring(tip.x + dx / dl * 0.2, ty + dy / dl * 0.2, tip.z + dz / dl * 0.2, dx, dy, dz, 0.9 * k, 0.12, 0.09, 0.14, 1.8 * u, 1.3 * u, 0.5 * u);
+        fx.ring(tip.x + dx / dl * 0.2, ty + dy / dl * 0.2, tip.z + dz / dl * 0.2, dx, dy, dz, Math.min(0.9 * k, 60 * px), 0.12, 0.09, 0.14, 1.8 * u, 1.3 * u, 0.5 * u);
       }
       // the string glows as it comes to full draw
       if (u > 0.5) fx.line(nock.x, nock.y + 0.55, nock.z, 0, 1, 0, 1.1, 0.025, 1.6 * u, 1.5 * u, 1.2 * u, 0.3);
     }
     if (aiming && u >= 1 && !fullPing) {                                        // full draw: a ping you can read mid-fight
       fullPing = true;
-      fx.glow(tip.x, ty, tip.z, 0.3, 1.4, 0.14, 3.4, 2.6, 1);
-      fx.ring(tip.x, ty, tip.z, 0, 0, 0, 0.1, 0.8, 0.1, 0.2, 2.8, 2, 0.6, 0, 1);
+      fx.glow(tip.x, ty, tip.z, 8 * px, Math.min(1.4, 40 * px), 0.12, 3.4, 2.6, 1);
+      fx.ring(tip.x, ty, tip.z, 0, 0, 0, 0.1, Math.min(0.8, 70 * px), 0.1, 0.2, 2.8, 2, 0.6, 0, 1);
     }
   }
 
@@ -331,7 +365,8 @@ export function createArrowView(scene, game, proj, fx) {
       let y = P.y[i];
       if (st === AS.STUCK) {
         if (prev[i] === AS.FLY) {                              // ground bite
-          dust(x, 0.1, z, kind === 4 ? 1 : 2, 1.8, 0.2, 0.7, 0.5, 0.45);
+          dust(x, 0.1, z, 2, 1.8, 0.2, kind === 4 ? 0.9 : 0.7, 0.5, 0.5);
+          fx.glow(x, 0.25, z, 0.15, 0.6, 0.08, 2.4, 1.6, 0.6);
           sparks(x, 0.1, z, 3, -dx * 0.3, 0.9, -dz * 0.3, 0.8, 4, 0.2, [1.2, 0.9, 0.6], 0.25);
           fx.groundRing(x, z, 0.1, 0.6 * bigK, 0.1, 0.2, 0.9, 0.7, 0.4);
           if (P.fire[i]) embers(x, 0.1, z, 4, 1, 2, 0.6);
@@ -342,8 +377,9 @@ export function createArrowView(scene, game, proj, fx) {
         const fire = P.fire[i], heavy = P.big[i] === 1;
         const col = fire ? CORE_FIRE : heavy ? CORE_HEAVY : CORE, gc = fire ? GLOW_FIRE : GLOW;
         if (kind === 4) {                                       // falling rain: long bright streaks
-          fx.line(x, y, z, dx, dy, dz, 3.6, 0.06, 2.8, 2.2, 1.2, 1.2);
-          fx.line(x, y, z, dx, dy, dz, 5, 0.22, 0.4, 0.26, 0.1, 0.8);
+          fx.line(x, y, z, dx, dy, dz, 4.5, 0.1, 2.6, 1.7, 0.7, 1.1);
+          fx.line(x, y, z, dx, dy, dz, 6.5, 0.34, 0.7, 0.38, 0.1, 0.8);
+          fx.dot(x, y, z, 0.16, 1.6, 1.0, 0.4);
         } else if (kind === 3) {                                // the skyward volley: a climbing flare
           fx.line(x, y, z, dx, dy, dz, 4, 0.1, 3, 2, 0.8, 1);
           fx.dot(x, y, z, 0.6, 2.6, 1.6, 0.5);
@@ -362,10 +398,11 @@ export function createArrowView(scene, game, proj, fx) {
             if (ringAcc[i] > 0.04) { ringAcc[i] = 0; fx.ring(x - dx * 0.8, y - dy * 0.8, z - dz * 0.8, dx, dy, dz, 0.2, 0.8, 0.1, 0.18, 1.3, 1.05, 0.65); }
           }
           if (fire) {
-            fx.dot(x, y, z, 0.3 + 0.12 * vrng.next(), 3, 1.4, 0.3);
+            fx.dot(x, y, z, 0.32 + 0.14 * vrng.next(), 2.4, 0.95, 0.16);                  // hot orange head (under the shoulder: stays orange)
+            fx.dot(x, y, z, 0.1, 2.6, 2.2, 1.4);
             if (emit) {
               for (let f = 0; f < 2; f++) fx.glow(x - dx * vrng.range(0, 0.8), y + vrng.range(-0.05, 0.1), z - dz * vrng.range(0, 0.8), 0.22, 0.05, vrng.range(0.18, 0.32),
-                2.8, vrng.range(0.8, 1.3), 0.2, vrng.range(-0.6, 0.6), vrng.range(0.5, 1.6), vrng.range(-0.6, 0.6), 2, 1.5, 0.4);
+                2.2, vrng.range(0.6, 0.95), 0.1, vrng.range(-0.6, 0.6), vrng.range(0.5, 1.6), vrng.range(-0.6, 0.6), 2, 1.5, 0.4);
               if (vrng.chance(0.5)) fx.smoke(x - dx, y, z - dz, 0.15, 0.7, 0.8, 0.12, 0.1, 0.09, 0.4, 0, 0.8, 0, 2, 0.8);
             }
           }
@@ -377,9 +414,9 @@ export function createArrowView(scene, game, proj, fx) {
     }
     // pinned arrows ride the soldier they stopped in
     for (let j = 0; j < NPIN; j++) {
-      if (pin.t[j] >= 0.8) { if (pin.t[j] < 9) { pin.t[j] = 9; arrows.setMatrixAt(N + j, ZERO); } continue; }
+      if (pin.t[j] >= PIN_T) { if (pin.t[j] < 9) { pin.t[j] = 9; arrows.setMatrixAt(N + j, ZERO); } continue; }
       pin.t[j] += dt;
-      const e = pin.e[j], sink = Math.min(1, (0.8 - pin.t[j]) / 0.2);
+      const e = pin.e[j], sink = Math.min(1, (PIN_T - pin.t[j]) / 0.25);
       _d.set(pin.dx[j], pin.dy[j], pin.dz[j]);
       _q.setFromUnitVectors(FWD, _d);
       const px = c.x[e] + pin.ox[j], pz = c.z[e] + pin.oz[j];
@@ -399,8 +436,9 @@ export function createArrowView(scene, game, proj, fx) {
     fx.light(x, y + 0.8, z, 1.6, 0xff8a30, 10, 1);             // the blaze rides it
     // sun core + beam
     // (sizes kept modest: the first frames of the flight pass the over-the-shoulder lens and washed the frame out)
-    fx.dot(x, y, z, 1.0, 3.4, 2.6, 1.4);
-    fx.dot(x, y, z, 2.4, 0.6, 0.34, 0.1);
+    const px = fx.px(x, y, z);
+    fx.dot(x, y, z, Math.min(1.0, 45 * px), 3.4, 2.6, 1.4);
+    fx.dot(x, y, z, Math.min(2.4, 110 * px), 0.6, 0.3, 0.06);
     fx.line(x + dx * 1.5, y, z + dz * 1.5, dx, dy, dz, 8, 0.4, 3.4, 2.5, 1.1, 1.4);
     fx.line(x + dx * 1.5, y, z + dz * 1.5, dx, dy, dz, 12, 1.0, 0.7, 0.36, 0.1, 0.7);
     // double spiral aura wound round the flight line

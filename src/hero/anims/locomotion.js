@@ -250,8 +250,9 @@ export function createDodgeGhosts(scene, model) {
         glow = ramp * flare * (0.12 + 0.05 * Math.sin(t * 0.7));
         edge = Math.min(1, ramp * flare * (0.6 + 0.2 * Math.sin(t * 0.7)));
         k = 1.06; ke = 1.1 + 0.02 * Math.sin(t * 0.7) + (flare > 1 ? 0.03 : 0);
-        live.mat.color.setHex(0x5a9cff);
-        rimMat.color.setHex(0x78b4ff);
+        const kg = hero.kit.fx && hero.kit.fx.glow;                     // the kit's colour (Huang Zhong: amber), else blue
+        live.mat.color.setHex(kg ? kg[0] : 0x5a9cff);
+        rimMat.color.setHex(kg ? kg[1] : 0x78b4ff);
       }
       const spawn = dodging && hero.stateT - lastT >= 4 && hero.stateT <= 9;
       if (glow > 0 || spawn) rig.root.updateMatrixWorld(true);

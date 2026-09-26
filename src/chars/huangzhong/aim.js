@@ -14,6 +14,7 @@
 import { AIM_AT } from './moves.js';
 import { startDodge, startJump, setState, stickDir } from '../../hero/locomotion.js';
 import { ARROW } from '../../combat/projectiles.js';
+import { ST } from '../../crowd/crowd.js';
 
 const D2R = Math.PI / 180;
 export const AIM = {
@@ -31,7 +32,8 @@ export const AIM = {
 export function createAim(game, proj) {
   const A = { active: false, yaw: 0, pitch: 0, held: 0, phase: 'draw', t: 0, d: 0 };
   const shot = { id: 'aim', yaw: 0, dist: 2.4, pitch: 0.1, fov: 38, height: 1.5, side: 0.55, shake: 0.5 };
-  A.reset = () => { A.active = false; A.held = 0; A.phase = 'draw'; A.t = 0; A.d = 0; };
+  let crowdK = 0;
+  A.reset = () => { crowdK = 0; A.active = false; A.held = 0; A.phase = 'draw'; A.t = 0; A.d = 0; };
 
   function enter(h) {
     A.active = true; A.yaw = h.yaw; A.pitch = 0; A.held = AIM_AT; A.phase = 'draw'; A.t = 0;
@@ -90,8 +92,19 @@ export function createAim(game, proj) {
   /** Over-the-shoulder aim camera (see header), or null. Zooms in as the draw builds. */
   A.shot = () => {
     if (!A.active) return null;
-    const d = A.phase === 'draw' ? A.d : 0.6;
-    return Object.assign(shot, { yaw: A.yaw, dist: 2.5 - 0.5 * d, pitch: 0.1 - A.pitch * 0.85, fov: 40 - 8 * d, height: 1.52 + A.pitch * 0.3, side: 0.58, shake: 0.4 });
+    const d = A.phase === 'draw' ? A.d : 0.6, h = game.hero, c = game.crowd;
+    // fx r1: above the heads, pulled back and higher still when soldiers crowd the lens (≈ 2 m behind-right of him), so
+    // the path and the target read over the crowd instead of through near-lens bodies
+    const bx = h.x - Math.sin(A.yaw) * 2.4 + Math.cos(A.yaw) * 0.7, bz = h.z - Math.cos(A.yaw) * 2.4 - Math.sin(A.yaw) * 0.7;
+    let near = 0;
+    for (let i = 0; i < c.N; i++) {
+      if (c.st[i] === ST.OFF || c.st[i] === ST.DEAD) continue;
+      const dd = Math.hypot(c.x[i] - bx, c.z[i] - bz);
+      if (dd < 1.8) near = Math.max(near, 1 - dd / 1.8);
+    }
+    crowdK += (near - crowdK) * (near > crowdK ? 0.3 : 0.05);                 // rise fast when they close in, settle slowly
+    return Object.assign(shot, { yaw: A.yaw, dist: 3.2 - 0.5 * d + 1.0 * crowdK, pitch: 0.2 + 0.14 * crowdK - A.pitch * 0.85, fov: 42 - 8 * d,
+      height: 2.1 + 0.6 * crowdK + A.pitch * 0.3, side: 0.62, shake: 0.4 });
   };
   return A;
 }

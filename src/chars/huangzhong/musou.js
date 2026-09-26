@@ -162,7 +162,7 @@ export function createMusou(game) {
       Object.assign(o, { id: 1, yaw: offSun(mu.yaw0 + Math.PI * 0.8), dist: 4.3 - 0.6 * u, pitch: 0.34, fov: 46, height: 1.1, side: 0.1 });
     } else if (t < M.plant) {                              // close-up: nocking, the old man's glare
       const u = (t - M.closeup) / (M.plant - M.closeup);
-      Object.assign(o, { id: 2, yaw: offSun(mu.yaw0 + Math.PI * 0.72), dist: 1.9 - 0.25 * smooth(u), pitch: 0.12, fov: 32, height: 1.5, side: -0.18 });
+      Object.assign(o, { id: 2, yaw: offSun(mu.yaw0 + Math.PI * 0.72), dist: 2.5 - 0.3 * smooth(u), pitch: 0.06, fov: 40, height: 1.62, side: -0.3 });   // face + nocked arrow
     } else if (t < M.big) {                                // wide from behind-left above: the sweep rakes the army
       const u = smooth((t - M.plant) / (M.big - M.plant));
       Object.assign(o, { id: 3, yaw: offSun(mu.yaw0 + 0.5 - 0.25 * u), dist: 7.2 + 1.2 * u, pitch: 0.24, fov: 58, height: 1.6, side: 1.3, shake: 0.5 });

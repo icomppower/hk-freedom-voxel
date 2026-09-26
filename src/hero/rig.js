@@ -368,3 +368,11 @@ export function spearWorld(pose, pos, yaw, zBase, zTip, outBase, outTip) {
     out.set(pos.x + _v.x * cy + _v.z * sy, pos.y + _v.y, pos.z - _v.x * sy + _v.z * cy);
   }
 }
+
+/** A point (lx, ly, lz m) of the weapon frame in world space (pure). The bow's limbs run along local y (VFX trails). */
+export function weaponWorld(pose, pos, yaw, lx, ly, lz, out) {
+  _e.set(-spearElev(pose, pos.y), pose[28], pose[30]); _q.setFromEuler(_e);
+  const cy = Math.cos(yaw + pose[38]), sy = Math.sin(yaw + pose[38]);
+  _v.set(lx, ly, lz).applyQuaternion(_q).add(_v2.set(pose[25], pose[26], pose[27])).multiplyScalar(HERO_SCALE);
+  return out.set(pos.x + _v.x * cy + _v.z * sy, pos.y + _v.y, pos.z - _v.x * sy + _v.z * cy);
+}

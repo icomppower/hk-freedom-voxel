@@ -125,9 +125,9 @@ export function createProjectiles(game) {
       const ls = { ...rs, kb: 'launch', heavy: true, dmg: spec.dmg * 1.6 };
       for (let k = 0; k < R.n; k++) {
         const a = hash01(s0, k, 1) * Math.PI * 2, r = R.r * Math.sqrt(hash01(s0, k, 2)), ax = cx + Math.sin(a) * r, az = cz + Math.cos(a) * r;
-        const tilt = 0.18, ta = hash01(s0, k, 3) * Math.PI * 2;      // falls slightly slanted, from 14 m up
+        const tilt = 0.18, ta = hash01(s0, k, 3) * Math.PI * 2;      // falls slightly slanted, from 11 m up (fx r1: from 14 m the rain spent ≈ 0.3 s above the gameplay frame)
         const at = game.frame + R.delay + Math.floor(k * R.over / R.n);
-        queue.push({ at, x: ax - Math.sin(ta) * tilt * 14, y: 14, z: az - Math.cos(ta) * tilt * 14, yaw: ta, pitch: -Math.atan2(1, tilt),
+        queue.push({ at, x: ax - Math.sin(ta) * tilt * 11, y: 11, z: az - Math.cos(ta) * tilt * 11, yaw: ta, pitch: -Math.atan2(1, tilt),
           spec: k >= R.n - R.launchLast ? ls : rs, move });
       }
       emit('arrow:rain', { x: cx, z: cz, r: R.r, delay: R.delay / 60, over: R.over / 60 });
