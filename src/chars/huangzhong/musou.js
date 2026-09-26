@@ -9,8 +9,9 @@
 //   84  VOLLEY (first volley = 'contact'): three flaming arrows every 3 sf while his aim sweeps ≈ 130° left → right across
 //       the army (66 arrows in 1.1 s), each pierces 2 and bursts small where it lands
 //   150 the giant arrow: a long deep draw, over-the-shoulder camera, embers gather
-//   182 RELEASE: a blazing arrow ×5 tears a straight line through everything (pierce ∞), and 26 m out it EXPLODES
-//       (≈ 218: musou:burst, the ring launches)                       244 control returns (≈ 4 s)
+//   182 RELEASE: a blazing arrow ×5 tears a straight line through everything (pierce ∞) and EXPLODES just past the
+//       last soldier on its line (9–26 m out; the flight time is fixed, so ≈ 218: musou:burst, the ring launches)
+//                                                                     244 control returns (≈ 4 s)
 import { emit } from '../../core/events.js';
 import { setState, stickDir } from '../../hero/locomotion.js';
 import { ST, wrap } from '../../crowd/crowd.js';
@@ -121,6 +122,19 @@ export function createMusou(game) {
       h.yaw = mu.yaw0;
       mu.side = Math.abs(wrap(mu.yaw0 + 1.3 - SUN_AZ)) >= Math.abs(wrap(mu.yaw0 - 1.3 - SUN_AZ)) ? 1 : -1;   // flank cam: sun behind it
       const b = bow(h, h.yaw);
+      // explode where the army is: 2 m past the farthest soldier within 3 m of the line (it used to fly a fixed 26 m and
+      // burst over empty ground whenever the fight was closer than ≈ 18 m — nearly always); the speed keeps the flight
+      // time (GIANT_FRAMES: the audio build-up and the cameras are timed on it)
+      const fx = Math.sin(h.yaw), fz = Math.cos(h.yaw);
+      let far = 0;
+      for (let i = 0; i < c.N; i++) {
+        const st = c.st[i];
+        if (st === ST.OFF || st === ST.DEAD) continue;
+        const dx = c.x[i] - b.x, dz = c.z[i] - b.z, along = dx * fx + dz * fz;
+        if (along > far && along < M.giant.range && Math.abs(dx * fz - dz * fx) < 3) far = along;
+      }
+      giant.range = Math.min(M.giant.range, Math.max(9, far + 2));
+      giant.speed = giant.range * 60 / (GIANT_FRAMES - 1);
       mu.giantI = mu.proj.spawn(b.x, b.y, b.z, h.yaw, 0, giant, 'musou', -1);
       emit('arrow:fire', { x: b.x, y: b.y, z: b.z, yaw: h.yaw, n: 1, heavy: true, fire: true, big: 2, sky: false, move: 'musou' });
     }
