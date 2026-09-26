@@ -34,7 +34,7 @@ export const CONTROLS = [   // also the pause menu's table (main.js)
   ['無雙', 'Musou', '<kbd>I</kbd> — when the gold gauge is full', '<kbd>B</kbd> ○'],
   ['視角', 'Camera', 'mouse (click the field to lock it) / <kbd>Q</kbd><kbd>E</kbd>', 'right stick'],
   ['鎖定', 'Recenter', '<kbd>R</kbd> — behind you, or onto the nearest officer', '<kbd>L1</kbd> <kbd>L2</kbd>'],
-  ['瞄準', 'Aim (黃忠)', 'hold <kbd>K</kbd> / right click from a standstill — mouse or stick aims, release to loose', 'hold <kbd>Y</kbd> △'],
+  ['瞄準', 'Aim (黃忠)', 'hold <kbd>K</kbd> / right click (standing or running) — mouse or stick aims, release to loose', 'hold <kbd>Y</kbd> △'],
   ['暫停', 'Pause', '<kbd>Esc</kbd> (also frees the mouse)', ''],
 ];
 
