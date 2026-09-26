@@ -13,6 +13,7 @@ import { vrng } from '../core/rng.js';
 import { vox } from '../hero/model.js';
 import { AS, ARROW } from '../combat/projectiles.js';
 import { ground } from '../world/map.js';
+import { lensClear } from '../camera/occlusion.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _d = new THREE.Vector3();
 const _c = new THREE.Color(), FWD = new THREE.Vector3(0, 0, 1), ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -26,7 +27,8 @@ function instanced(parent, geo, mat, n, color) {
   parent.add(m);
   return m;
 }
-const addMat = (o = {}) => new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, ...o });
+// lensClear: an additive spark within 3 m of the lens filled the frame as a flat pale square (critic: burst screenshots)
+const addMat = (o = {}) => lensClear(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, ...o }), 3);
 
 export function createArrowView(scene, game, proj) {
   const root = new THREE.Group();

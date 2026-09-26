@@ -413,6 +413,9 @@
 
   /* pause menu (#menu, battle): ink band + brush name, the title's menu vocabulary */
   #menu .t { font-size: 13rem; }
+  #menu table { position: absolute; right: 6rem; top: 50%; transform: translateY(-50%); margin: 0; font-size: 1.45rem;
+    background: linear-gradient(90deg, rgba(12,8,6,.86), rgba(12,8,6,.7)); box-shadow: 0 0 4rem 2rem rgba(12,8,6,.5); }
+  #menu td { padding: .6rem 1.4rem; }
   #menu .sub { font: 700 2.4rem/1 var(--kai); letter-spacing: .6rem; color: #f2c14e; margin-top: 1.6rem; }
   #menu .sub small { font: 600 1.2rem/1 var(--sans); letter-spacing: .16em; margin-left: 1rem; color: var(--dim); }
   #menu #go, #menu #quit { position: relative; margin: 1rem 0 0 .2rem; padding: .6rem 0 1rem 3rem; border-radius: 0; box-shadow: none; background: none;
@@ -568,7 +571,7 @@
   <div class="sub">戰局暫停<small>Battle paused</small></div>
   <button id="go">繼續<small>Resume</small></button>
   <button id="quit">撤退<small>Quit to title</small></button>
-  <div class="hint">Enter or Esc to resume · the full controls are under 操作說明 on the title screen</div>
+  <div class="hint">Enter or Esc to resume</div>
 </div>
 <!-- flow screens (main.js). ui lane: #title #select · story lane: #prologue #result -->
 <div id="title" class="scr" hidden></div>

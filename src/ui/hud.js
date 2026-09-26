@@ -337,7 +337,7 @@ export function createHud(root, game, camera) {
         set(o.bar, 'transform', `scaleX(${hpF.toFixed(4)})`);
         set(o.lagEl, 'transform', `scaleX(${o.lag.toFixed(4)})`);
       });
-      if (f - S.tgtF < 600 || f - S.tgtKoF < 70) clash = true;           // an officer fight: the target bar needs the corner
+      if (f - S.tgtF < 600 || f - S.tgtKoF < 70 || S.dlg) clash = true;   // … and a dialogue line takes the corner too           // an officer fight: the target bar needs the corner
       S.introCut = clamp01(S.introCut + (clash ? 0.15 : -0.05) * df);
       tags.sort((a, b) => b.ay - a.ay);
       for (let k = 1; k < tags.length; k++) {

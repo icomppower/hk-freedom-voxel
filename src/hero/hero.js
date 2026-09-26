@@ -34,7 +34,7 @@ export function createHero(game) {
     if (h.dead || h.iframes > 0 || h.state === 'musou' || h.state === 'dodge') return false;
     h.hp = Math.max(game.mode === 'story' ? 0 : 1, h.hp - dmg);   // free mode: the hero cannot die (the demo keeps running)
     h.musou = Math.min(h.musouMax, h.musou + dmg * 0.15);
-    const armored = !!h.move && (!officer || h.kit.moves[h.move].armor);
+    const armored = !!h.move && h.move !== 'aim' && (!officer || h.kit.moves[h.move].armor);   // aim: a stance, not a swing
     emit('hero:hurt', { dmg, hp: h.hp, x: h.x, y: h.y + 1.2, z: h.z, armored });
     if (!h.hp) {                                 // story mode: down for good (flow shows the result on story:end)
       h.dead = true; h.move = null; h.musouBuf = 0; setState(h, 'hurt');

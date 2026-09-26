@@ -34,7 +34,7 @@ const nearZ = (id) => { const q = zone(id); return q.z - (q.r ?? q.d / 2); };
 export function createStory(game) {
   const S = { mode: 'free', chapter: null, char: 'zhaoyun', t: 0, done: false, maxChain: 0, downT: -1 };
   const st = { morale: undefined, target: null };
-  const DLG_GAP = 24;                            // sim frames between two queued lines
+  const DLG_GAP = 12;                            // sim frames between two queued lines
 
   st.stats = () => {
     const h = game.hero, time = Math.round(S.t / 60);
@@ -52,7 +52,7 @@ export function createStory(game) {
   // ---- dialogue: one line at a time; lines resolve the speaker (hero / ally / SPK seal) and branch on the hero
   const say = (line) => {
     const pick = line[S.char], zh = pick ? pick[0] : line.zh, en = pick ? pick[1] : line.en;
-    const dur = Math.max(210, Math.min(340, 140 + zh.length * 9));
+    const dur = Math.max(160, Math.min(270, 100 + zh.length * 8));   // ≈ 2.7-4.5 s: DW8 pace, taunts don't queue behind a briefing
     const e = { zh, en, dur };
     if (line.who === 'ally') { const a = CHARS[S.ally]; Object.assign(e, { speaker: a.name, portrait: a.id, side: 'shu' }); }
     else if (line.who !== 'hero') { const p = SPK[line.who]; Object.assign(e, { speaker: p.name, portrait: { seal: p.seal, side: p.side }, side: p.side }); }

@@ -198,7 +198,7 @@ export function createProjectiles(game) {
           hit.dmg *= ARROW.headK; hit.heavy = true; hit.kb = 'blow'; hit.force = Math.max(hit.force, 9); hit.lift = Math.max(hit.lift, 5);
           emit('arrow:headshot', { i: e, x: c.x[e], y: ey + 1.6, z: c.z[e] });
         }
-        game.combat.hitOne(e, hit, x0 + dx * u - Math.sin(yaw) * 0.5, z0 + dz * u - Math.cos(yaw) * 0.5, yaw, P.key[i], false, P.move[i]);
+        if (!game.combat.hitOne(e, hit, x0 + dx * u - Math.sin(yaw) * 0.5, z0 + dz * u - Math.cos(yaw) * 0.5, yaw, P.key[i], false, P.move[i])) continue;   // refused (KO'd this tick): no pierce spent
         if (--P.pierce[i] < 0) {
           if (s.burst) burst(i, c.x[e], c.z[e]);
           else P.st[i] = AS.NONE;

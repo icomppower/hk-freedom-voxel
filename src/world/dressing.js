@@ -12,6 +12,7 @@ import { makeRng } from '../core/rng.js';
 import { figureGeometry, watchtower, pagoda } from './castle.js';
 import { TERRAIN as G, ROUTE, ground, riverZ, routeDist, FORDS, WALL_Z, GATE_X, SUMMIT_H, CAMP_H } from './map.js';
 import { topAt } from './terrain.js';
+import { lensClear } from '../camera/occlusion.js';
 
 const WIND = new THREE.Vector3(0.75, 0, 0.55).normalize();   // blows up the valley, toward the castle's end
 const lit = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, flatShading: true });
@@ -129,7 +130,8 @@ function fireSystem(scene, list) {
     if (smoke) for (let i = 0; i < 30; i++) puffs.push({ x, y, z, s, g, ph: i / 30 + r.range(0, 0.02), sp: r.range(0.075, 0.095), ox: r.range(-0.8, 0.8), oz: r.range(-0.8, 0.8), rot: r.range(0, 6.28), v: r.range(0.8, 1.2) });
   }
   const cube = new THREE.BoxGeometry(1, 1, 1);
-  const add = new THREE.MeshBasicMaterial({ color: 0xffffff, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false });
+  // lensClear: flame cubes by the lens (the barricades burn on the road) read as flat pale squares, so cut them inside 3 m
+  const add = lensClear(new THREE.MeshBasicMaterial({ color: 0xffffff, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false }), 3);
   const fm = new THREE.InstancedMesh(cube, add, flames.length + embers.length);
   fm.frustumCulled = false;
   fm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array((flames.length + embers.length) * 3), 3);
@@ -285,7 +287,8 @@ export function buildDressing(scene, { castle, fieldFires }) {
   const r = makeRng(44);
   const poles = [], cloths = [], props = [];
   // sunlight through the cloth: emissive = the banner's own texture, so 魏/蜀 read even when backlit
-  const cm = (map, alpha = true) => new THREE.MeshStandardMaterial({ map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: 0.22, side: THREE.DoubleSide, alphaTest: alpha ? 0.5 : 0, roughness: 0.92, flatShading: true });
+  // lensClear (also on the poles / props below): a banner or tent between the lens and the hero blacked out a third of the frame
+  const cm = (map, alpha = true) => lensClear(new THREE.MeshStandardMaterial({ map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: 0.22, side: THREE.DoubleSide, alphaTest: alpha ? 0.5 : 0, roughness: 0.92, flatShading: true }), 2.5);
   const mats = {
     wei: cm(bannerTexture('魏', { bg: '#7d2a1f', fg: '#1a0d0a', border: '#4a1712', seed: 3 })),
     shu: cm(bannerTexture('蜀', { bg: '#c7a574', fg: '#2a120a', border: '#8e2a1c', w: 192, h: 256, seed: 5 })),
@@ -519,7 +522,7 @@ export function buildDressing(scene, { castle, fieldFires }) {
     scene.add(sp); dusts.push(sp);
   }
 
-  const poleMesh = new THREE.Mesh(boxesGeometry(poles.concat(props)), lit());
+  const poleMesh = new THREE.Mesh(boxesGeometry(poles.concat(props)), lensClear(lit(), 2.5));
   poleMesh.castShadow = true; poleMesh.receiveShadow = true;
   scene.add(poleMesh);
 

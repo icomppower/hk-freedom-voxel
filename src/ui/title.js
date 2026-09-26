@@ -17,7 +17,7 @@ const ITEMS = [
   { go: 'free', zh: '自由演武', en: 'Free battle · endless waves' },
   { go: 'controls', zh: '操作說明', en: 'Controls' },
 ];
-const CONTROLS = [
+export const CONTROLS = [   // also the pause menu's table (main.js)
   ['移動', 'Move', '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows', 'left stick'],
   ['攻擊', 'Attack', '<kbd>J</kbd> / left click — tap for the full combo', '<kbd>X</kbd> □'],
   ['蓄力', 'Charge', '<kbd>K</kbd> / right click — mid-combo for charge attacks', '<kbd>Y</kbd> △'],

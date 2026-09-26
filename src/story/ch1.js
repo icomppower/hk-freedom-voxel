@@ -165,7 +165,7 @@ export const BEATS = [
 
   // ---- 定軍山頂: 夏侯淵 (boss), the drums at half HP
   {
-    when: { zone: 'summit' },
+    when: { at: ['summit', 0, -0.35] },           // z ≈ 182: over the barricade (the ramp below it tops out at z ≈ 177)
     skip: { down: 'yuan' },
     banner: { html: '敵總大將 <em>夏侯淵</em>', en: 'Enemy commander: Xiahou Yuan', dur: 150, big: true },
     waves: true,

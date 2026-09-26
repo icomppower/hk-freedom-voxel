@@ -22,7 +22,7 @@ import { createAudio } from './audio/audio.js';
 import { CHARS } from './chars/index.js';
 import { spawnPoint } from './world/map.js';
 import { createStory } from './story/index.js';
-import { createTitle } from './ui/title.js';
+import { createTitle, CONTROLS } from './ui/title.js';
 import { createSelect } from './ui/select.js';
 import { createPrologue } from './story/prologue.js';
 import { createResult } from './story/result.js';
@@ -119,6 +119,8 @@ addEventListener('resize', () => {
 // ---- flow + pause menu (index.html #menu, battle only): the sim waits while it is open or while a screen is up
 const $ = (id) => document.getElementById(id);
 const menu = $('menu'), hudEl = $('hud');
+// the bindings mid-battle too (critic: checking aim meant quitting the chapter)
+menu.querySelector('.hint').insertAdjacentHTML('beforebegin', `<table>${CONTROLS.map(([zh, en, kb]) => `<tr><td>${zh}<small>${en}</small></td><td>${kb}</td></tr>`).join('')}</table>`);
 let paused = false, state = null, ctx = {};
 const setPaused = (v) => { paused = v; menu.hidden = !v; hudEl.hidden = v; input.sample(); };   // sample(): drop keys pressed on the menu
 const flow = {

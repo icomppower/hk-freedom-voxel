@@ -57,10 +57,10 @@ const MAP = `
   </g>
   <g class="pl-labels">
     <g class="pl-mark" data-id="yangping"><rect x="276" y="286" width="30" height="30" rx="3"/><text x="330" y="312">陽平關</text></g>
-    <g class="pl-mark" data-id="nanzheng"><rect x="1042" y="282" width="36" height="36" rx="3"/><text x="1034" y="262">南鄭</text></g>
+    <g class="pl-mark" data-id="nanzheng"><rect x="1042" y="282" width="36" height="36" rx="3"/><text x="1034" y="350">南鄭</text></g>
     <g class="pl-mark wei" data-id="dingjun"><text x="600" y="690">定軍山</text><text class="sm" x="686" y="520">夏侯淵</text></g>
     <g class="pl-mark wei" data-id="east"><text class="sm" x="880" y="650">張郃 東圍</text></g>
-    <g class="pl-mark" data-id="river"><text class="sm river" x="70" y="318">漢 水</text></g>
+    <g class="pl-mark" data-id="river"><text class="sm river" x="190" y="412">漢 水</text></g>
   </g>
   <rect width="1600" height="900" fill="url(#pl-vig)"/>
 </svg>`;
@@ -95,8 +95,9 @@ export function createPrologue(el, flow) {
       const id = m.dataset.id, now = c.show.includes(id), before = PROLOGUE.slice(0, k).some((p) => p.show.includes(id));
       m.classList.toggle('on', now || before); m.classList.toggle('hot', now);
     }
-    const [fx, fy, s] = c.focus, lim = (s - 1) / 2 * 100;   // drift: bring the focus toward the centre, never past the paper edge
-    const tx = Math.max(-lim, Math.min(lim, (0.5 - fx / 1600) * s * 100)), ty = Math.max(-lim, Math.min(lim, (0.5 - fy / 900) * s * 100));
+    const [fx, fy, s] = c.focus, lim = (s - 1) / 2 * 100;   // drift: bring the focus toward 38 % x (clear of the calligraphy
+    // card on the right, which covered 南鄭 when the focus was centred), never past the paper edge
+    const tx = Math.max(-lim, Math.min(lim, (0.38 - fx / 1600) * s * 100)), ty = Math.max(-lim, Math.min(lim, (0.5 - fy / 900) * s * 100));
     map.style.transform = `translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%) scale(${s})`;
     pips.innerHTML = PROLOGUE.map((_, j) => `<b class="${j === k ? 'on' : j < k ? 'past' : ''}">${NUM[j]}</b>`).join('');
     later(() => show(k + 1), 1.4 + v.cols.length * 0.55 + Math.min(3.2, 1.6 + v.en.length * 0.018));
