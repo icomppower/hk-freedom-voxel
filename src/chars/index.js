@@ -34,6 +34,7 @@
 //   createMusouView(scene, game, camera) → { update(dt), dispose() }   render-only
 // }
 import { ZHAOYUN_KIT } from './zhaoyun/kit.js';
+import { HUANGZHONG_KIT } from './huangzhong/kit.js';
 
 const ZY_FACE = [
   '....................',
@@ -103,7 +104,7 @@ export const CHARS = {
     kit: ZHAOYUN_KIT,
   },
   huangzhong: {
-    id: 'huangzhong', ready: false,   // hz lane: own kit (bow + projectiles) replaces the Zhao Yun stand-in, then ready: true
+    id: 'huangzhong', ready: true,
     name: { zh: '黃忠', en: 'Huang Zhong' }, courtesy: { zh: '漢升', en: 'Hansheng' }, seal: '老將',
     title: { zh: '老當益壯', en: 'The Veteran Who Never Ages' }, motto: '老當益壯 · 百步穿楊 · 定軍斬將',
     weapon: { zh: '破軍弓', en: 'Army-Breaker Longbow' },
@@ -118,7 +119,7 @@ export const CHARS = {
       copy: ['一矢既出', '萬軍辟易'],
     },
     portrait: { face: HZ_FACE, pal: PAL },
-    kit: ZHAOYUN_KIT,                 // stand-in so the game runs if picked
+    kit: HUANGZHONG_KIT,
   },
 };
 export const CHAR_ORDER = ['zhaoyun', 'huangzhong'];

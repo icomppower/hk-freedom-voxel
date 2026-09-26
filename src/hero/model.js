@@ -21,6 +21,7 @@ export const C = {
   blue: 0x2a78e0, blueH: 0x78c8ff, blueD: 0x1c4aa8, ribbon: 0x8ccbe8, ribbonD: 0x5c9ccc,
   cape: 0xebe6dc, capeD: 0xd6d0c4, emb: 0x2f5fa6,
 };
+let K = C;                        // palette the body-part builders read (bodyParts swaps it for another character)
 
 // ---------------------------------------------------------------- voxel mesher with AO
 const FACES = [
@@ -105,7 +106,7 @@ const mirX = (bx, sx, c2 = 0) => (sx > 0 ? bx : { ...bx, a: [c2 - bx.b[0], bx.a[
  * (the rows overlap like scales; AO darkens under every lip) and the voxel tucked under the next lip is shaded, so every
  * row reads as plates with dark gaps. `trim` colours the lip of the lowest row; `jag` knocks out every 3rd voxel of it.
  */
-function lamellar(a, b, { base = C.W, rowH = 3, pw = 4, trim = null, jag = false, lipX = true } = {}) {
+export function lamellar(a, b, { base = K.W, rowH = 3, pw = 4, trim = null, jag = false, lipX = true } = {}) {
   const out = [], dark = shade(base, 0.6), tuck = shade(base, 0.8), hi = shade(base, 1.04);
   const seam = (x, y, z) => md(x + z + (Math.floor((y - a[1]) / rowH) & 1) * (pw >> 1), pw) === 0;
   out.push(B(a, b, (x, y, z) => (seam(x, y, z) ? dark : (y - a[1]) % rowH === rowH - 1 ? tuck : base)));
@@ -119,79 +120,81 @@ function lamellar(a, b, { base = C.W, rowH = 3, pw = 4, trim = null, jag = false
 
 // ---------------------------------------------------------------- body parts
 function torso() {
+  const k = K;                    // palette captured now: colour functions run later, inside vox()
   const P_ = {};
   // hips (pelvis, narrow): gunmetal core, teal sash + leather belt with the gold buckle, white faulds at the back
   P_.hips = [
-    B([-6, -5, -4], [6, 3, 4], C.G),
-    B([-7, -1, -5], [7, 2, 5], (x, y) => (md(x + y, 4) === 0 ? C.Td : C.T)),
-    B([-7, 2, -5], [7, 3, 5], C.leather),
-    B([-1, 0, 5], [1, 3, 6], C.gold),
-    B([5, -4, -2], [8, 1, 2], C.T),                                  // sash knot on the left hip
-    ...lamellar([-6, -6, -6], [6, -1, -5], { rowH: 2, lipX: false, trim: C.T, jag: true }),   // back fauld (front: apron chain)
+    B([-6, -5, -4], [6, 3, 4], k.G),
+    B([-7, -1, -5], [7, 2, 5], (x, y) => (md(x + y, 4) === 0 ? k.Td : k.T)),
+    B([-7, 2, -5], [7, 3, 5], k.leather),
+    B([-1, 0, 5], [1, 3, 6], k.gold),
+    B([5, -4, -2], [8, 1, 2], k.T),                                  // sash knot on the left hip
+    ...lamellar([-6, -6, -6], [6, -1, -5], { rowH: 2, lipX: false, trim: k.T, jag: true }),   // back fauld (front: apron chain)
   ];
   // waist (narrow): gunmetal with grey-white belly lamellar and a teal band under the breastplate
   P_.spine = [
-    B([-5, -3, -4], [5, 8, 4], C.G),
-    ...lamellar([-5, -1, -4], [5, 6, 4], { base: C.W2, rowH: 2 }),
-    B([-6, 6, -5], [6, 8, 5], C.T),
+    B([-5, -3, -4], [5, 8, 4], k.G),
+    ...lamellar([-5, -1, -4], [5, 6, 4], { base: k.W2, rowH: 2 }),
+    B([-6, 6, -5], [6, 8, 5], k.T),
   ];
   // chest (V taper, broad at the top): white lamellar cuirass, white scale mantle round the neck and shoulders (teal
   // lining, V opening), silver heart-mirror with a teal gem
   P_.chest = [
-    B([-7, -2, -5], [7, 9, 5], C.G),
-    ...lamellar([-6, -1, -5], [6, 3, 5], { base: C.W2, rowH: 2 }),
-    ...lamellar([-7, 3, -5], [7, 8, 5], { base: C.W, rowH: 3, pw: 3 }),
-    B([-1, -1, 6], [1, 5, 7], C.T),                                  // teal centre strip under the mirror
-    B([-2, 2, 6], [2, 6, 8], C.S),
-    B([-1, 3, 8], [1, 5, 9], C.Tl),
-    B([-2, 2, 7], [2, 3, 8], C.Sd, true),
+    B([-7, -2, -5], [7, 9, 5], k.G),
+    ...lamellar([-6, -1, -5], [6, 3, 5], { base: k.W2, rowH: 2 }),
+    ...lamellar([-7, 3, -5], [7, 8, 5], { base: k.W, rowH: 3, pw: 3 }),
+    B([-1, -1, 6], [1, 5, 7], k.T),                                  // teal centre strip under the mirror
+    B([-2, 2, 6], [2, 6, 8], k.S),
+    B([-1, 3, 8], [1, 5, 9], k.Tl),
+    B([-2, 2, 7], [2, 3, 8], k.Sd, true),
     // mantle: shaggy scale tiers, widest at the bottom, reaching over the shoulders
-    ...lamellar([-9, 6, -6], [9, 11, 6], { base: C.Wh, rowH: 2, pw: 3, jag: true }),
-    B([-4, 8, -4], [4, 12, 4], C.T),                                 // teal inner collar
+    ...lamellar([-9, 6, -6], [9, 11, 6], { base: k.Wh, rowH: 2, pw: 3, jag: true }),
+    B([-4, 8, -4], [4, 12, 4], k.T),                                 // teal inner collar
     B([-3, 8, -3], [3, 13, 3], -1),                                  // neck hole
     B([-2, 6, 3], [2, 12, 8], -1),                                   // V opening at the throat
-    B([-2, 5, 3], [2, 10, 5], C.T),
-    B([-1, 5, 4], [1, 8, 6], C.S),                                   // collar clasp
+    B([-2, 5, 3], [2, 10, 5], k.T),
+    B([-1, 5, 4], [1, 8, 6], k.S),                                   // collar clasp
   ];
-  P_.neck = [B([-2, -1, -2], [2, 3, 2], C.skinD)];
+  P_.neck = [B([-2, -1, -2], [2, 3, 2], k.skinD)];
   return P_;
 }
 
 function limbs(P_) {
+  const k = K;
   for (const [s, sx] of [['R', -1], ['L', 1]]) {
     // upper arm: gunmetal sleeve under small white lamellar with a teal hem (pauldron is separate)
     P_['upperArm' + s] = [
-      B([-2, -12, -2], [2, 1, 2], C.G),
-      ...lamellar([-2, -11, -2], [2, -5, 2], { rowH: 2, pw: 3, trim: C.T }),
+      B([-2, -12, -2], [2, 1, 2], k.G),
+      ...lamellar([-2, -11, -2], [2, -5, 2], { rowH: 2, pw: 3, trim: k.T }),
     ];
     // forearm: banded white vambrace (plate rows with dark gaps), dark wrist band, teal line, silver elbow cop
     P_['foreArm' + s] = [
-      B([-2, -11, -2], [3, 0, 3], C.Gd),
-      ...lamellar([-2, -9, -2], [3, -2, 3], { rowH: 2, trim: C.S }),
-      P([-3, -3, -3], [4, -2, 4], C.T),
-      B([-2, -1, -3], [3, 1, 3], C.S),
+      B([-2, -11, -2], [3, 0, 3], k.Gd),
+      ...lamellar([-2, -9, -2], [3, -2, 3], { rowH: 2, trim: k.S }),
+      P([-3, -3, -3], [4, -2, 4], k.T),
+      B([-2, -1, -3], [3, 1, 3], k.S),
     ];
-    P_['hand' + s] = [B([-2, -2, -2], [2, 2, 2], C.glove), B([-2, 1, -2], [2, 2, 2], C.Gd)];
+    P_['hand' + s] = [B([-2, -2, -2], [2, 2, 2], k.glove), B([-2, 1, -2], [2, 2, 2], k.Gd)];
     // thigh: gunmetal trousers, flared scale tasset on the outside/front/back (rotates with the leg)
     P_['thigh' + s] = [
-      B([-3, -18, -3], [4, 1, 4], (x, y) => (y % 5 === 0 ? C.Gd : C.G)),
-      ...lamellar([-2, -9, -4], [5, 2, 5], { rowH: 2, trim: C.T, jag: true }).map((b) => mirX(b, sx, 1)),
+      B([-3, -18, -3], [4, 1, 4], (x, y) => (y % 5 === 0 ? k.Gd : k.G)),
+      ...lamellar([-2, -9, -4], [5, 2, 5], { rowH: 2, trim: k.T, jag: true }).map((b) => mirX(b, sx, 1)),
     ];
     // shin: plated greave over the front/sides with a silver ridge and knee cop, teal band, gunmetal calf
     P_['shin' + s] = [
-      B([-2, -17, -2], [3, 0, 3], C.G),                               // slim calf, gunmetal wrap
+      B([-2, -17, -2], [3, 0, 3], k.G),                               // slim calf, gunmetal wrap
       ...lamellar([-2, -15, -1], [3, -3, 4], { rowH: 3, pw: 4 }),     // greave plates
-      B([0, -14, 4], [1, -3, 5], C.S),                                // centre ridge
-      B([-3, -17, -3], [4, -15, 4], (x, y) => (y === -17 ? C.T : C.S)),            // greave cuff over the boot
-      B([-2, -3, 0], [3, 2, 5], C.S),                                 // knee cop
-      B([0, -2, 5], [1, 0, 6], C.T),
+      B([0, -14, 4], [1, -3, 5], k.S),                                // centre ridge
+      B([-3, -17, -3], [4, -15, 4], (x, y) => (y === -17 ? k.T : k.S)),            // greave cuff over the boot
+      B([-2, -3, 0], [3, 2, 5], k.S),                                 // knee cop
+      B([0, -2, 5], [1, 0, 6], k.T),
     ];
     // foot: armoured white boot, silver toe cap, dark sole, teal ankle band
     P_['foot' + s] = [
-      B([-3, -3, -2], [3, 1, 6], (x, y) => (y === -1 ? C.W2 : C.W)),
-      B([-3, -3, 4], [3, -1, 7], C.S),
-      P([-3, -3, -2], [3, -2, 7], C.sole),
-      B([-3, 0, -3], [3, 1, 3], C.T),
+      B([-3, -3, -2], [3, 1, 6], (x, y) => (y === -1 ? k.W2 : k.W)),
+      B([-3, -3, 4], [3, -1, 7], k.S),
+      P([-3, -3, -2], [3, -2, 7], k.sole),
+      B([-3, 0, -3], [3, 1, 3], k.T),
     ];
   }
   return P_;
@@ -199,12 +202,13 @@ function limbs(P_) {
 
 /** Big flared three-tier scale pauldron + upturned wing, chest-aligned, u = outward (voxels). */
 function pauldronBoxes(sx) {
+  const k = K;
   const b = [
-    ...lamellar([-4, 2, -4], [2, 5, 4], { base: C.W, rowH: 3 }),
-    ...lamellar([-2, -1, -5], [3, 2, 5], { base: C.W, rowH: 3 }),
-    ...lamellar([-1, -4, -5], [4, -1, 5], { base: C.W, rowH: 3, trim: C.T, jag: true }),
-    B([2, 4, -3], [4, 6, 3], C.Wh),                                  // upturned outer wing, silver rim
-    B([3, 6, -3], [5, 7, 3], C.S),
+    ...lamellar([-4, 2, -4], [2, 5, 4], { base: k.W, rowH: 3 }),
+    ...lamellar([-2, -1, -5], [3, 2, 5], { base: k.W, rowH: 3 }),
+    ...lamellar([-1, -4, -5], [4, -1, 5], { base: k.W, rowH: 3, trim: k.T, jag: true }),
+    B([2, 4, -3], [4, 6, 3], k.Wh),                                  // upturned outer wing, silver rim
+    B([3, 6, -3], [5, 7, 3], k.S),
   ];
   return b.map((bx) => mirX(bx, sx));
 }
@@ -290,7 +294,7 @@ function bladeGeo() {
  * concept: peach rim/sun, blue-grey fill. Added after lighting and faded out where the surface is already bright, so
  * it lifts the shade side without blowing sunlit armour into the bloom. Does not touch the scene or other materials.
  */
-function heroLook(mat, fill = 0.4, rim = 0.9) {
+export function heroLook(mat, fill = 0.4, rim = 0.9) {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uHeroFill = { value: fill };
     sh.uniforms.uHeroRim = { value: rim };
@@ -304,6 +308,13 @@ function heroLook(mat, fill = 0.4, rim = 0.9) {
   };
   mat.customProgramCacheKey = () => `hero-look-${fill}-${rim}`;
   return mat;
+}
+
+/** Torso / limb / pauldron boxes of this body in another palette (same keys as C): other characters (src/chars/*)
+ *  share the build and the armour cut, then add their own head, weapon and trim. → { parts: {joint: boxes}, pauldron(sx) } */
+export function bodyParts(pal) {
+  K = pal;
+  try { const pd = [pauldronBoxes(-1), pauldronBoxes(1)]; return { parts: limbs(torso()), pauldron: (sx) => pd[sx > 0 ? 1 : 0] }; } finally { K = C; }
 }
 
 export function createHeroModel(rig) {
