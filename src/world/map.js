@@ -199,7 +199,9 @@ export function clampWalk(x, z, pad = 0) {
     if (d >= pad) break;
     const gx = walkD(x + E, z) - walkD(x - E, z), gz = walkD(x, z + E) - walkD(x, z - E), g2 = gx * gx + gz * gz;
     if (g2 < 1e-6) { x += 0.37; continue; }                                  // flat spot (medial axis of a cut): nudge
-    const s = (pad - d + 0.01) * 2 * E / g2;
+    // step along the unit gradient by the deficit, ≤ 3 m per iteration: a Newton step (deficit / |∇d|) blew up to tens
+    // of metres where the field is nearly flat (thin closed gates, river banks) and teleported soldiers across the map
+    const s = Math.min(pad - d + 0.01, 3) / Math.sqrt(g2);
     x += gx * s; z += gz * s;
   }
   _out[0] = x; _out[1] = z;
