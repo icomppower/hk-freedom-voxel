@@ -62,7 +62,7 @@ function head() {
 // ---------------------------------------------------------------- bow (weapon joint: origin = grip, +Z = arrow line, limbs ±Y)
 export const BOW = { v: 0.02, R: 42, brace: -0.13 };   // voxel, limb length (voxels: 0.84 m), string plane z (m) behind the grip
 /** Limb profile z (voxels) at |y| = u·R: the limb bends back toward the string, the tips recurve forward. */
-const bowZ = (u) => Math.round(9 * Math.pow(Math.cos(Math.min(1, u) * Math.PI / 2), 1.2) - 9 + (u > 0.84 ? (u - 0.84) / 0.16 * 2.6 : 0));
+const bowZ = (u) => Math.round(14 * Math.pow(Math.cos(Math.min(1, u) * Math.PI / 2), 1.2) - 14 + (u > 0.76 ? ((u - 0.76) / 0.24) ** 1.5 * 7.6 : 0));   // deep D, hooked tips (string plane unchanged)
 function bowGeo() {
   const { R } = BOW, boxes = [];
   for (let y = -R; y <= R; y++) {
@@ -168,7 +168,7 @@ export function createHzSecondary(scene, rig, mat) {
     wind: 2.2, cone: 110, sway: 0.5, seg: tailSeg, hit: ['head'] });
 
   // bowstring (2 thin segments via the nock), nocked arrow, fire glow at its head, slash ribbon
-  const strMat = new THREE.MeshBasicMaterial({ color: 0xf4ead8 });
+  const strMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 1.38, 1.15) });   // bright: the string must read against a bright sky at select scale
   const unit = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);    // unit box from y 0 → 1 (scaled along a segment)
   const str = [0, 1].map(() => { const m = new THREE.Mesh(unit, strMat); m.matrixAutoUpdate = false; m.frustumCulled = false; scene.add(m); return m; });
   const arrowGeo = vox([B([0, 0, 0], [1, 1, 44], (x, y, z) => (z > 40 ? 0xd8dde4 : z < 5 ? HC.feather : HC.bowH)), B([-1, 0, 0], [2, 1, 4], HC.feather),
@@ -224,7 +224,7 @@ export function createHzSecondary(scene, rig, mat) {
       const sc = rig.root.scale.y;
       if (drawn) {
         nock.set(0, 0, loc.z).applyMatrix4(W);
-        seg(str[0], nock, t0, 0.011 * sc); seg(str[1], t1, nock, 0.011 * sc);
+        seg(str[0], nock, t0, 0.018 * sc); seg(str[1], t1, nock, 0.018 * sc);
         // nocked arrow along the line from the nock (bow-local frame)
         m4.copy(W).multiply(new THREE.Matrix4().makeTranslation(0, 0, loc.z - 0.02));
         arrow.matrix.copy(m4); arrow.matrixWorldNeedsUpdate = true;
@@ -235,7 +235,7 @@ export function createHzSecondary(scene, rig, mat) {
           flame.matrix.copy(W).multiply(new THREE.Matrix4().makeTranslation(0, 0, loc.z + 0.98 * sc)).multiply(new THREE.Matrix4().makeScale(k, k, k));
           flame.matrixWorldNeedsUpdate = true;
         }
-      } else { str[0].visible = true; seg(str[0], t1, t0, 0.011 * sc); flame.visible = false; }
+      } else { str[0].visible = true; seg(str[0], t1, t0, 0.018 * sc); flame.visible = false; }
       str[1].visible = drawn; arrow.visible = drawn;
 
       // slash ribbon: upper-limb blade (root-relative speed > 7 m/s: a cut, not the run swing)

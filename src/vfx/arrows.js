@@ -309,6 +309,7 @@ export function createArrowView(scene, game, proj, fx) {
     shed += dt;
     const emit = shed >= 1 / 60;                               // trail particles at ≤ 60 Hz whatever the frame rate
     if (emit) shed = 0;
+    let hi = 0;                                                // draw only up to the last live slot (the pool is 544 × 468 tris)
     for (let i = 0; i < N; i++) {
       const st = P.st[i];
       if (!st) {
@@ -373,7 +374,7 @@ export function createArrowView(scene, game, proj, fx) {
       }
       _m.compose(_p.set(x, y + ground(x, z), z), _q, _s.setScalar(bigK));
       arrows.setMatrixAt(i, _m);
-      prev[i] = st;
+      prev[i] = st; hi = i + 1;
     }
     // pinned arrows ride the soldier they stopped in
     for (let j = 0; j < NPIN; j++) {
@@ -384,8 +385,9 @@ export function createArrowView(scene, game, proj, fx) {
       _q.setFromUnitVectors(FWD, _d);
       const px = c.x[e] + pin.ox[j], pz = c.z[e] + pin.oz[j];
       _m.compose(_p.set(px, c.y[e] + pin.oy[j] + ground(px, pz), pz), _q, _s.setScalar(pin.s[j] * sink));
-      arrows.setMatrixAt(N + j, _m);
+      arrows.setMatrixAt(N + j, _m); hi = N + NPIN;
     }
+    arrows.count = hi;
     arrows.instanceMatrix.needsUpdate = true;
     updateGiantTrail(dt);
     updateDraw(dt);

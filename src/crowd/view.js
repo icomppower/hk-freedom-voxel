@@ -553,15 +553,21 @@ export function createCrowdView(scene, game) {
     }
   }
 
+  // camera cull (scene lane): soldiers outside last frame's view frustum (+ 2.5 m slack) aren't packed at all, so they
+  // cost neither the main nor the shadow pass; they snap to their pose on re-entry (seen = 0)
+  const frustum = new THREE.Frustum(), vp = new THREE.Matrix4(), sph = new THREE.Sphere(new THREE.Vector3(), 2.5);
   return {
-    update(dt) {
+    /** camera (optional): cull to its frustum. */
+    update(dt, camera) {
       time += dt; uTime.value = time; frameNo++;
+      if (camera) frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
       const h = game.hero;
       uSight.value.set(h.x, ground(h.x, h.z) + h.y + 0.95, h.z);
       for (const m of meshes) m.count = 0;
       for (let i = 0; i < N; i++) {
         const s = crowd.st[i];
         if (s === ST.OFF) { seen[i] = 0; continue; }
+        if (camera && !frustum.intersectsSphere(sph.set(sph.center.set(crowd.x[i], crowd.y[i] + 1, crowd.z[i]), 2.5))) { seen[i] = 0; continue; }
         // standing soldiers (idle ranks) are recomputed every 4th frame and replayed in between
         if (s === ST.IDLE && seen[i] && crowd.type[i] === 0 && !crowd.flash[i] && ((frameNo + i) & 3)) replay(i);
         else write(i, s, (s === ST.IDLE ? 4 : 1) * dt);
