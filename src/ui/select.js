@@ -12,13 +12,16 @@ import * as THREE from 'three';
 import { CHARS, CHAR_ORDER, paintPortrait } from '../chars/index.js';
 import { createRig, sampleClip, POSE_SIZE, HERO_SCALE } from '../hero/rig.js';
 import { ground, zone } from '../world/map.js';
-import { createNav, sfx, inkWipe, wiping, stamp, clearStamp, replay } from './menu.js';
-import { SWASH } from './title.js';
+import { createNav, sfx, inkWipe, wiping, afterWipe, stamp, clearStamp, replay } from './menu.js';
+import { SWASH, STAGE as TITLE } from './title.js';
 import { MODE } from './loading.js';
 
 const STATS = [['atk', '攻', 'Attack'], ['def', '防', 'Defence'], ['speed', '速', 'Speed'], ['range', '射程', 'Reach']];
-// stage framing: officer ≈ 6.3 m from the lens, 30° vFOV (full body + headroom), aim shifted so he stands at x ≈ 72 %
-const STAGE = { dist: 6.3, eye: 1.2, aim: 1.05, fov: 30, screenX: 0.44, face: Math.PI - 0.38, sway: 0.28, spin: 1.35, motes: 110 };
+// stage framing: officer ≈ 6.3 m from the lens, 30° vFOV (full body + headroom), aim shifted so he stands at x ≈ 75 %
+// (clear of the info column, which ends at ≈ 60 %)
+const STAGE = { dist: 6.3, eye: 1.2, aim: 1.05, fov: 30, screenX: 0.5, face: Math.PI - 0.38, sway: 0.28, spin: 1.35, motes: 110 };
+// key-art frame (snapshot for the loading card / result, main.js snapArt): closer, knees up, the title's held pose
+const KEYART = { dist: 4.3, eye: 1.35, aim: 1.3, screenX: 0.42 };
 
 export function createSelect(el, flow) {
   el.innerHTML = `
@@ -73,14 +76,16 @@ export function createSelect(el, flow) {
   }
 
   const go = () => {
-    if (busy || wiping()) return;
+    if (busy) return;
+    if (wiping()) return afterWipe(go);             // pressed while this screen is still being uncovered: queued
     busy = true;
     stamp($('.s-act'), '出陣');
     const id = CHAR_ORDER[cur];
     setTimeout(() => inkWipe(() => flow.go('loading', { mode: ctx.mode, char: id, chapter: 'ch1' })), 520);
   };
   const back = () => {
-    if (busy || wiping()) return;
+    if (busy) return;
+    if (wiping()) return afterWipe(back);
     busy = true; sfx('back');
     inkWipe(() => flow.go('title'));
   };
@@ -106,7 +111,7 @@ export function createSelect(el, flow) {
   addEventListener('pointerup', () => { drag = null; });
 
   // ---- 3D: officer stage (render-only; every officer meshed on the first view, kept for the session)
-  let group = null, motes = null, t = 0;
+  let group = null, motes = null, t = 0, keyart = false;
   const models = {}, pose = new Float32Array(POSE_SIZE), P = new THREE.Vector3(), tmp = new THREE.Vector3();
   // the foot of the mountain road (山道), looking up it: open ground in the long Dingjun map and inside the old arena disc
   const stageAt = () => {
@@ -147,9 +152,11 @@ export function createSelect(el, flow) {
     // idle clip, turntable sway + spin-in (easeOutCubic) + the player's drag, eased home when let go
     if (drag === null) userYaw *= Math.exp(-2.5 * dt);
     const u = Math.min(1, spinT / 0.75), spin = S.spin * (1 - u) ** 3;
-    sampleClip(M.K.clips.idle, (t % 2.5) / 2.5, pose);
+    const ka = keyart && TITLE.cast.find((c) => c.id === id), F = ka ? KEYART : S;
+    if (ka) sampleClip(M.K.clips[ka.clip], ka.u, pose);
+    else sampleClip(M.K.clips.idle, (t % 2.5) / 2.5, pose);
     M.rig.root.scale.set(1, 1, 1);
-    M.rig.apply(pose, p, S.face + Math.sin(t * 0.35) * S.sway + spin + userYaw);
+    M.rig.apply(pose, p, ka ? ka.face : S.face + Math.sin(t * 0.35) * S.sway + spin + userYaw);
     M.rig.root.scale.setScalar(HERO_SCALE); M.rig.root.updateMatrixWorld(true);
     if (M.fresh) { M.sec.reset(); M.fresh = false; }
     M.sec.update(dt);
@@ -163,10 +170,10 @@ export function createSelect(el, flow) {
     a.needsUpdate = true;
     // camera: in front of him (toward -Z, looking up the field into the sun), aim shifted to screen-left so he stands
     // at x ≈ 68 %; DoF focus on his chest
-    const aspect = camera.aspect, side = S.screenX * S.dist * Math.tan(S.fov * Math.PI / 360) * aspect;
+    const aspect = camera.aspect, side = F.screenX * F.dist * Math.tan(S.fov * Math.PI / 360) * aspect;
     camera.fov = S.fov; camera.updateProjectionMatrix();
-    camera.position.set(p.x + side * 0.3, p.y + S.eye, p.z - S.dist);
-    tmp.set(p.x + side, p.y + S.aim, p.z);
+    camera.position.set(p.x + side * 0.3, p.y + F.eye, p.z - F.dist);
+    tmp.set(p.x + side, p.y + F.aim, p.z);
     camera.lookAt(tmp);
     camera.updateMatrixWorld();
     focus.set(p.x, p.y + 1.1, p.z);
@@ -174,6 +181,8 @@ export function createSelect(el, flow) {
 
   return {
     view,
+    /** main.js snapArt: true for one render = the key-art frame of the focused officer. */
+    keyart(v) { keyart = v; },
     enter(c) {
       ctx = c; busy = false; armed = false; clearStamp($('.s-act'));
       const [zh, en] = MODE[c.mode] || MODE.free;

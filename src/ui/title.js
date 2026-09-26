@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { CHARS } from '../chars/index.js';
 import { createRig, sampleClip, POSE_SIZE, HERO_SCALE } from '../hero/rig.js';
 import { heroLook } from '../hero/model.js';
-import { createNav, sfx, inkWipe, wiping, stamp, clearStamp } from './menu.js';
+import { createNav, sfx, inkWipe, wiping, afterWipe, stamp, clearStamp } from './menu.js';
 import { ground, zone } from '../world/map.js';
 
 // brush swash drawn under the focused item (revealed left → right) — one tapered stroke, dry tail
@@ -44,13 +44,13 @@ export const CONTROLS = [   // also the pause menu's table (main.js)
 export const STAGE = {
   at: 0.56,                    // stage point: this far up the pass zone (0 = south edge, 1 = north); the lens stays north
                                // of the origin, where the idle gameplay hero stands before any battle
-  dist: 5.1, eye: 0.9, aim: 1.25, fov: 32, screenX: 0.62,       // pair centred at x ≈ 62 % of the frame
+  dist: 5.1, eye: 1.05, aim: 1.5, fov: 32, screenX: 0.63,       // pair centred at x ≈ 63 % of the frame; aim high enough to keep Zhao Yun's spearhead in shot
   push: -0.3, pushT: 3.2,      // enter: start this much closer (on Zhao Yun), pull back to the pair over pushT s (the path
                                // stays between the lens and the officers: nothing on the road can cross it)
   embers: 240,
   cast: [
-    { id: 'zhaoyun', clip: 'mu_act', u: 1, x: 0.45, z: 0, face: Math.PI + 0.3, look: [0.7, 1.8], tag: [-0.32, 2.45], banner: [1.9, 5.5] },
-    { id: 'huangzhong', clip: 'hz_face', u: 1, x: -1.1, z: 1.0, face: Math.PI + 0.9, look: [1.0, 2.0], tag: [-0.35, 2.1], banner: [-3.1, 7.5] },
+    { id: 'zhaoyun', clip: 'mu_act', u: 1, x: 0.15, z: 0, face: Math.PI + 0.4, look: [0.7, 1.8], tag: [-0.32, 2.45], banner: [1.9, 5.5] },
+    { id: 'huangzhong', clip: 'hz_face', u: 1, x: -1.35, z: 1.4, face: Math.PI + 0.55, look: [1.0, 2.0], tag: [0.3, 2.75], banner: [-5.2, 7.5] },
   ],
 };
 
@@ -88,7 +88,8 @@ export function createTitle(el, flow) {
   };
   const wake = () => { pre = false; el.classList.remove('pre'); sfx('ok'); };
   const ok = () => {
-    if (busy || wiping()) return;
+    if (busy) return;
+    if (wiping()) return afterWipe(ok);
     if (pre) return wake();
     if (ctl) return back();
     const it = ITEMS[cur];
@@ -98,7 +99,8 @@ export function createTitle(el, flow) {
     setTimeout(() => inkWipe(() => flow.go('select', { mode: it.go })), 380);
   };
   const back = () => {
-    if (busy || wiping()) return;
+    if (busy) return;
+    if (wiping()) return afterWipe(back);
     if (pre) return wake();
     if (ctl) { sfx('back'); setCtl(false); }
   };

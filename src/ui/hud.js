@@ -23,8 +23,7 @@ export function createHud(root, game, camera) {
     <div class="h-obj"><i>◆</i><b></b><small></small><span class="go"><i class="ar"></i><em></em></span></div>
     <div class="h-intro"><div class="zh"></div><i class="seal"></i><div class="en"></div>
       <div class="sub"></div>
-      <div class="keys"><kbd>WASD</kbd> 移動 move · <kbd>J</kbd> 攻擊 attack · <kbd>K</kbd> 蓄力 charge<br>
-        <kbd>Space</kbd> 跳躍 jump · <kbd>L</kbd> 閃避 dodge · <kbd>I</kbd> 無雙 musou · <kbd>R</kbd> 鎖定 recenter · <kbd>H</kbd> 說明</div></div>
+      <div class="keys"></div></div>
     <div class="h-target"><i class="seal">將</i><b></b><span></span><div class="bar"><em></em><i></i></div><strong>擊破</strong></div>
     <div class="h-map"><div class="morale"><i></i><span>蜀</span><span>魏</span></div><canvas width="200" height="200"></canvas><i class="seal">${MAP.name.zh}</i></div>
     <div class="h-offs">${'<div class="off"><i class="ld"></i><div class="mk">▼▼</div><div class="bd"><b></b><span></span><div class="bar"><em></em><i></i></div></div></div>'.repeat(nOff)}</div>
@@ -66,6 +65,10 @@ export function createHud(root, game, camera) {
     text($('.h-intro .zh'), ch.name.zh); text($('.h-intro .seal'), ch.seal); text($('.h-intro .en'), ch.name.en.toUpperCase());
     text($('.h-intro .sub'), ch.motto); text($('.h-player .name'), ch.name.zh);
     $('.h-copy').innerHTML = ch.lines.copy.join('<br>');
+    // keys row from the kit: an aim mode (kit.aimShot, 黃忠) puts hold-K aim first, before the charge
+    $('.h-intro .keys').innerHTML = `<kbd>WASD</kbd> 移動 move · <kbd>J</kbd> 攻擊 attack · ${ch.kit.aimShot
+      ? '<kbd>K</kbd> 長按瞄準 hold to aim · 連擊中 蓄力 mid-combo charge' : '<kbd>K</kbd> 蓄力 charge'}<br>
+      <kbd>Space</kbd> 跳躍 jump · <kbd>L</kbd> 閃避 dodge · <kbd>I</kbd> 無雙 musou · <kbd>R</kbd> 鎖定 recenter · <kbd>H</kbd> 說明`;
     paintPortrait($('.h-player canvas'), ch);
     for (const g of chainG) g.f = -99;
     for (const o of offs) o.lag = 1;
