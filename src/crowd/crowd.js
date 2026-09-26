@@ -68,7 +68,7 @@ export function createCrowd(game, grunts) {
     raiseF: I(), feint: I(), wind: I(),                         // raiseF: rallying until (render + ring surge); feint strike; winding up
     hitHeavy: I(),                                              // last hit was heavy (set by combat, read by hitfx.js)
     boss: I(), offName: new Array(CROWD.officerSlots).fill(null),   // story: boss flag; officer display names {zh, en}
-    waveT: 0, tokensUsed: 0, strikeF: 0, gap: 0, graceF: 0, heroHp: 0, wavesOn: false, engaged: 0,
+    waveT: 0, tokensUsed: 0, strikeF: 0, gap: 0, graceF: 0, heroHp: 0, wavesOn: false, engaged: 0, zMax: Infinity,   // zMax: story stage bound (waves)
   };
   const head = new Int32Array(GRID * GRID), next = new Int32Array(N);
   const px = new Float64Array(N), pz = new Float64Array(N), sqAlive = new Int32Array(MAXSQ);
@@ -96,7 +96,7 @@ export function createCrowd(game, grunts) {
 
   c.reset = () => {
     c.offName.fill(null);
-    c.st.fill(ST.OFF); c.token.fill(0); c.tokensUsed = 0; c.strikeF = 0; c.gap = 0; c.graceF = 0; c.heroHp = game.hero.hp; c.waveT = 0; c.sq.n = 0; c.wavesOn = false;
+    c.st.fill(ST.OFF); c.token.fill(0); c.tokensUsed = 0; c.strikeF = 0; c.gap = 0; c.graceF = 0; c.heroHp = game.hero.hp; c.waveT = 0; c.sq.n = 0; c.wavesOn = false; c.zMax = Infinity;
   };
 
   function freeSlots(officer) {
@@ -527,8 +527,11 @@ export function createCrowd(game, grunts) {
       const dx = c.x[i] - h.x, dz = c.z[i] - h.z, d = Math.hypot(dx, dz);
       if (d < hr && !h.y) { const k = (hr - d) / (d || 1e-4); px[i] += dx * k; pz[i] += dz * k; }
     }
+    // every live body is clamped here, pushed or not: this runs after both movers of the step (the AI integrate above
+    // and combat reactions(), which run first in main.js step()), so nobody walks, slides or is thrown through a
+    // closed gate, the castle wall or a cliff (airborne bodies too: they stop at the fence instead of landing past it)
     for (let i = 0; i < N; i++) {
-      if (!px[i] && !pz[i]) continue;
+      if (c.st[i] === ST.OFF) continue;
       [c.x[i], c.z[i]] = clampWalk(c.x[i] + Math.max(-0.2, Math.min(0.2, px[i] * 0.6)), c.z[i] + Math.max(-0.2, Math.min(0.2, pz[i] * 0.6)), -1);
     }
   }
@@ -543,7 +546,11 @@ export function createCrowd(game, grunts) {
     c.waveT = 0;
     const n = Math.min(off.length, rng.int(CROWD.wave[0], CROWD.wave[1]));
     const a = game.cam.yaw + rng.range(-1.1, 1.1), d = rng.range(CROWD.waveDist[0], CROWD.waveDist[1]);
-    const [sx, sz] = clampWalk(h.x + Math.sin(a) * d, h.z + Math.cos(a) * d, 1);
+    // story stage bound (c.zMax, set by story fire() with its `limit`): a column that would land past it (behind a
+    // closed barricade / gate it can't cross) is mirrored behind the hero instead
+    let wz = h.z + Math.cos(a) * d;
+    if (wz > c.zMax - 4) wz = Math.min(c.zMax - 4, 2 * h.z - wz);
+    const [sx, sz] = clampWalk(h.x + Math.sin(a) * d, wz, 1);
     makeSquad(off.slice(0, n), sx, sz, Math.atan2(h.x - sx, h.z - sz), 3, SQ_CHARGE);   // a column that runs straight in
     // free mode: KO'd officers come back with the waves (story officers are named and stay down)
     for (const i of freeSlots(true)) {

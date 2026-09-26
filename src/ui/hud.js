@@ -77,7 +77,16 @@ export function createHud(root, game, camera) {
   // system banners queue (one at a time, held back while the Musou plays); dialogue (top left) and the banner band
   // (y 64-70 %) sit apart, so neither cancels the other. Dialogue holds 5 s like DW8.
   // big: the DW8 officer-slain / commander banners (larger gold brush type in the same band)
-  const banner = (html, en, dur = 150, big = false) => { if (S.bandQ.length < 3) S.bandQ.push({ html, en, dur, big }); };
+  // pri: 0 officer KO / wave, 1 story, 2 big story. The queue stays sorted by pri (FIFO within one); when full the lowest
+  // (newest of the lowest) is dropped, never a higher one. A big story banner flushes queued pri-0 chatter and cuts a
+  // pri-0 band in play, so the chapter payoff (敵總大將 討取！) shows at once, inside the victory slow-mo.
+  const banner = (html, en, dur = 150, big = false, pri = 0) => {
+    const q = S.bandQ;
+    if (pri >= 2) { for (let k = q.length - 1; k >= 0; k--) if (!q[k].pri) q.splice(k, 1); if (S.band && !S.band.pri) S.band = null; }
+    let k = q.length; while (k > 0 && q[k - 1].pri < pri) k--;
+    q.splice(k, 0, { html, en, dur, big, pri });
+    if (q.length > 3) q.splice(q.reduce((m, e, j) => (e.pri <= q[m].pri ? j : m), 0), 1);
+  };
   // dialogue: speaker {zh, en} (default: the hero); portrait = CHARS id or a {face, pal} 20×20 portrait (chars/index.js),
   // or {seal: glyph} (story NPCs: a carved name seal instead of a face), null = no badge; default: the hero's when the
   // hero speaks, none for anyone else. side 'wei' turns the panel's rule and name vermilion (enemy speaking).
@@ -92,7 +101,7 @@ export function createHud(root, game, camera) {
     dlg.classList.toggle('wei', side === 'wei');
   };
   on('story:say', (e) => say(e.zh, e.en, e.dur ?? 300, e.speaker || undefined, e.portrait !== undefined ? e.portrait : e.speaker ? null : undefined, e.side));
-  on('story:banner', (e) => banner(e.html, e.en, e.dur ?? 150, !!e.big));
+  on('story:banner', (e) => banner(e.html, e.en, e.dur ?? 150, !!e.big, e.big ? 2 : 1));
   on('story:objective', (e) => { S.obj = e.zh ? { zh: e.zh, en: e.en || '', f: game.frame } : null; if (S.obj) { text(objB, e.zh); text(objS, e.en || ''); } });
   on('crowd:wave', (e) => {
     if (game.frame - S.waveF > 600) { S.waveF = game.frame; banner('<em>魏軍</em>援兵 到着', 'Wei reinforcements have arrived!', 130); }

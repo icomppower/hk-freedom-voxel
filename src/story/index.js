@@ -86,7 +86,7 @@ export function createStory(game) {
       S.off[k] = -1; S.dead[k] = false;
     }
     if (b.waves != null) c.setWaves(b.waves);
-    if (b.limit) { S.limit = b.limit.z ? pos(b.limit.z)[1] : Infinity; S.nag = b.limit.nag || null; }
+    if (b.limit) { S.limit = c.zMax = b.limit.z ? pos(b.limit.z)[1] : Infinity; S.nag = b.limit.nag || null; }   // crowd: waves spawn inside it
     if (b.heal && !h.dead) h.hp = Math.min(h.hpMax, h.hp + b.heal * h.hpMax);
     if (b.morale != null) S.mBase = b.morale === 1 ? 1 : S.mBase + b.morale;
     if (b.gate) { setGate(b.gate, true); emit('story:gate', { id: b.gate, open: true }); }

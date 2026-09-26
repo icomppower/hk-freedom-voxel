@@ -228,21 +228,35 @@ function recoilPose(T, i, s, t, sd) {
   return t < 2 ? 55 + 45 * hash01(i, 99) : 16;
 }
 
-/** Dithered dissolve for fragments closer than `near` metres to the camera (DW-style: nothing blocks the lens). */
+// Sight cone (camera r4): the hero's chest, written each render by update(). Fragments inside the cone from the lens to
+// him (radius sightR m at his body, narrowing to the lens) and more than sightGap m in front of him are cut, so the
+// front rank of a mob no longer hides him (DW8 fades the soldiers between camera and player). The ring beside and
+// beyond him stays drawn.
+const uSight = { value: new THREE.Vector3() }, sightR = 1.1, sightGap = 0.8;
+
+/** Dithered dissolve for fragments closer than `near` metres to the camera or inside the sight cone (DW-style: nothing
+ *  blocks the lens or the hero). */
 function nearFade(material, near, extra) {
   material.customProgramCacheKey = () => `crowd-fade-${near}-${!!extra}`;
   material.onBeforeCompile = (sh) => {
     if (extra) extra(sh);
+    sh.uniforms.uSight = uSight;
     sh.vertexShader = 'varying vec3 vCrowdWP;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
       vec4 cwp = vec4(transformed, 1.0);
       #ifdef USE_INSTANCING
         cwp = instanceMatrix * cwp;
       #endif
       vCrowdWP = (modelMatrix * cwp).xyz;`);
-    sh.fragmentShader = 'varying vec3 vCrowdWP;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+    sh.fragmentShader = 'varying vec3 vCrowdWP;\nuniform vec3 uSight;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
       // camera part (r3): a clean cut at ≈1.3 × near with a thin dithered rim, not a wide screen-door band (under the
       // DoF a wide per-pixel dissolve turned near soldiers and banners into a coarse mosaic)
       float cfade = smoothstep(${(near * 1.27).toFixed(2)}, ${(near * 1.33).toFixed(2)}, distance(vCrowdWP, cameraPosition));
+      vec3 sAx = uSight - cameraPosition, sP = vCrowdWP - cameraPosition;
+      float sL = length(sAx), sT = dot(sP, sAx) / (sL * sL);
+      if (sT > 0.0 && sT < 1.0 - ${sightGap.toFixed(2)} / sL) {
+        float sR = ${sightR.toFixed(2)} * sT;
+        cfade = min(cfade, smoothstep(sR * 0.9, sR * 1.05, length(sP - sAx * sT)));
+      }
       if (cfade < 1.0 && cfade < fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715))))) discard;`);
   };
 }
@@ -542,6 +556,8 @@ export function createCrowdView(scene, game) {
   return {
     update(dt) {
       time += dt; uTime.value = time; frameNo++;
+      const h = game.hero;
+      uSight.value.set(h.x, ground(h.x, h.z) + h.y + 0.95, h.z);
       for (const m of meshes) m.count = 0;
       for (let i = 0; i < N; i++) {
         const s = crowd.st[i];

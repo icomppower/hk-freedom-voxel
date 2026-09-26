@@ -46,9 +46,11 @@ const CAM = {
   recenterF: 16, targetR: 15,               // recenter swing (frames, smoothstep) · officer target radius (m)
   lockTol: 0.35,                            // stick direction change (rad) that re-anchors the control frame to the view
   // crowd pull-out tiers: [enter at ≥ n soldiers within crowdR, leave under n (after tierHold s), pull-out share of
-  // dist, pitch add]; eased at tierRate (1/s, ≈1.5 s to settle). Dense: look up so the skyline stays in.
+  // dist, pitch add]; eased at tierRate (1/s, ≈1.5 s to settle). Dense: the boom rises over the mob (DW8: in a thick
+  // crowd the lens climbs and pulls back so he reads above the front rank instead of vanishing behind it); the crowd
+  // view also cuts soldiers standing between the lens and him (crowd/view.js nearFade sight cone)
   crowdR: 10, tierHold: 1.5, tierRate: 1.4,
-  tiers: [[0, 0, 0, 0], [22, 12, 0.08, -1.2 * DEG], [42, 30, 0.15, -2.5 * DEG]],
+  tiers: [[0, 0, 0, 0], [22, 12, 0.2, 4 * DEG], [42, 30, 0.35, 8 * DEG]],
   aimRate: 8,                               // kit aim shot ease (1/s)
   clearIn: 14, clearOut: 2.5,               // boom clearance: pull in fast at a wall, ease back out slowly (1/s)
   kickMaxPx: 4,                             // shake ceiling at 720p (bench: ≤ 4 px, finishers only)

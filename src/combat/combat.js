@@ -19,6 +19,7 @@ export const COMBAT = {
   hurtFrames: 16, downFrames: 108, getupFrames: 24, comboWindow: 150,
   tintFrames: 12,                       // victim flash: 1 sf hot silhouette, then a warm tint held ≈ 6 sf, gone by ≈ 11 sf
   stopPer: 5, stopMax: 4, stopHeavy: [6, 8], victimStopMax: 3,
+  farStop: 4,                           // projectile contacts beyond this (m): no shooter hitstop (tickDone)
   // KO throw: a killing flinch/push/spin hit blasts the body 2.2-3 H out, ≈ 0.6 s airborne, cartwheeling 270-450°
   koLift: 7.5, koForce: 9.5, koFlip2: 0.4, otgLift: 3.4,
   lensCut: 0.8,                         // hero blow-aways straight at the camera swing ≈ 75° sideways
@@ -99,11 +100,15 @@ export function createCombat(game) {
     return count;
   };
 
-  /** After a tick's applyHit()s: hero / victim hitstop and the aggregate `hits` event. */
-  function tickDone(hit, count, sx, sz, key, moveId) {
+  /** After a tick's applyHit()s: hero / victim hitstop and the aggregate `hits` event. far: a ranged hero-move contact
+   *  beyond COMBAT.farStop m (hitOne) — the victim keeps its stop, the shooter takes none (DW bows: no shooter freeze on
+   *  distant arrows; the weight is the victim's reaction). */
+  function tickDone(hit, count, sx, sz, key, moveId, far = false) {
     const c = game.crowd;
-    const hs = heroStop(hit, count, moveId, key), vs = heroMove(moveId) ? Math.min(Math.max(hs, hit.sweep ? 2 : 0), COMBAT.victimStopMax) : hs;
+    let hs = heroStop(hit, count, moveId, key);
+    const vs = heroMove(moveId) ? Math.min(Math.max(hs, hit.sweep ? 2 : 0), COMBAT.victimStopMax) : hs;
     for (let k = 0; k < count; k++) c.hs[victims[k]] = vs;
+    if (far && heroMove(moveId)) hs = 0;
     game.hitstop = Math.max(game.hitstop, hs);
     Object.assign(hitsPayload, { count, x: sx / count, z: sz / count, move: moveId, hitstop: hs, heavy: !!hit.heavy });
     emit('hits', hitsPayload);
@@ -125,7 +130,8 @@ export function createCombat(game) {
     c.lastHit[i] = key;
     applyHit(i, hit, ox, oz, yaw, moveId);
     victims[0] = i;
-    tickDone(hit, 1, c.x[i], c.z[i], key, moveId);
+    const h = game.hero;
+    tickDone(hit, 1, c.x[i], c.z[i], key, moveId, Math.hypot(c.x[i] - h.x, c.z[i] - h.z) > COMBAT.farStop);
     return true;
   };
 
