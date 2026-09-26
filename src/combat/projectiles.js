@@ -107,14 +107,16 @@ export function createProjectiles(game) {
       yaw = Math.atan2(c.x[tgt] - x, c.z[tgt] - z);
       if (!spec.pitch) pitch = Math.atan2(c.y[tgt] + 1.0 - y, Math.hypot(c.x[tgt] - x, c.z[tgt] - z));
     }
+    let lock = tgt;
     if (spec.groundAim) {                                     // drive it into the ground at the target (or groundAim m ahead)
-      const d = tgt >= 0 ? Math.min(12, Math.hypot(c.x[tgt] - x, c.z[tgt] - z)) : spec.groundAim;
+      let d = tgt >= 0 ? Math.min(12, Math.hypot(c.x[tgt] - x, c.z[tgt] - z)) : spec.groundAim;
+      if (d < 5) { d = 5; lock = -1; }                        // fx r2: never at his feet — a point-blank burst buried him in his own fireball
       pitch = -Math.atan2(y, Math.max(2, d)) + (spec.g || 0) * d / (2 * spec.speed * spec.speed);
     }
     const n = spec.n || 1, sp = (spec.spread || 0) * D2R, d0 = (spec.dir || 0) * D2R;
     for (let k = 0; k < n; k++) {
       const a = yaw + d0 + (n > 1 ? (k / (n - 1) - 0.5) * sp : 0);
-      spawn(x, y, z, a, pitch, spec, move, n > 1 && tgt >= 0 ? -1 : tgt);   // a fan does not converge on one man
+      spawn(x, y, z, a, pitch, spec, move, n > 1 && tgt >= 0 ? -1 : lock);   // a fan does not converge on one man
     }
     if (spec.rain) {                                          // skyward volley → a circle of arrows falls round the target
       const R = spec.rain, s0 = seq;

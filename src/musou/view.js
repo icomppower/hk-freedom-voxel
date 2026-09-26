@@ -292,7 +292,7 @@ export function createMusouView(parent, game, camera) {
       _v.set(Math.cos(th) * rr, Math.sin(th) * rr, 0).applyMatrix4(bases[j]);
       shard(_v.x, _v.y, _v.z, vrng.range(-0.3, 0.3), vrng.range(0, 0.6), vrng.range(-0.3, 0.3), vrng.range(0.25, 0.45), vrng.range(0.05, 0.09), 0.5, 1.4, 2.0);
     }
-    shell.material.uniforms.uK.value = 0.7 * (1 - 0.7 * dissolve) * (0.85 + 0.15 * Math.sin(time * 17));   // (fx r1: 0.7× — a halo, not a fog)
+    shell.material.uniforms.uK.value = 0.4 * (1 - 0.7 * dissolve) * (0.85 + 0.15 * Math.sin(time * 17));   // (fx r1: 0.7× — a halo, not a fog)
     const jaw = 0.18 + 0.22 * Math.max(0, Math.sin(time * 7)), wave = Math.sin(time * 11);
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i], j = p.seg + 1;

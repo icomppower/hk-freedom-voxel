@@ -63,10 +63,12 @@ const ATTACK = {
   // N1: bow raised high on the left, the upper limb's blade chops down across to the front-right
   n1: M('n1', [
     [0, {}],
-    [5, { ...tw(35), ...WIDE, spear: blade([0.34, 1.72, -0.12], [0.2, 0.9, -0.5], [0, 0.2, 1]), armR: [-20, 0, 30, 60] }, 'out'],
-    [8, { ...tw(-8), ...WIDE, hips: [0, 0.84, 0.05], spear: blade([0.2, 1.3, 0.5], [-0.3, -0.25, 0.9], [-1, -0.35, 0.1]), armR: [10, 0, 40, 40] }, 'snap'],
-    [11, { ...tw(-35), ...WIDE, hips: [0, 0.8, 0.08], spear: blade([0.02, 0.98, 0.42], [-0.65, -0.65, 0.3], [-0.6, 0, -0.8]), armR: [20, 0, 50, 30] }, 'out'],
-    [22, { ...tw(-30), ...WIDE, hips: [0, 0.82, 0.08], spear: blade([0.05, 1.0, 0.42], [-0.6, -0.6, 0.35], [-0.6, 0, -0.8]), armR: [14, 0, 44, 36] }, 'io'],
+    // (fx r2: the limb sweeps across the body — up-left → front-right → low right — instead of straight down the
+    // arrow line: that arc lay in the plane of the follow camera and its ribbon read as a straight rod)
+    [5, { ...tw(35), ...WIDE, spear: blade([0.34, 1.7, -0.02], [0.62, 0.72, 0.3], [0, 0.2, 1]), armR: [-20, 0, 30, 60] }, 'out'],
+    [8, { ...tw(-8), ...WIDE, hips: [0, 0.84, 0.05], spear: blade([0.2, 1.3, 0.5], [-0.35, 0.25, 0.9], [-1, -0.35, 0.1]), armR: [10, 0, 40, 40] }, 'snap'],
+    [11, { ...tw(-35), ...WIDE, hips: [0, 0.8, 0.08], spear: blade([0.02, 0.98, 0.42], [-0.8, -0.5, 0.3], [-0.6, 0, -0.8]), armR: [20, 0, 50, 30] }, 'out'],
+    [22, { ...tw(-30), ...WIDE, hips: [0, 0.82, 0.08], spear: blade([0.05, 1.0, 0.42], [-0.75, -0.5, 0.35], [-0.6, 0, -0.8]), armR: [14, 0, 44, 36] }, 'io'],
     [34, {}],
   ]),
   // N2: half-turn, a quick draw from the hip and a point-blank loose
