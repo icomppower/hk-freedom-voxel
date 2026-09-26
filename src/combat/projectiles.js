@@ -10,8 +10,10 @@
 // without being a homing missile. Contact uses a swept segment vs the soldier's cylinder (r 0.42 m, standing 1.9 m tall,
 // lying 0.5 m, airborne bodies around their centre) through a coarse spatial grid, so fast arrows never tunnel.
 //
-// Events: arrow:fire {x,y,z, yaw, n, heavy, fire, big, sky} (once per shot) · arrow:burst {x,z, r, fire, heavy} ·
-// arrow:headshot {i, x,y,z} (aim-mode head hit on an officer).
+// Events: arrow:fire {x,y,z, yaw, pitch, spread, n, heavy, fire, big, sky, move} (once per shot) · arrow:burst {x,z, r,
+// fire, heavy, big, count} · arrow:headshot {i, x,y,z} (aim-mode head hit on an officer) · arrow:hit {a (arrow), e
+// (soldier), x,y,z (contact), dx,dy,dz (flight dir), big, fire, spent} (one reused object: read it, never keep it) ·
+// arrow:rain {x, z, r, delay, over (s)} (where and when a rain volley will fall).
 // Render: src/vfx/arrows.js reads the SoA pool (x/y/z, vx/vy/vz, st, t, kind, fire, big) and never writes it.
 import { ST } from '../crowd/crowd.js';
 import { emit } from '../core/events.js';
@@ -83,7 +85,8 @@ export function createProjectiles(game) {
     P.vx[i] = Math.sin(yaw) * cp * v; P.vy[i] = Math.sin(pitch) * v; P.vz[i] = Math.cos(yaw) * cp * v;
     P.st[i] = AS.FLY; P.t[i] = 0; P.life[i] = Math.max(4, Math.round((spec.range || 20) / v * 60));
     P.pierce[i] = spec.pierce ?? 0; P.key[i] = newKey(); P.tgt[i] = tgt;
-    P.kind[i] = spec.sky ? 3 : 0; P.fire[i] = spec.fire ? 1 : 0; P.big[i] = spec.big || 0; P.head[i] = spec.head ? 1 : 0;
+    P.kind[i] = spec.sky ? 3 : spec.drop ? 4 : 0;           // 3 skyward volley, 4 falling rain (render: long streaks)
+    P.fire[i] = spec.fire ? 1 : 0; P.big[i] = spec.big || 0; P.head[i] = spec.head ? 1 : 0;
     P.spec[i] = spec; P.move[i] = move;
     return i;
   }
@@ -118,7 +121,7 @@ export function createProjectiles(game) {
       let cx, cz;
       const t2 = lockOn(h.x, h.z, h.yaw, R.reach, 50 * D2R, false);
       if (t2 >= 0) { cx = c.x[t2]; cz = c.z[t2]; } else { cx = h.x + Math.sin(h.yaw) * R.ahead; cz = h.z + Math.cos(h.yaw) * R.ahead; }
-      const rs = { ...spec, sky: false, rain: null, pierce: 0, rad: 0.45, speed: 34, range: 60, home: 0 };
+      const rs = { ...spec, sky: false, drop: true, rain: null, pierce: 0, rad: 0.45, speed: 34, range: 60, home: 0 };
       const ls = { ...rs, kb: 'launch', heavy: true, dmg: spec.dmg * 1.6 };
       for (let k = 0; k < R.n; k++) {
         const a = hash01(s0, k, 1) * Math.PI * 2, r = R.r * Math.sqrt(hash01(s0, k, 2)), ax = cx + Math.sin(a) * r, az = cz + Math.cos(a) * r;
@@ -127,8 +130,9 @@ export function createProjectiles(game) {
         queue.push({ at, x: ax - Math.sin(ta) * tilt * 14, y: 14, z: az - Math.cos(ta) * tilt * 14, yaw: ta, pitch: -Math.atan2(1, tilt),
           spec: k >= R.n - R.launchLast ? ls : rs, move });
       }
+      emit('arrow:rain', { x: cx, z: cz, r: R.r, delay: R.delay / 60, over: R.over / 60 });
     }
-    emit('arrow:fire', { x, y, z, yaw, n, heavy: !!spec.heavy, fire: !!spec.fire, big: spec.big || 0, sky: !!spec.sky, move });
+    emit('arrow:fire', { x, y, z, yaw, pitch, spread: sp, n, heavy: !!spec.heavy, fire: !!spec.fire, big: spec.big || 0, sky: !!spec.sky, move });
     return tgt;
   };
 
@@ -177,6 +181,7 @@ export function createProjectiles(game) {
   }
 
   const one = { shape: 'line' };                        // arrows push along their flight
+  const hitEv = { a: 0, e: 0, x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 1, big: 0, fire: 0, spent: false };
   /** Swept test of arrow i over its move this frame (p0 → p0 + v·dt): hit every soldier the segment passes through, in
    *  grid order, until the pierce count runs out. Returns false when the arrow is spent. */
   function sweep(i, x0, y0, z0, x1, y1, z1) {
@@ -199,7 +204,12 @@ export function createProjectiles(game) {
           emit('arrow:headshot', { i: e, x: c.x[e], y: ey + 1.6, z: c.z[e] });
         }
         if (!game.combat.hitOne(e, hit, x0 + dx * u - Math.sin(yaw) * 0.5, z0 + dz * u - Math.cos(yaw) * 0.5, yaw, P.key[i], false, P.move[i])) continue;   // refused (KO'd this tick): no pierce spent
-        if (--P.pierce[i] < 0) {
+        const spent = --P.pierce[i] < 0, vl = Math.hypot(P.vx[i], P.vy[i], P.vz[i]) || 1;
+        const H = hitEv;
+        H.a = i; H.e = e; H.x = x0 + dx * u; H.y = ay; H.z = z0 + dz * u; H.dx = P.vx[i] / vl; H.dy = P.vy[i] / vl; H.dz = P.vz[i] / vl;
+        H.big = P.big[i]; H.fire = P.fire[i]; H.spent = spent && !s.burst;
+        emit('arrow:hit', hitEv);
+        if (spent) {
           if (s.burst) burst(i, c.x[e], c.z[e]);
           else P.st[i] = AS.NONE;
           return false;

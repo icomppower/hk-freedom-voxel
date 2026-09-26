@@ -1,170 +1,444 @@
-// Arrow VFX (render-only; reads the projectile pool src/combat/projectiles.js and its events, never writes sim state):
-//  · instanced voxel arrows along their velocity (heavy ×1.6, the Musou giant ×5); stuck arrows stand in the ground at
-//    their flight angle and sink away over their last 40 sf
-//  · a bright streak behind every flying arrow (≈ 3 sf of travel: reads at 60-80 m/s where the arrow itself is a blur),
-//    white-gold, orange for fire arrows, a long blazing wake for the giant
-//  · embers shed by fire arrows, a pop of dust + splinters where an arrow bites the ground, a bow flash on every shot
-//  · bursts: expanding fire / dust ring, a light flash and an ember fountain (sized by the burst radius)
-//  · headshot: a gold star + needle burst over the officer's head
-// Positions stay in sim space (y = height above ground); ground(x, z) is added when composing the matrices.
+// Arrow VFX (render-only; reads the projectile pool src/combat/projectiles.js, its events and the hero's move state,
+// never writes sim state). Built on the Huang Zhong fx primitives (src/chars/huangzhong/fx.js). Layers per stage:
+//  · draw / charge (the frames before every shot, and aim mode): light gathers on the arrowhead (motes converging, a
+//    growing gold core), contracting charge rings on the charge shots, a full-draw ping in aim mode
+//  · release (arrow:fire): muzzle flash (hot core + warm halo), forward star rays, string glint, an air-burst ring on the
+//    arrow line (two on heavy shots), a spray line per arrow of a fan, dust kicked back from his feet + camera thump +
+//    light flash on heavy shots, a flare column on the skyward rain volley
+//  · flight: the voxel arrow + a bright core streak + a soft glow trail + fading afterimages; heavy arrows cut air rings
+//    along their line; fire arrows burn (flickering head, flame trail, smoke); rain falls as long streaks; the Musou
+//    giant carries a sun core, a double spiral aura, a flame shell, torn-up dust under its path and a light trail that
+//    lingers after it explodes
+//  · impact (arrow:hit): hit flash, spark burst along the flight, dust puff, a pierce streak out of the body, and the
+//    spent arrow stays pinned in the soldier for ≈ 0.7 s; a ground bite = dust + chips + a small ring, the arrow stands
+//    in the ground at its flight angle and sinks away
+//  · rain (arrow:rain): a red-gold marker circle where it will fall and a sky flare over it
+//  · bursts (arrow:burst): small = flash, ring, dust (+ mini fireball and scorch when fire); big (C6) = core flash,
+//    fireball, smoke column, ground + air shock rings, sparks, embers, thrown earth, scorch decal with cooling embers,
+//    light pulse, camera thump; the Musou giant's explosion scales it up and adds a light pillar
+//  · headshot: gold star burst, rings and flash over the officer's head
+// Positions stay in sim space (y = height above ground); ground(x, z) is added when composing.
 import * as THREE from 'three';
 import { on } from '../core/events.js';
 import { vrng } from '../core/rng.js';
 import { vox } from '../hero/model.js';
+import { heroPose } from '../hero/hero.js';
+import { POSE_SIZE, spearWorld } from '../hero/rig.js';
 import { AS, ARROW } from '../combat/projectiles.js';
 import { ground } from '../world/map.js';
-import { lensClear } from '../camera/occlusion.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _d = new THREE.Vector3();
-const _c = new THREE.Color(), FWD = new THREE.Vector3(0, 0, 1), ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
+const FWD = new THREE.Vector3(0, 0, 1), ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 const B = (a, b, c) => ({ a, b, c });
+// palette (linear HDR): Huang Zhong's gold / fire, off Zhao Yun's teal
+const CORE = [3.4, 2.7, 1.6], CORE_HEAVY = [3.8, 2.9, 1.5], CORE_FIRE = [3.6, 1.6, 0.4], GLOW = [0.55, 0.36, 0.15], GLOW_FIRE = [0.8, 0.3, 0.06];
+const GOLD = [2.4, 1.6, 0.55], SPARK = [3.2, 2.1, 0.8], EARTH = [[0.2, 0.13, 0.09], [0.26, 0.18, 0.12], [0.16, 0.1, 0.07], [0.32, 0.23, 0.15]];
+const DUSTC = [0.52, 0.4, 0.3];
+const NPIN = 64;
 
-function instanced(parent, geo, mat, n, color) {
-  const m = new THREE.InstancedMesh(geo, mat, n);
-  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  m.frustumCulled = false;
-  for (let i = 0; i < n; i++) { m.setMatrixAt(i, ZERO); if (color) m.setColorAt(i, _c.setRGB(1, 1, 1)); }
-  parent.add(m);
-  return m;
-}
-// lensClear: an additive spark within 3 m of the lens filled the frame as a flat pale square (critic: burst screenshots)
-const addMat = (o = {}) => lensClear(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, ...o }), 3);
-
-export function createArrowView(scene, game, proj) {
+export function createArrowView(scene, game, proj, fx) {
   const root = new THREE.Group();
   scene.add(root);
-  const N = proj.N;
+  const N = proj.N, c = game.crowd, hero = game.hero;
   // arrow: tip at the origin, shaft back along −Z (0.95 m): steel head, dark shaft, white-red fletching
   const geo = vox([B([0, 0, -43], [1, 1, 0], (x, y, z) => (z > -4 ? 0xd8dee6 : z < -38 ? 0xf2efe8 : 0x4a2c22)),
     B([-1, 0, -3], [2, 1, -1], 0xc0c8d2), B([-1, 0, -42], [2, 1, -37], 0xf2efe8), B([0, -1, -42], [1, 2, -37], 0xb3261e)], 0.022,
   { off: [-0.5, -0.5, 0], jitter: 0, ao: 0.1 });
-  const arrows = instanced(root, geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, flatShading: true }), N);
-  arrows.castShadow = true;
-  const streak = instanced(root, new THREE.BoxGeometry(1, 1, 1).translate(0, 0, -0.5), addMat(), N, true);
-  // ember / spark particles: small additive cubes with velocity and life (visual RNG)
-  const NP = 900, pe = { m: instanced(root, new THREE.BoxGeometry(1, 1, 1), addMat(), NP, true), next: 0,
-    x: new Float32Array(NP * 3), v: new Float32Array(NP * 3), life: new Float32Array(NP), max: new Float32Array(NP), size: new Float32Array(NP), g: new Float32Array(NP) };
-  const spark = (x, y, z, vx, vy, vz, life, size, r, g, b, grav = -3) => {
-    const i = pe.next; pe.next = (pe.next + 1) % NP;
-    pe.x.set([x, y, z], i * 3); pe.v.set([vx, vy, vz], i * 3); pe.life[i] = pe.max[i] = life; pe.size[i] = size; pe.g[i] = grav;
-    pe.m.setColorAt(i, _c.setRGB(r, g, b)); pe.m.instanceColor.needsUpdate = true;
-  };
-  const embers = (x, y, z, n, spd, up, k = 1) => {
-    for (let i = 0; i < n; i++) {
-      const a = vrng.range(0, 6.283), s = spd * vrng.range(0.2, 1), w = vrng.range(0.6, 1.2) * k;
-      spark(x, y, z, Math.cos(a) * s, vrng.range(0.3, 1) * up, Math.sin(a) * s, vrng.range(0.35, 0.9), vrng.range(0.04, 0.09), 2.6 * w, 1.0 * w, 0.25 * w, 2.5);
-    }
-  };
-  const dust = (x, z, n, spd) => {
-    for (let i = 0; i < n; i++) {
-      const a = vrng.range(0, 6.283), s = spd * vrng.range(0.3, 1);
-      spark(x, 0.05, z, Math.cos(a) * s, vrng.range(0.6, 2), Math.sin(a) * s, vrng.range(0.25, 0.5), vrng.range(0.05, 0.1), 0.34, 0.26, 0.18, -6);
-    }
-  };
-  // burst rings (flat additive discs that expand and fade) + a light
-  const NR = 8, ringGeo = new THREE.RingGeometry(0.82, 1, 48).rotateX(-Math.PI / 2);
-  const rings = Array.from({ length: NR }, () => { const m = new THREE.Mesh(ringGeo, addMat({ side: THREE.DoubleSide })); m.visible = false; m.frustumCulled = false; root.add(m); return { m, age: 1, dur: 1, r: 1 }; });
-  let ringNext = 0;
-  const ring = (x, z, r, dur, rgb) => {
-    const R = rings[ringNext]; ringNext = (ringNext + 1) % NR;
-    R.m.position.set(x, 0.12 + ground(x, z), z); R.age = 0; R.dur = dur; R.r = r; R.m.material.color.setRGB(...rgb); R.m.visible = true;
-  };
-  const light = new THREE.PointLight(0xff9a40, 0, 22, 1.6);
-  root.add(light);
-  let lightK = 0;
-  const prev = new Int32Array(N);                                     // pool state last render: fly → stuck = a ground bite
+  const arrows = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, flatShading: true }), N + NPIN);
+  arrows.instanceMatrix.setUsage(THREE.DynamicDrawUsage); arrows.frustumCulled = false; arrows.castShadow = true;
+  for (let i = 0; i < N + NPIN; i++) arrows.setMatrixAt(i, ZERO);
+  root.add(arrows);
 
+  const prev = new Int32Array(N), ringAcc = new Float32Array(N);
+  // comet tail per arrow: a point that chases the head (≈ 70 ms lag), so the streak is as long as the flight is fast and
+  // collapses onto the arrow when it stops; when an arrow vanishes into a body the tail finishes as a fading streak
+  const tx = new Float32Array(N), ty = new Float32Array(N), tz = new Float32Array(N);
+  // pinned arrows (spent in a soldier): soldier, offset from his feet, flight dir, age
+  const pin = { e: new Int32Array(NPIN), ox: new Float32Array(NPIN), oy: new Float32Array(NPIN), oz: new Float32Array(NPIN),
+    dx: new Float32Array(NPIN), dy: new Float32Array(NPIN), dz: new Float32Array(NPIN), t: new Float32Array(NPIN).fill(9), s: new Float32Array(NPIN), next: 0 };
+  // the Musou giant: release point, last head, trail fade
+  const giant = { on: false, x0: 0, y0: 0, z0: 0, x: 0, y: 0, z: 0, fade: 0, t: 0 };
+
+  // ---------------------------------------------------------------- effect recipes
+  function flash(x, y, z, s, k, life = 0.08) {
+    fx.glow(x, y, z, s * 0.3, s * 0.8, life, 3.2 * k, 2.5 * k, 1.5 * k);
+    fx.glow(x, y, z, s * 0.5, s * 1.2, life * 1.5, 0.4 * k, 0.24 * k, 0.08 * k);
+  }
+  function sparks(x, y, z, n, dx, dy, dz, cone, spd, len, col = SPARK, life = 0.2) {
+    for (let k = 0; k < n; k++) {
+      const vx = dx + vrng.range(-cone, cone), vy = dy + vrng.range(-cone, cone) + 0.25, vz = dz + vrng.range(-cone, cone), l = Math.hypot(vx, vy, vz) || 1, s = spd * vrng.range(0.5, 1);
+      fx.spark(x, y, z, vx / l * s, vy / l * s, vz / l * s, len, vrng.range(0.025, 0.045), life * vrng.range(0.6, 1.2), col[0], col[1], col[2], 3, -12);
+    }
+  }
+  function dust(x, y, z, n, spd, s0, s1, life, a0 = 0.5, col = DUSTC) {
+    for (let k = 0; k < n; k++) {
+      const a = vrng.range(0, 6.283), v = spd * vrng.range(0.4, 1);
+      fx.smoke(x + Math.cos(a) * 0.2, y, z + Math.sin(a) * 0.2, s0, s1 * vrng.range(0.8, 1.2), life * vrng.range(0.8, 1.2),
+        col[0] * vrng.range(0.9, 1.1), col[1], col[2], a0, Math.cos(a) * v, vrng.range(0.3, 1.2), Math.sin(a) * v, 3, 0.4);
+    }
+  }
+  function embers(x, y, z, n, spd, up, life = 1) {
+    for (let k = 0; k < n; k++) {
+      const a = vrng.range(0, 6.283), s = spd * vrng.range(0.2, 1), w = vrng.range(0.7, 1.2);
+      fx.glow(x, y, z, vrng.range(0.06, 0.12), 0.02, life * vrng.range(0.5, 1.2), 3 * w, 1.2 * w, 0.25 * w,
+        Math.cos(a) * s, up * vrng.range(0.4, 1), Math.sin(a) * s, 1.2, -6, 0.5);
+    }
+  }
+  /** Billowing fireball: n separate flame puffs (size ≤ ≈ 1.6 m whatever the radius, so it keeps its structure instead
+   *  of stacking into a flat dome), white-yellow at the heart, deep orange-red outside, rising and slowing. */
+  function fireball(x, y, z, r, n, life) {
+    const R = Math.min(r, 5);
+    for (let k = 0; k < n; k++) {
+      const a = vrng.range(0, 6.283), rr = R * 0.3 * Math.sqrt(vrng.next()), up = vrng.range(0.1, 1), hot = vrng.next() ** 2;
+      const sp = R * vrng.range(0.9, 2.2), s = vrng.range(0.18, 0.32) * R;
+      fx.glow(x + Math.cos(a) * rr, y + up * R * 0.25, z + Math.sin(a) * rr, s * 0.5, s, life * vrng.range(0.55, 1.1),
+        1.5 + hot * 1.6, 0.45 + hot * 1.3, 0.06 + hot * 0.45, Math.cos(a) * sp, up * sp * 0.8 + 1.5, Math.sin(a) * sp, 4, 3, 0.2);
+    }
+    fx.glow(x, y + 0.5, z, R * 0.15, R * 0.35, life * 0.35, 3.4, 2.6, 1.3);   // the white-hot heart
+  }
+  function smokeColumn(x, z, r, n, life) {
+    for (let k = 0; k < n; k++) {
+      const a = vrng.range(0, 6.283), rr = r * 0.4 * vrng.next(), g = vrng.range(0.07, 0.13);
+      fx.smoke(x + Math.cos(a) * rr, vrng.range(0.3, 1.2) * r * 0.3, z + Math.sin(a) * rr, r * 0.3, r * vrng.range(0.7, 1.0), life * vrng.range(0.7, 1.2),
+        g, g * 0.85, g * 0.75, 0.85, Math.cos(a) * r * 0.5, vrng.range(1.5, 3.5), Math.sin(a) * r * 0.5, 1.2, 1.5);
+    }
+  }
+  function thrown(x, z, n, spd, up, s0, s1) {
+    for (let k = 0; k < n; k++) {
+      const a = vrng.range(0, 6.283), v = spd * vrng.range(0.4, 1), col = EARTH[k % EARTH.length];
+      fx.debris(x + Math.cos(a) * 0.4, 0.3, z + Math.sin(a) * 0.4, Math.cos(a) * v, up * vrng.range(0.6, 1.1), Math.sin(a) * v, vrng.range(s0, s1), vrng.range(1.4, 2.4), col[0], col[1], col[2]);
+    }
+  }
+
+  // ---------------------------------------------------------------- release
   on('arrow:fire', (e) => {
-    const fx = Math.sin(e.yaw), fz = Math.cos(e.yaw), big = e.big > 1 ? 3 : e.heavy ? 1.6 : 1;
-    for (let i = 0; i < 6 * big; i++) {
-      const s = vrng.range(3, 9) * big;
-      spark(e.x + fx * 0.3, e.y, e.z + fz * 0.3, fx * s + vrng.range(-1.5, 1.5), vrng.range(-0.8, 1.6), fz * s + vrng.range(-1.5, 1.5), vrng.range(0.08, 0.18), 0.05 * big,
-        e.fire ? 2.8 : 2.2, e.fire ? 1.2 : 1.9, e.fire ? 0.3 : 1.2, 0);
+    const cp = Math.cos(e.pitch || 0), dx = Math.sin(e.yaw) * cp, dy = Math.sin(e.pitch || 0), dz = Math.cos(e.yaw) * cp;
+    const k = e.big > 1 ? 2.6 : e.heavy || e.big ? 1.5 : 1, mu = e.move === 'musou' && e.big < 2;
+    const x = e.x + dx * 0.25, y = e.y + dy * 0.25, z = e.z + dz * 0.25;
+    flash(x, y, z, (mu ? 0.5 : 0.7) * k, e.fire ? 0.9 : 1, 0.07 + 0.02 * k);
+    // forward star rays
+    const rays = mu ? 2 : Math.round(4 + 3 * k);
+    for (let r = 0; r < rays; r++) {
+      const ox = dx + vrng.range(-0.35, 0.35), oy = dy + vrng.range(-0.3, 0.3), oz = dz + vrng.range(-0.35, 0.35), l = Math.hypot(ox, oy, oz);
+      const len = vrng.range(0.6, 1.4) * k;
+      fx.streak(x + ox / l * len, y + oy / l * len, z + oz / l * len, ox / l, oy / l, oz / l, len, 0.05 * k, 0.07, 3, 2.3, 1.2, 0.8);
     }
-    if (e.heavy || e.big) { lightK = Math.max(lightK, e.big > 1 ? 3 : 1.2); light.position.set(e.x, e.y + 0.3 + ground(e.x, e.z), e.z); light.color.setHex(e.fire ? 0xff8a30 : 0xfff0d0); }
-  });
-  on('arrow:burst', (e) => {
-    const k = Math.min(2.5, e.r / 2.5);
-    ring(e.x, e.z, e.r * 1.15, 0.35 + 0.1 * k, e.fire ? [2.2, 0.9, 0.25] : [1.2, 1.0, 0.7]);
-    if (e.r > 3) ring(e.x, e.z, e.r * 0.7, 0.5, e.fire ? [1.6, 0.5, 0.1] : [0.7, 0.6, 0.45]);
-    embers(e.x, 0.3, e.z, Math.round((e.fire ? 18 : 6) * (0.6 + k)), 3 + 2 * k, 4 + 3 * k, e.fire ? 1 : 0.6);
-    dust(e.x, e.z, Math.round(8 * (0.6 + k)), 3 + 2 * k);
-    lightK = Math.max(lightK, e.big > 1 ? 8 : 1 + k); light.position.set(e.x, 1.2 + k + ground(e.x, e.z), e.z); light.color.setHex(e.fire ? 0xff7a28 : 0xffe0b0);
-  });
-  on('arrow:headshot', (e) => {
-    for (let i = 0; i < 26; i++) {
-      const a = vrng.range(0, 6.283), b = vrng.range(-1, 1), s = vrng.range(4, 10);
-      spark(e.x, e.y, e.z, Math.cos(a) * s * Math.sqrt(1 - b * b), b * s, Math.sin(a) * s * Math.sqrt(1 - b * b), vrng.range(0.15, 0.35), 0.07, 3, 2.2, 0.6, 0);
+    // string glint: a vertical flick of light at the bow
+    if (!mu) fx.streak(e.x, e.y + 0.62, e.z, 0, 1, 0, 1.24, 0.035, 0.07, 2.6, 2.6, 2.2, 0.2);
+    // air-burst ring on the arrow line (two on heavy shots)
+    fx.ring(x + dx * 1.2, y + dy * 1.2, z + dz * 1.2, dx, dy, dz, 0.1, Math.min(0.9, 0.45 * k), 0.05, 0.14, 1.5, 1.25, 0.85);
+    if (k > 1) fx.ring(x + dx * 3.2, y + dy * 3.2, z + dz * 3.2, dx, dy, dz, 0.15, Math.min(1.2, 0.7 * k), 0.045, 0.2, 1.3, 1.05, 0.7, 0.03);
+    // fan: a spray line along each arrow so the spread reads at a glance
+    if (e.n > 1 && e.spread > 0) {
+      for (let a = 0; a < e.n; a++) {
+        const yaw = e.yaw + (a / (e.n - 1) - 0.5) * e.spread, fx2 = Math.sin(yaw) * cp, fz2 = Math.cos(yaw) * cp;
+        fx.streak(x + fx2 * 3.4, y + dy * 3.4, z + fz2 * 3.4, fx2, dy, fz2, 3.2, 0.07, 0.12, e.fire ? 3 : 2.4, e.fire ? 1.3 : 1.9, e.fire ? 0.3 : 1.0, 0.7);
+      }
     }
-    ring(e.x, e.z, 1.6, 0.3, [2.4, 1.8, 0.5]);
+    if (e.fire) for (let f = 0; f < 6 * k; f++) fx.glow(x, y, z, 0.2, 0.5, vrng.range(0.12, 0.25), 3, 1.2, 0.25, dx * vrng.range(2, 6) + vrng.range(-1, 1), vrng.range(0, 2), dz * vrng.range(2, 6) + vrng.range(-1, 1), 4, 2, 0.4);
+    if (e.sky) {                                              // rain volley: a flare column climbs off the bow
+      fx.streak(x + dx * 5, y + dy * 5, z + dz * 5, dx, dy, dz, 5, 0.18, 0.25, 2.6, 1.6, 0.6, 0.6);
+      fx.ring(x, y, z, dx, dy, dz, 0.2, 1.4, 0.08, 0.3, 1.8, 1.2, 0.5);
+    }
+    if ((e.heavy || e.big) && !mu) {                          // weight: dust kicked back off his feet, thump, light
+      const hx = hero.x - dx * 0.3, hz = hero.z - dz * 0.3;
+      for (let d = 0; d < 5 * k; d++) {
+        const a = e.yaw + Math.PI + vrng.range(-1.1, 1.1), v = vrng.range(1.5, 4) * k;
+        fx.smoke(hx, 0.15, hz, 0.25, vrng.range(0.6, 0.9) * k, vrng.range(0.45, 0.7), DUSTC[0], DUSTC[1], DUSTC[2], 0.3, Math.sin(a) * v, vrng.range(0.2, 0.8), Math.cos(a) * v, 3, 0.3);
+      }
+      fx.groundRing(hero.x, hero.z, 0.3, 1.6 * k, 0.045, 0.3, 0.9, 0.6, 0.3);
+      fx.kick(e.big > 1 ? 4 : 2.2, e.big > 1 ? 0.3 : 0.16, 0.15, 1);
+      fx.light(x, y + 0.2, z, e.big > 1 ? 3 : 1.4, e.fire ? 0xff8a30 : 0xfff0d0, 9);
+    }
   });
-  on('scenario', () => { pe.life.fill(0); for (const r of rings) r.m.visible = false; lightK = 0; prev.fill(0); });
 
-  const COL = { plain: [1.6, 1.45, 1.1], heavy: [2.2, 1.9, 1.3], fire: [3.0, 1.2, 0.3], giant: [3.2, 1.6, 0.5] };
-  let emberAcc = 0;
-  return {
-    update(dt) {
-      const P = proj;
-      emberAcc += dt;
-      const shed = emberAcc > 1 / 60; if (shed) emberAcc = 0;
-      for (let i = 0; i < N; i++) {
-        const st = P.st[i];
-        if (!st) { if (prev[i]) { arrows.setMatrixAt(i, ZERO); streak.setMatrixAt(i, ZERO); } prev[i] = 0; continue; }
-        const big = P.big[i] === 2 ? 5 : P.big[i] ? 1.6 : 1, sky = P.kind[i] === 3;
-        _d.set(P.vx[i], P.vy[i], P.vz[i]);
-        const v = _d.length();
-        if (v > 1e-4) _d.divideScalar(v); else _d.set(0, -1, 0);
-        _q.setFromUnitVectors(FWD, _d);
-        let y = P.y[i];
-        if (st === AS.STUCK) {
-          if (prev[i] === AS.FLY) { dust(P.x[i], P.z[i], 3, 1.5); if (P.fire[i]) embers(P.x[i], 0.1, P.z[i], 4, 1, 2); }
-          y -= 0.14 * big + Math.max(0, P.t[i] - (ARROW.stuck - 40)) / 40 * 0.9 * big;
-          streak.setMatrixAt(i, ZERO);
-        } else {
-          const col = P.big[i] === 2 ? COL.giant : P.fire[i] ? COL.fire : P.big[i] ? COL.heavy : COL.plain;
-          const len = big > 2 ? Math.min(10, 2 + P.t[i] * 0.4) : Math.min(3.2, v * 0.05) * (sky ? 1.4 : 1), w = big > 2 ? 0.7 : 0.035 * big * (P.fire[i] ? 1.6 : 1);
-          _m.compose(_p.set(P.x[i], y + ground(P.x[i], P.z[i]), P.z[i]).addScaledVector(_d, -0.4 * big), _q, _s.set(w, w, len));
-          streak.setMatrixAt(i, _m); streak.setColorAt(i, _c.setRGB(...col));
-          if (shed && (P.fire[i] || big > 2)) {                         // embers peel off the flame
-            const n = big > 2 ? 6 : 1;
-            for (let k = 0; k < n; k++) spark(P.x[i] - _d.x * vrng.range(0, 1.5 * big), y + vrng.range(-0.2, 0.2) * big, P.z[i] - _d.z * vrng.range(0, 1.5 * big),
-              vrng.range(-1, 1), vrng.range(0.5, 2), vrng.range(-1, 1), vrng.range(0.25, 0.6), vrng.range(0.04, 0.08) * (big > 2 ? 2 : 1), 2.8, 1.1, 0.25, 1.5);
+  // ---------------------------------------------------------------- impact
+  let hitFrame = -1, hitN = 0;
+  on('arrow:hit', (e) => {
+    if (game.frame !== hitFrame) { hitFrame = game.frame; hitN = 0; }
+    const full = ++hitN <= 6, k = e.big > 1 ? 1.8 : e.big ? 1.4 : 1;
+    fx.glow(e.x, e.y, e.z, 0.2, (full ? 0.9 : 0.5) * k, 0.09, 3.2, 2.4, 1.3);
+    if (full) {
+      sparks(e.x, e.y, e.z, Math.round(7 * k), e.dx, e.dy, e.dz, 0.8, 12 * k, 0.5, e.fire ? CORE_FIRE : SPARK);
+      sparks(e.x, e.y, e.z, 3, -e.dx, 0.4, -e.dz, 0.9, 5, 0.3);                     // a few kicked back at the shooter
+      fx.smoke(e.x, e.y - 0.3, e.z, 0.25, 0.9 * k, 0.45, DUSTC[0], DUSTC[1], DUSTC[2], 0.35, e.dx * 1.5, 0.5, e.dz * 1.5, 3, 0.5);
+      if (e.fire) embers(e.x, e.y, e.z, 5, 2.5, 3, 0.6);
+    }
+    if (!e.spent) fx.streak(e.x + e.dx * 1.3, e.y + e.dy * 1.3, e.z + e.dz * 1.3, e.dx, e.dy, e.dz, 1.2, 0.06 * k, 0.08, 2.8, 2.2, 1.2, 0.7);   // pierce
+    else if (e.big < 2) {                                                          // pinned in the body
+      const j = pin.next; pin.next = (pin.next + 1) % NPIN;
+      pin.e[j] = e.e; pin.ox[j] = e.x - c.x[e.e] + e.dx * 0.3; pin.oy[j] = e.y - c.y[e.e] + e.dy * 0.3; pin.oz[j] = e.z - c.z[e.e] + e.dz * 0.3;
+      pin.dx[j] = e.dx; pin.dy[j] = e.dy; pin.dz[j] = e.dz; pin.t[j] = 0; pin.s[j] = e.big ? 1.6 : 1;
+    }
+  });
+
+  // ---------------------------------------------------------------- rain marker
+  on('arrow:rain', (e) => {
+    const life = e.delay + e.over + 0.25;
+    fx.groundRing(e.x, e.z, e.r * 0.5, e.r, 0.035, life, 1.6, 0.55, 0.12);
+    fx.groundRing(e.x, e.z, e.r * 0.2, e.r * 0.45, 0.06, life, 1.0, 0.35, 0.08);
+    fx.groundRing(e.x, e.z, e.r * 1.4, e.r * 0.9, 0.05, e.delay + 0.1, 1.4, 0.8, 0.3);       // closing in: "here it comes"
+    fx.glow(e.x, 9, e.z, 1.2, 4, 0.5, 2.6, 1.7, 0.6);
+    fx.glow(e.x, 9, e.z, 3, 7, 0.9, 0.5, 0.3, 0.1);
+  });
+
+  // ---------------------------------------------------------------- bursts
+  on('arrow:burst', (e) => {
+    const x = e.x, z = e.z, r = e.r;
+    if (e.big > 1) {                                          // the Musou giant's explosion
+      fx.glow(x, 1.5, z, 2, 7, 0.18, 4, 3, 1.6);
+      fx.glow(x, 1.5, z, 4, 11, 0.4, 0.6, 0.34, 0.1);
+      fireball(x, 0.8, z, r, 40, 0.95);
+      smokeColumn(x, z, r * 0.7, 22, 3.2);
+      fx.groundRing(x, z, 1, r * 1.8, 0.025, 0.55, 2.4, 1.6, 0.7);
+      fx.groundRing(x, z, 0.5, r * 1.2, 0.04, 0.9, 1.0, 0.5, 0.15, 0.06);
+      fx.ring(x, 1.6, z, 0, 0, 0, 1, r * 1.1, 0.02, 0.26, 1.6, 1.4, 1.0, 0, 1);
+      fx.streak(x, 22, z, 0, 1, 0, 24, 3.2, 0.55, 3.2, 2.2, 0.9, 0.35);            // light pillar
+      fx.streak(x, 18, z, 0, 1, 0, 18, 7, 0.8, 0.6, 0.35, 0.1, 0.3);
+      sparks(x, 1, z, 48, 0, 0.5, 0, 1.2, 30, 1.2, SPARK, 0.4);
+      embers(x, 0.8, z, 80, 9, 14, 1.8);
+      thrown(x, z, 36, 9, 14, 0.14, 0.34);
+      dust(x, 0.3, z, 24, 10, 1.2, 3.2, 1.4, 0.55);
+      fx.scorch(x, z, r * 0.8, 10, 1.2);
+      fx.light(x, 2.5, z, 10, 0xff8a38, 2.5);
+      fx.kick(4, 0.45, 0.3, 1);
+      return;
+    }
+    if (r > 3) {                                               // C6 fire arrow: the full explosion
+      fx.glow(x, 1, z, 1, 3.2, 0.1, 3.6, 2.6, 1.3);
+      fireball(x, 0.6, z, r, 26, 0.7);
+      smokeColumn(x, z, r * 0.8, 14, 2.4);
+      fx.groundRing(x, z, 0.5, r * 1.5, 0.028, 0.36, 2.2, 1.3, 0.5);
+      fx.groundRing(x, z, 0.3, r * 1.05, 0.05, 0.7, 0.8, 0.42, 0.14, 0.05);
+      fx.ring(x, 1.2, z, 0, 0, 0, 0.6, r * 0.8, 0.025, 0.2, 1.5, 1.3, 0.9, 0, 1);
+      sparks(x, 0.8, z, 26, 0, 0.6, 0, 1.1, 20, 0.9, CORE_FIRE, 0.35);
+      embers(x, 0.6, z, 44, 6, 11, 1.4);
+      thrown(x, z, 16, 6, 10, 0.12, 0.28);
+      dust(x, 0.3, z, 14, 6, 0.8, 2.2, 1.0, 0.5);
+      fx.scorch(x, z, r * 0.85, 8, 1);
+      fx.light(x, 1.8, z, 6, 0xff7a28, 4);
+      fx.kick(3.2, 0.3, 0.25, 1);
+      return;
+    }
+    // small bursts: jump attack (dust), jump-charge fan and Musou volley (fire)
+    fx.glow(x, 0.5, z, 0.3, r * 0.55, 0.09, 2.6, e.fire ? 1.5 : 2, e.fire ? 0.5 : 1.1);
+    fx.groundRing(x, z, 0.2, r * 1.15, 0.05, 0.26, e.fire ? 1.8 : 1.2, e.fire ? 0.9 : 0.95, e.fire ? 0.3 : 0.7);
+    if (e.fire) {
+      fireball(x, 0.3, z, r * 0.8, 7, 0.4);
+      smokeColumn(x, z, r * 0.7, 3, 1.4);
+      embers(x, 0.4, z, 8, 3, 6, 0.9);
+      fx.scorch(x, z, r * 0.55, 3.5, 0.7, 0.7);
+      fx.light(x, 1, z, 1.5, 0xff8a38, 8);
+    } else sparks(x, 0.3, z, 8, 0, 1, 0, 1, 8, 0.4);
+    dust(x, 0.2, z, e.fire ? 3 : 6, 3 + r, 0.4, 1.2, 0.6, 0.45);
+  });
+
+  on('arrow:headshot', (e) => {
+    fx.glow(e.x, e.y, e.z, 0.5, 2.2, 0.16, 3.6, 2.8, 1);
+    sparks(e.x, e.y, e.z, 26, 0, 0.3, 0, 1.5, 14, 0.7, [3.4, 2.6, 0.7], 0.3);
+    fx.ring(e.x, e.y, e.z, 0, 0, 0, 0.2, 1.6, 0.07, 0.3, 3, 2.2, 0.6, 0, 1);
+    fx.ring(e.x, e.y, e.z, 0, 0, 0, 0.1, 0.9, 0.12, 0.22, 2.4, 1.8, 0.5, 0.05, 1);
+  });
+
+  on('scenario', () => {
+    fx.clear(); prev.fill(0); pin.t.fill(9); giant.on = false; giant.fade = 0;
+    for (let i = 0; i < N + NPIN; i++) arrows.setMatrixAt(i, ZERO);
+    arrows.instanceMatrix.needsUpdate = true;
+  });
+
+  // ---------------------------------------------------------------- draw / charge on the arrowhead
+  const pose = new Float32Array(POSE_SIZE), tip = new THREE.Vector3(), nock = new THREE.Vector3(), hpos = new THREE.Vector3();
+  let fullPing = false, moteAcc = 0, chargeAcc = 0;
+  /** Frames to the next shot of the current move (or -1) and whether it is a charge shot. */
+  function nextShot() {
+    if (hero.state !== 'attack' || !hero.move) return -1;
+    const m = hero.kit.moves[hero.move];
+    if (!m || !m.shots) return -1;
+    const t = hero.moveT;
+    let best = 1e9;
+    for (const s of m.shots) {
+      if (Array.isArray(s.f)) { for (let f = s.f[0]; f <= s.f[1]; f += s.every) if (f >= t) { best = Math.min(best, f); break; } }
+      else if (s.f >= t) best = Math.min(best, s.f);
+    }
+    return best < 1e9 ? best - t : -1;
+  }
+  function updateDraw(dt) {
+    const aim = game.musou.aim, aiming = aim && aim.active;
+    let u = 0, charge = false;
+    if (aiming) { u = aim.phase === 'draw' ? aim.d : 0; charge = true; }
+    else {
+      const d = nextShot(), m = d >= 0 && hero.kit.moves[hero.move], W = m && m.armor ? 16 : 7;
+      if (d >= 0 && d <= W) { u = 1 - d / W; charge = !!m.armor; }
+    }
+    if (u <= 0) { fullPing = false; return; }
+    hpos.set(hero.x, hero.y, hero.z);
+    heroPose(hero, pose);
+    spearWorld(pose, hpos, hero.yaw, -0.55, 0.22, nock, tip);                  // bow line: nock ← grip → arrowhead
+    const ty = tip.y, dx = tip.x - nock.x, dy = tip.y - nock.y, dz = tip.z - nock.z, dl = Math.hypot(dx, dy, dz) || 1;
+    const k = charge ? 1 : 0.6;
+    fx.dot(tip.x, ty, tip.z, (0.12 + 0.4 * u * u) * k, 2.6 * u, 1.8 * u, 0.6 * u);
+    fx.dot(tip.x, ty, tip.z, (0.35 + 0.55 * u) * k, 0.3 * u, 0.19 * u, 0.06 * u);
+    // motes converge on the head
+    moteAcc += dt * (charge ? 70 : 30) * u;
+    while (moteAcc >= 1) {
+      moteAcc--;
+      const a = vrng.range(0, 6.283), b = vrng.range(-1, 1), R = vrng.range(0.7, 1.4) * k, sb = Math.sqrt(1 - b * b), life = 0.18;
+      const ox = Math.cos(a) * sb * R, oy = b * R, oz = Math.sin(a) * sb * R;
+      fx.spark(tip.x + ox, ty + oy, tip.z + oz, -ox / life, -oy / life, -oz / life, 0.35, 0.025, life, 2.6, 1.8, 0.7, 0, 0, 1);
+    }
+    if (charge) {                                                               // contracting charge rings on the aim line
+      chargeAcc += dt;
+      if (chargeAcc > 0.09) {
+        chargeAcc = 0;
+        fx.ring(tip.x + dx / dl * 0.2, ty + dy / dl * 0.2, tip.z + dz / dl * 0.2, dx, dy, dz, 0.9 * k, 0.12, 0.09, 0.14, 1.8 * u, 1.3 * u, 0.5 * u);
+      }
+      // the string glows as it comes to full draw
+      if (u > 0.5) fx.line(nock.x, nock.y + 0.55, nock.z, 0, 1, 0, 1.1, 0.025, 1.6 * u, 1.5 * u, 1.2 * u, 0.3);
+    }
+    if (aiming && u >= 1 && !fullPing) {                                        // full draw: a ping you can read mid-fight
+      fullPing = true;
+      fx.glow(tip.x, ty, tip.z, 0.3, 1.4, 0.14, 3.4, 2.6, 1);
+      fx.ring(tip.x, ty, tip.z, 0, 0, 0, 0.1, 0.8, 0.1, 0.2, 2.8, 2, 0.6, 0, 1);
+    }
+  }
+
+  // ---------------------------------------------------------------- per-frame arrows
+  let shed = 0;
+  function update(dt) {
+    const P = proj;
+    shed += dt;
+    const emit = shed >= 1 / 60;                               // trail particles at ≤ 60 Hz whatever the frame rate
+    if (emit) shed = 0;
+    for (let i = 0; i < N; i++) {
+      const st = P.st[i];
+      if (!st) {
+        if (prev[i]) {
+          arrows.setMatrixAt(i, ZERO);
+          if (prev[i] === AS.FLY && P.big[i] < 2 && P.kind[i] !== 3) {
+            const ex = P.x[i] - tx[i], ey = P.y[i] - ty[i], ez = P.z[i] - tz[i], L = Math.hypot(ex, ey, ez);
+            if (L > 0.3) fx.streak(P.x[i], P.y[i], P.z[i], ex / L, ey / L, ez / L, Math.min(L, 8), P.big[i] ? 0.12 : 0.08, 0.12,
+              P.fire[i] ? 2.2 : 1.8, P.fire[i] ? 0.9 : 1.4, P.fire[i] ? 0.25 : 0.7, 0.6);
           }
         }
-        _m.compose(_p.set(P.x[i], y + ground(P.x[i], P.z[i]), P.z[i]), _q, _s.setScalar(big));
-        arrows.setMatrixAt(i, _m);
-        prev[i] = st;
+        prev[i] = 0; continue;
       }
-      arrows.instanceMatrix.needsUpdate = true; streak.instanceMatrix.needsUpdate = true;
-      if (streak.instanceColor) streak.instanceColor.needsUpdate = true;
-      // particles
-      let any = false;
-      for (let i = 0; i < NP; i++) {
-        if (pe.life[i] <= 0) continue;
-        pe.life[i] -= dt;
-        if (pe.life[i] <= 0) { pe.m.setMatrixAt(i, ZERO); any = true; continue; }
-        const j = i * 3;
-        pe.v[j + 1] += pe.g[i] * dt;
-        pe.x[j] += pe.v[j] * dt; pe.x[j + 1] = Math.max(0.02, pe.x[j + 1] + pe.v[j + 1] * dt); pe.x[j + 2] += pe.v[j + 2] * dt;
-        const s = pe.size[i] * Math.min(1, pe.life[i] / pe.max[i] * 2);
-        _m.compose(_p.set(pe.x[j], pe.x[j + 1] + ground(pe.x[j], pe.x[j + 2]), pe.x[j + 2]), _q.identity(), _s.setScalar(s));
-        pe.m.setMatrixAt(i, _m); any = true;
+      const bigK = P.big[i] === 2 ? 5 : P.big[i] ? 1.6 : 1, kind = P.kind[i];
+      _d.set(P.vx[i], P.vy[i], P.vz[i]);
+      const v = _d.length();
+      if (v > 1e-4) _d.divideScalar(v); else _d.set(0, -1, 0);
+      _q.setFromUnitVectors(FWD, _d);
+      const x = P.x[i], z = P.z[i], dx = _d.x, dy = _d.y, dz = _d.z;
+      let y = P.y[i];
+      if (st === AS.STUCK) {
+        if (prev[i] === AS.FLY) {                              // ground bite
+          dust(x, 0.1, z, kind === 4 ? 1 : 2, 1.8, 0.2, 0.7, 0.5, 0.45);
+          sparks(x, 0.1, z, 3, -dx * 0.3, 0.9, -dz * 0.3, 0.8, 4, 0.2, [1.2, 0.9, 0.6], 0.25);
+          fx.groundRing(x, z, 0.1, 0.6 * bigK, 0.1, 0.2, 0.9, 0.7, 0.4);
+          if (P.fire[i]) embers(x, 0.1, z, 4, 1, 2, 0.6);
+        }
+        y -= 0.14 * bigK + Math.max(0, P.t[i] - (ARROW.stuck - 40)) / 40 * 0.9 * bigK;
+      } else if (P.big[i] === 2) flyGiant(i, x, y, z, dx, dy, dz, v, emit, dt);
+      else {
+        const fire = P.fire[i], heavy = P.big[i] === 1;
+        const col = fire ? CORE_FIRE : heavy ? CORE_HEAVY : CORE, gc = fire ? GLOW_FIRE : GLOW;
+        if (kind === 4) {                                       // falling rain: long bright streaks
+          fx.line(x, y, z, dx, dy, dz, 3.6, 0.06, 2.8, 2.2, 1.2, 1.2);
+          fx.line(x, y, z, dx, dy, dz, 5, 0.22, 0.4, 0.26, 0.1, 0.8);
+        } else if (kind === 3) {                                // the skyward volley: a climbing flare
+          fx.line(x, y, z, dx, dy, dz, 4, 0.1, 3, 2, 0.8, 1);
+          fx.dot(x, y, z, 0.6, 2.6, 1.6, 0.5);
+        } else {
+          if (prev[i] !== AS.FLY) { tx[i] = x - dx * 0.5; ty[i] = y - dy * 0.5; tz[i] = z - dz * 0.5; }
+          const kf = 1 - Math.exp(-dt * 14);
+          tx[i] += (x - tx[i]) * kf; ty[i] += (y - ty[i]) * kf; tz[i] += (z - tz[i]) * kf;
+          const ex = x - tx[i], ey = y - ty[i], ez = z - tz[i], tl = Math.min(9, Math.hypot(ex, ey, ez));
+          const len = Math.min(3.2, Math.max(0.8, v * 0.045)) * (heavy ? 1.3 : 1);
+          fx.line(x, y, z, dx, dy, dz, len, 0.07 * bigK * (fire ? 1.3 : 1), col[0], col[1], col[2], 1.5);          // hot core
+          if (tl > 0.3) fx.line(x, y, z, ex / tl, ey / tl, ez / tl, tl, 0.28 * bigK, gc[0] * 1.6, gc[1] * 1.6, gc[2] * 1.6, 0.7);   // comet glow
+          fx.dot(x, y, z, 0.2 * bigK, col[0] * 0.6, col[1] * 0.6, col[2] * 0.6);
+          if (emit) fx.streak(x - dx * 0.6, y - dy * 0.6, z - dz * 0.6, dx, dy, dz, 1.1 * bigK, 0.06 * bigK, 0.16, gc[0] * 2.2, gc[1] * 2.2, gc[2] * 2.2, 1);   // afterimage
+          if (heavy) {                                          // heavy shots cut air rings along their line
+            ringAcc[i] += dt;
+            if (ringAcc[i] > 0.04) { ringAcc[i] = 0; fx.ring(x - dx * 0.8, y - dy * 0.8, z - dz * 0.8, dx, dy, dz, 0.2, 0.8, 0.1, 0.18, 1.3, 1.05, 0.65); }
+          }
+          if (fire) {
+            fx.dot(x, y, z, 0.3 + 0.12 * vrng.next(), 3, 1.4, 0.3);
+            if (emit) {
+              for (let f = 0; f < 2; f++) fx.glow(x - dx * vrng.range(0, 0.8), y + vrng.range(-0.05, 0.1), z - dz * vrng.range(0, 0.8), 0.22, 0.05, vrng.range(0.18, 0.32),
+                2.8, vrng.range(0.8, 1.3), 0.2, vrng.range(-0.6, 0.6), vrng.range(0.5, 1.6), vrng.range(-0.6, 0.6), 2, 1.5, 0.4);
+              if (vrng.chance(0.5)) fx.smoke(x - dx, y, z - dz, 0.15, 0.7, 0.8, 0.12, 0.1, 0.09, 0.4, 0, 0.8, 0, 2, 0.8);
+            }
+          }
+        }
       }
-      if (any) pe.m.instanceMatrix.needsUpdate = true;
-      for (const R of rings) {
-        if (!R.m.visible) continue;
-        R.age += dt;
-        const u = R.age / R.dur;
-        if (u >= 1) { R.m.visible = false; continue; }
-        R.m.scale.setScalar(R.r * (0.25 + 0.75 * (1 - (1 - u) * (1 - u))));
-        R.m.material.opacity = 1 - u;
+      _m.compose(_p.set(x, y + ground(x, z), z), _q, _s.setScalar(bigK));
+      arrows.setMatrixAt(i, _m);
+      prev[i] = st;
+    }
+    // pinned arrows ride the soldier they stopped in
+    for (let j = 0; j < NPIN; j++) {
+      if (pin.t[j] >= 0.8) { if (pin.t[j] < 9) { pin.t[j] = 9; arrows.setMatrixAt(N + j, ZERO); } continue; }
+      pin.t[j] += dt;
+      const e = pin.e[j], sink = Math.min(1, (0.8 - pin.t[j]) / 0.2);
+      _d.set(pin.dx[j], pin.dy[j], pin.dz[j]);
+      _q.setFromUnitVectors(FWD, _d);
+      const px = c.x[e] + pin.ox[j], pz = c.z[e] + pin.oz[j];
+      _m.compose(_p.set(px, c.y[e] + pin.oy[j] + ground(px, pz), pz), _q, _s.setScalar(pin.s[j] * sink));
+      arrows.setMatrixAt(N + j, _m);
+    }
+    arrows.instanceMatrix.needsUpdate = true;
+    updateGiantTrail(dt);
+    updateDraw(dt);
+  }
+
+  // ---------------------------------------------------------------- the Musou giant in flight + its lingering trail
+  function flyGiant(i, x, y, z, dx, dy, dz, v, emit, dt) {
+    if (!giant.on) { giant.on = true; giant.x0 = x - dx * 1.5; giant.y0 = y; giant.z0 = z - dz * 1.5; giant.t = 0; }
+    giant.x = x; giant.y = y; giant.z = z; giant.fade = 1; giant.t += dt;
+    const t = giant.t, sx = -dz, sz = dx;                      // side axis (flat flight)
+    fx.light(x, y + 0.8, z, 1.6, 0xff8a30, 10, 1);             // the blaze rides it
+    // sun core + beam
+    // (sizes kept modest: the first frames of the flight pass the over-the-shoulder lens and washed the frame out)
+    fx.dot(x, y, z, 1.0, 3.4, 2.6, 1.4);
+    fx.dot(x, y, z, 2.4, 0.6, 0.34, 0.1);
+    fx.line(x + dx * 1.5, y, z + dz * 1.5, dx, dy, dz, 8, 0.4, 3.4, 2.5, 1.1, 1.4);
+    fx.line(x + dx * 1.5, y, z + dz * 1.5, dx, dy, dz, 12, 1.0, 0.7, 0.36, 0.1, 0.7);
+    // double spiral aura wound round the flight line
+    for (let s = 0; s < 2; s++) for (let k = 0; k < 14; k++) {
+      const back = k * 0.55, a = t * 22 - k * 0.7 + s * Math.PI, rr = 0.9 + 0.05 * k, f = 1 - k / 14;
+      fx.dot(x - dx * back + sx * Math.cos(a) * rr, y + Math.sin(a) * rr, z - dz * back + sz * Math.cos(a) * rr, 0.28 * f + 0.08, 2.6 * f, 1.8 * f, 0.6 * f);
+    }
+    if (emit) {
+      for (let f = 0; f < 5; f++) {                            // flame shell + embers peeling off
+        const a = vrng.range(0, 6.283), rr = vrng.range(0.2, 0.9);
+        fx.glow(x - dx * vrng.range(0, 2) + sx * Math.cos(a) * rr, y + Math.sin(a) * rr, z - dz * vrng.range(0, 2) + sz * Math.cos(a) * rr, 0.9, 0.2, vrng.range(0.25, 0.45),
+          3, vrng.range(0.9, 1.5), 0.25, sx * Math.cos(a) * 2, Math.sin(a) * 2 + 1, sz * Math.cos(a) * 2, 2, 2, 0.3);
       }
-      lightK *= Math.exp(-dt * 7);
-      light.intensity = lightK > 0.02 ? lightK * 6 : 0;
-    },
+      embers(x - dx * 2, y, z - dz * 2, 3, 3, 4, 0.9);
+      fx.smoke(x - dx * 3, y, z - dz * 3, 0.6, 2.4, 1.6, 0.14, 0.11, 0.09, 0.45, 0, 1, 0, 1.5, 1);
+      for (const side of [-1, 1]) {                            // the ground torn up under its path
+        const v2 = vrng.range(3, 6);
+        fx.smoke(x + sx * side * 0.6, 0.15, z + sz * side * 0.6, 0.5, 1.8, 0.9, DUSTC[0], DUSTC[1], DUSTC[2], 0.5, sx * side * v2, vrng.range(0.5, 2), sz * side * v2, 2.5, 0.5);
+      }
+      fx.ring(x - dx * 2.5, y, z - dz * 2.5, dx, dy, dz, 0.6, 1.2, 0.06, 0.22, 2, 1.5, 0.7);
+    }
+  }
+  function updateGiantTrail(dt) {
+    if (!giant.on) return;
+    const g = game.musou.giantI, alive = g >= 0 && proj.st[g] === AS.FLY && proj.big[g] === 2;
+    if (!alive) giant.fade -= dt / 1.4;
+    if (giant.fade <= 0) { giant.on = false; return; }
+    const dx = giant.x - giant.x0, dy = giant.y - giant.y0, dz = giant.z - giant.z0, L = Math.hypot(dx, dy, dz);
+    if (L < 0.5) return;
+    const f = giant.fade * giant.fade;
+    fx.line(giant.x, giant.y, giant.z, dx / L, dy / L, dz / L, L, 0.3 * f + 0.05, 2.6 * f, 1.8 * f, 0.7 * f, 0.15);
+    fx.line(giant.x, giant.y, giant.z, dx / L, dy / L, dz / L, L, 0.9 * f, 0.4 * f, 0.22 * f, 0.06 * f, 0.1);
+  }
+
+  return {
+    update,
     dispose() {
       scene.remove(root);
-      ringGeo.dispose();
       root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
     },
   };

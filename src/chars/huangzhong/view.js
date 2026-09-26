@@ -1,15 +1,21 @@
 // Huang Zhong's kit view (render-only; reads game.musou = the kit sim of musou.js, never writes sim state):
-//  · the arrows (src/vfx/arrows.js)
+//  · the fx primitives (fx.js) and the arrows (src/vfx/arrows.js); the camera thump is applied here, after the rig
 //  · aim mode: a dotted flight path of the next arrow (same integrator as the sim: speed, gravity, ground) that turns
 //    gold where it would take a standing officer in the head, plus a ring where it lands
 //  · 真・無雙「百步穿楊」 presentation: warm ember-night dim through the activation and close-up (display-space multiply,
-//    centred on him), cut-frame flash, calligraphy cut-in (無雙 + 老將 seal), embers gathering on the giant draw, a
-//    blaze light riding the giant arrow, a warm screen wash on the release and on the explosion.
+//    centred on him), cut-frame flash, calligraphy cut-in (無雙 + 老將 seal), a warm screen wash on the release and on
+//    the explosion; layered gold energy: activation = shock ring + sigil rings + motes spiralling up an aura column
+//    round him; close-up = light pooling on the nocked arrow; volley = a turning ground sigil; giant draw = streaks of
+//    light and ground dust pulled into a growing sun on the arrowhead, contracting rings on the aim line; release =
+//    staggered air rings down the line and a dust wave off his feet (the arrow's flight / explosion: arrows.js).
 import * as THREE from 'three';
 import { on } from '../../core/events.js';
 import { vrng } from '../../core/rng.js';
 import { ST } from '../../crowd/crowd.js';
 import { createArrowView } from '../../vfx/arrows.js';
+import { createFx } from './fx.js';
+import { heroPose } from '../../hero/hero.js';
+import { POSE_SIZE, spearWorld } from '../../hero/rig.js';
 import { ARROW } from '../../combat/projectiles.js';
 import { ground } from '../../world/map.js';
 import { AIM } from './aim.js';
@@ -24,7 +30,8 @@ export function createMusouView(parent, game, camera) {
   const mu = game.musou, hero = game.hero;
   const scene = new THREE.Group();
   parent.add(scene);
-  const arrows = createArrowView(scene, game, mu.proj);
+  const fx = createFx(scene, camera);
+  const arrows = createArrowView(scene, game, mu.proj, fx);
   const addMat = () => new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
 
   // ---- aim preview: dots along the predicted flight + landing ring
@@ -98,24 +105,16 @@ export function createMusouView(parent, game, camera) {
   const setStyle = (el, k, v) => { if (el.style[k] !== v) el.style[k] = v; };
   const show = (el, v) => { setStyle(el, 'display', v > 0 ? 'block' : 'none'); setStyle(el, 'opacity', v.toFixed(3)); };
 
-  // ---- embers gathering on the giant draw + the blaze riding the giant arrow
-  const NE = 160;
-  const em = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), addMat(), NE);
-  em.frustumCulled = false; em.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  for (let i = 0; i < NE; i++) { em.setMatrixAt(i, ZERO); em.setColorAt(i, _c.setRGB(2.6, 1.0, 0.25)); }
-  scene.add(em);
-  const eP = new Float32Array(NE * 4);                                // angle, radius, height, phase
-  for (let i = 0; i < NE; i++) eP.set([vrng.range(0, 6.283), vrng.range(0.6, 2.4), vrng.range(0, 2.2), vrng.range(0, 1)], i * 4);
-  const blaze = new THREE.PointLight(0xff8a30, 0, 26, 1.5);
-  scene.add(blaze);
-
+  // ---- Musou energy (fx): bow / arrowhead positions from the rendered pose
+  const pose = new Float32Array(POSE_SIZE), hpos = new THREE.Vector3(), tip = new THREE.Vector3(), nock = new THREE.Vector3(), bowTop = new THREE.Vector3();
+  let moteAcc = 0, ringAcc = 0, lastT = -1, released = false;
   let tv = -1, relF = -99, burstF = -99;
   on('musou:start', () => { tv = 0; });
   on('musou:burst', () => { burstF = game.frame; });
   on('arrow:fire', (e) => { if (e.big > 1) relF = game.frame; });
   on('scenario', () => { tv = -1; });
 
-  function hideAll() { show(dimEl, 0); show(washEl, 0); show(cut, 0); em.visible = false; blaze.intensity = 0; }
+  function hideAll() { show(dimEl, 0); show(washEl, 0); show(cut, 0); }
 
   function updateGrade(t) {
     // dim: warm ember night on him (≈ 0.7× centre, 0.3× edges), lifting from the plant into the volley
@@ -145,42 +144,109 @@ export function createMusouView(parent, game, camera) {
     setStyle(cutSeal, 'opacity', se.toFixed(3));
     setStyle(cutSub, 'opacity', ramp(t, M.closeup + 10, M.closeup + 20).toFixed(3));
   }
-  function updateEmbers(t) {
-    const k = ramp(t, M.big, M.big + 10) * (1 - ramp(t, M.release, M.release + 2));
-    em.visible = k > 0;
-    if (em.visible) {
-      const u = ramp(t, M.big, M.release);
-      for (let i = 0; i < NE; i++) {
-        const a = eP[i * 4] + t * 0.05 * (1 + eP[i * 4 + 3]), ph = (eP[i * 4 + 3] + t / 40) % 1;
-        const r = eP[i * 4 + 1] * (1 - 0.8 * ph) * (1.2 - u * 0.6), y = 0.2 + eP[i * 4 + 2] * (0.4 + ph);
-        _m.compose(_p.set(hero.x + Math.sin(a) * r, y + ground(hero.x, hero.z), hero.z + Math.cos(a) * r), _q.identity(), _s.setScalar(0.05 * k * (1 - ph * 0.5)));
-        em.setMatrixAt(i, _m);
+  const G = [2.6, 1.75, 0.6];
+  function updateEnergy(t, dt) {
+    if (!mu.active) return;
+    const h = hero, first = lastT < 0 || t < lastT;
+    lastT = t;
+    if (first) released = false;
+    hpos.set(h.x, h.y, h.z);
+    heroPose(h, pose);
+    spearWorld(pose, hpos, h.yaw, -0.55, 0.22, nock, tip);
+    const fwx = Math.sin(h.yaw), fwz = Math.cos(h.yaw);
+    if (first) {                                                         // activation: shock + sigil
+      fx.groundRing(h.x, h.z, 0.5, 8, 0.04, 0.55, 2.6, 1.7, 0.5);
+      fx.groundRing(h.x, h.z, 0.3, 4.2, 0.1, 1.1, 1.2, 0.75, 0.2, 0.05);
+      fx.ring(h.x, 1.2, h.z, 0, 0, 0, 0.5, 4, 0.06, 0.3, 2.2, 1.5, 0.5, 0, 1);
+      fx.glow(h.x, 1.2, h.z, 1, 5, 0.25, 3, 2.2, 0.9);
+      fx.light(h.x, 2, h.z, 4, 0xffc060, 3);
+      for (let k = 0; k < 20; k++) {
+        const a = vrng.range(0, 6.283), v = vrng.range(4, 8);
+        fx.smoke(h.x, 0.2, h.z, 0.4, 1.6, 0.8, 0.52, 0.4, 0.3, 0.5, Math.cos(a) * v, vrng.range(0.3, 1), Math.sin(a) * v, 2.5, 0.3);
       }
-      em.instanceMatrix.needsUpdate = true;
     }
-    // blaze light on the giant arrow in flight
-    const g = mu.giantI, P = mu.proj;
-    const flying = mu.active && g >= 0 && P.st[g] === 1 && P.big[g] === 2;
-    blaze.intensity = flying ? 9 : k * 3;
-    if (flying) blaze.position.set(P.x[g], P.y[g] + 0.8 + ground(P.x[g], P.z[g]), P.z[g]);
-    else if (k > 0) blaze.position.set(hero.x, 1.6 + ground(hero.x, hero.z), hero.z);
+    moteAcc += dt;
+    const step = 1 / 60;
+    if (t < M.plant) {                                                   // aura column + motes spiralling up round him
+      const k = t < M.closeup ? 1 : 0.5;
+      fx.line(h.x, 4.2, h.z, 0, 1, 0, 4.4, 1.3 * k, 0.5 * k, 0.33 * k, 0.1 * k, 0.5);
+      if (t < M.closeup) {
+        spearWorld(pose, hpos, h.yaw, 0, 0.9, nock, bowTop);             // the bow thrust overhead: a star on it
+        fx.dot(bowTop.x, bowTop.y, bowTop.z, 0.7 + 0.2 * Math.sin(t * 0.8), 3, 2.3, 1);
+      } else fx.dot(tip.x, tip.y, tip.z, 0.25 + 0.3 * ramp(t, M.closeup, M.plant), 2.8, 2, 0.8);
+      while (moteAcc >= step) {
+        moteAcc -= step;
+        for (let k2 = 0; k2 < 3; k2++) {
+          const a = vrng.range(0, 6.283), r = vrng.range(0.9, 2.4);
+          fx.glow(h.x + Math.cos(a) * r, vrng.range(0, 0.5), h.z + Math.sin(a) * r, 0.1, 0.04, vrng.range(0.6, 1.1), G[0], G[1], G[2],
+            -Math.sin(a) * 2.5 - Math.cos(a) * 0.6, vrng.range(2.5, 4.5), Math.cos(a) * 2.5 - Math.sin(a) * 0.6, 0.6, 0, 0.3);
+        }
+      }
+      ringAcc += dt;
+      if (ringAcc > 0.35) { ringAcc = 0; fx.groundRing(h.x, h.z, 2.6, 1.2, 0.05, 0.45, 1.4, 0.9, 0.3); }
+    } else if (t < M.big) {                                              // volley: a turning sigil under his feet
+      ringAcc += dt;
+      if (ringAcc > 0.25) { ringAcc = 0; fx.groundRing(h.x, h.z, 1.2, 3.2, 0.05, 0.5, 1.2, 0.6, 0.15); }
+      moteAcc = 0;
+    } else if (t < M.release) {                                          // the giant draw: everything pours into the arrowhead
+      const u = ramp(t, M.big, M.release);
+      fx.dot(tip.x, tip.y, tip.z, 0.3 + 1.3 * u * u, 3.4 * (0.5 + u), 2.5 * (0.5 + u), 1.1 * (0.5 + u));
+      fx.dot(tip.x, tip.y, tip.z, 1.5 + 3 * u, 0.6 * u, 0.36 * u, 0.1 * u);
+      fx.line(tip.x + fwx * 0.3, tip.y, tip.z + fwz * 0.3, fwx, 0, fwz, 1.5 + 5 * u * u, 0.06 + 0.1 * u, 2.8 * u, 2 * u, 0.8 * u, 0.6);   // the line it will fly
+      while (moteAcc >= step) {
+        moteAcc -= step;
+        for (let k2 = 0; k2 < 4; k2++) {
+          const a = vrng.range(0, 6.283), b = vrng.range(-0.6, 0.9), R = vrng.range(2.5, 6), sb = Math.sqrt(1 - b * b), life = vrng.range(0.22, 0.35);
+          const ox = Math.cos(a) * sb * R, oy = b * R * 0.6, oz = Math.sin(a) * sb * R;
+          fx.spark(tip.x + ox, Math.max(0.2, tip.y + oy), tip.z + oz, -ox / life, -oy / life, -oz / life, 0.6, 0.035, life, G[0], G[1], G[2], 0, 0, 1);
+        }
+        if (vrng.chance(0.6)) {                                          // ground dust dragged in toward him
+          const a = vrng.range(0, 6.283), R = vrng.range(3, 6);
+          fx.smoke(h.x + Math.cos(a) * R, 0.15, h.z + Math.sin(a) * R, 0.5, 0.2, 0.6, 0.5, 0.39, 0.3, 0.35, -Math.cos(a) * R * 1.4, 0.3, -Math.sin(a) * R * 1.4, 0.5, 0);
+        }
+      }
+      ringAcc += dt;
+      if (ringAcc > 0.1) {
+        ringAcc = 0;
+        fx.ring(tip.x + fwx * 0.4, tip.y, tip.z + fwz * 0.4, fwx, 0, fwz, 1.1, 0.15, 0.07, 0.16, 2 * u + 0.4, 1.4 * u + 0.3, 0.5 * u + 0.1);
+        fx.groundRing(h.x, h.z, 3.5, 0.8, 0.05, 0.25, 1.2 * u, 0.8 * u, 0.25 * u);
+      }
+      fx.light(tip.x, tip.y, tip.z, 1 + 2 * u, 0xffb050, 8, 1);
+    } else if (!released) {                                              // release: air rings down the line, dust wave
+      released = true;
+      for (let k = 1; k <= 4; k++) {
+        const d = k * 3.2;
+        fx.ring(tip.x + fwx * d, tip.y, tip.z + fwz * d, fwx, 0, fwz, 0.4, 1.0 + k * 0.08, 0.06, 0.3, 2.4, 1.8, 0.8, k * 0.035);
+      }
+      fx.groundRing(h.x, h.z, 0.6, 7, 0.05, 0.5, 1.6, 1.0, 0.35);
+      for (let k = 0; k < 18; k++) {
+        const a = h.yaw + Math.PI + vrng.range(-1.6, 1.6), v = vrng.range(3, 8);
+        fx.smoke(h.x, 0.2, h.z, 0.5, 2, 0.9, 0.52, 0.4, 0.3, 0.5, Math.sin(a) * v, vrng.range(0.3, 1.2), Math.cos(a) * v, 2.5, 0.3);
+      }
+    }
   }
 
   let warm = 2;
+  const finish = (dt) => { fx.update(dt); fx.applyKick(); };
   return {
     update(dt) {
       arrows.update(dt);
       updateAim();
-      if (warm > 0 && tv < 0) { warm--; em.visible = dots.visible = true; return; }   // compile at boot, not mid-Musou
+      if (warm > 0 && tv < 0) { warm--; dots.visible = true; fx.warm(); finish(dt); return; }   // compile at boot, not mid-Musou
       if (mu.active) tv = mu.t;
       else if (tv >= 0) { tv += dt * 60; if (tv > M.end + GIANT_FRAMES) tv = -1; }
-      if (tv < 0) { hideAll(); return; }
-      updateGrade(tv);
-      updateCut(tv);
-      updateEmbers(tv);
+      if (!mu.active) { lastT = -1; ringAcc = 0; }
+      if (tv < 0) hideAll();
+      else {
+        updateGrade(tv);
+        updateCut(tv);
+        updateEnergy(tv, dt);
+      }
+      finish(dt);
     },
     dispose() {
       arrows.dispose();
+      fx.dispose();
       parent.remove(scene);
       scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
       for (const el of [dimEl, washEl, css, cut]) el.remove();
