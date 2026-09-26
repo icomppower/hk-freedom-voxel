@@ -225,6 +225,7 @@ export function createPost({ canvas, width, height }) {
   setSize(width, height);
 
   return {
+    renderer,                                       // main.js: compileAsync warm-up behind the loading card / ink wipe
     setSize,
     /** focus: world point the camera frames (hero) → DoF focus plane; flash: white screen flash (0..1). */
     render(scene, camera, time, focus, flash) {
