@@ -63,7 +63,7 @@ function groundTexture() {
   const c = document.createElement('canvas'); c.width = c.height = SZ;
   const g = c.getContext('2d');
   const r = makeRng(99);
-  g.fillStyle = '#86725f'; g.fillRect(0, 0, SZ, SZ);                        // pale dust (low chroma: the warm sun and grade add the peach)
+  g.fillStyle = '#7e6a57'; g.fillRect(0, 0, SZ, SZ);                        // pale dust (low chroma: the warm sun and grade add the peach)
   for (let i = 0; i < 160; i++) {                                            // tone blotches (dust / damp)
     const x = r.int(0, SZ), y = r.int(0, SZ), rad = r.range(30, 110), light = r.chance(0.55);
     const gr = g.createRadialGradient(x, y, 0, x, y, rad);
@@ -157,8 +157,10 @@ function splatMaterial(map, grass) {
         return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), f.x), mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), f.x), f.y);
       }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
-        float mN = gNoise(vGw / 23.0) * 0.65 + gNoise(vGw / 7.3 + 11.0) * 0.35;
-        diffuseColor.rgb *= mix(vec3(0.8, 0.84, 0.93), vec3(1.08, 1.0, 0.88), smoothstep(0.25, 0.75, mN));
+        // macro: sun-dried ochre drifts vs cooler, darker trampled earth, with defined (not smeared) edges and a
+        // mid-scale mottling, so the 8-40 m band has value and hue separation instead of one beige
+        float mN = gNoise(vGw / 29.0) * 0.6 + gNoise(vGw / 9.1 + 11.0) * 0.3 + gNoise(vGw / 2.3 + 5.0) * 0.1;
+        diffuseColor.rgb *= mix(vec3(0.72, 0.76, 0.84), vec3(1.12, 1.0, 0.84), smoothstep(0.4, 0.6, mN));
         vec4 gT = texture2D(tGrass, vGw / 8.0);
         float gF = texture2D(tGrass, vGw / 61.0 + 0.37).a;                       // macro: lusher / drier patches
         float gm = smoothstep(0.42, 0.58, vGrass + (gT.a - 0.5) * 0.55);
@@ -253,8 +255,9 @@ function groundMesh(scorch) {
 
 /**
  * Grass tufts (one instanced mesh): two crossed quads with a pixel-art blade cutout, rooted where grassAt() is dense,
- * swaying in the valley wind in the vertex shader (GRASS_TIME, advanced by world.js). Normals point up so they light
- * like the ground they grow from. Never on the road or the water; ≤ 0.7 m so nothing hides the fight.
+ * swaying in the valley wind in the vertex shader (GRASS_TIME, advanced by world.js). Normals point up on both faces so
+ * they light like the ground they grow from, plus a gold translucency toward the sun. Never on the road or the water;
+ * ≤ 0.7 m so nothing hides the fight.
  */
 export const GRASS_TIME = { value: 0 };
 function tufts() {
@@ -287,6 +290,16 @@ function tufts() {
         transformed *= 1.0 - smoothstep(26.0, 42.0, distance(instanceMatrix[3].xyz, cameraPosition));   // far tufts: gone into the splat
         float gw = sin(uTime * 1.9 + gp.x * 0.21 + gp.y * 0.13) * 0.6 + sin(uTime * 3.3 + gp.x * 0.7) * 0.25 + 0.35;
         transformed.xz += vec2(0.75, 0.55) * gw * 0.22 * uv.y * uv.y;`);
+    // DoubleSide flips the normal on back faces (faceDirection) → half the cards shaded black. Pin it to the ground's
+    // up for both faces, and let backlit blades glow gold toward the low sun (thin-leaf translucency, stronger at the tip)
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+      uniform vec3 uSunW;`)
+      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+        normal = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float gBack = pow(max(dot(normalize(-vViewPosition), normalize((viewMatrix * vec4(uSunW, 0.0)).xyz)), 0.0), 3.0);
+        totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.5, 0.18) * (0.04 + 0.3 * gBack * vMapUv.y * vMapUv.y);`);
+    sh.uniforms.uSunW = { value: SUN_DIR };
   };
   const r = makeRng(404), spots = [];
   for (let n = 0; n < 80000 && spots.length < 9000; n++) {
@@ -299,7 +312,7 @@ function tufts() {
   }
   const mesh = new THREE.InstancedMesh(geo, mat, spots.length);
   const m = new THREE.Matrix4(), qq = new THREE.Quaternion(), e = new THREE.Euler(), pp = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
-  const TINTS = [0x8e9070, 0xa09a78, 0x80896a, 0xaa9e7a, 0x8a8e6e];   // olive-sage, blue kept in: the warm sun + grade add the gold
+  const TINTS = [0x868a6c, 0x9a9274, 0x7a8466, 0xa29676, 0x84886a];   // olive-sage, blue kept in: the warm sun + grade add the gold
   spots.forEach(([x, z, gm], i) => {
     const w = r.range(0.45, 0.8), hgt = r.range(0.32, 0.62) * (0.7 + 0.5 * gm);
     mesh.setMatrixAt(i, m.compose(pp.set(x, ground(x, z) - 0.03, z), qq.setFromEuler(e.set(0, r.range(0, 3.14), 0)), sc.set(w, hgt, w)));
@@ -440,8 +453,8 @@ function pines() {
 }
 
 // ---------------------------------------------------------------- Han River
-/** Water: 20 cm voxel ripples scrolling downstream (two noise layers), Fresnel reflection of the golden-hour sky
- *  (dwHaze toward the horizon, dusk blue overhead), a sun glint streak toward SUN_DIR, darker depth in the pools, foam
+/** Water: smooth ripples scrolling downstream (two noise layers + chop), Fresnel reflection of the golden-hour sky
+ *  (dwHaze toward the horizon, dusk blue overhead), HDR-capped sun sparkles toward SUN_DIR, darker depth in the pools, foam
  *  round the stepping stones and along the banks (tFoam, a mask in strip uv), a soft shoreline; the haze chunk fogs it. */
 const WATER_VS = /* glsl */`
   varying vec3 vWp; varying vec2 vUv;
@@ -464,29 +477,34 @@ const WATER_FS = /* glsl */`
   }
   float wH(vec2 p) { return wNoise(p * vec2(0.35, 0.8) + vec2(uTime * 0.45, 0.0)) * 0.6 + wNoise(p * vec2(1.1, 1.6) - vec2(uTime * 0.8, uTime * 0.2)) * 0.4; }
   void main() {
-    vec2 q = floor(vWp.xz * 3.0) / 3.0;                                    // voxel ripples (33 cm)
-    float h0 = wH(q), hx = wH(q + vec2(0.33, 0.0)), hz = wH(q + vec2(0.0, 0.33));
-    vec3 N = normalize(vec3((h0 - hx) * 0.7, 1.0, (h0 - hz) * 0.7));
+    // smooth ripples (the old 33 cm voxel grid read as grey paving tiles): two scrolling layers + a fine chop
+    vec2 q = vWp.xz;
+    float h0 = wH(q), hx = wH(q + vec2(0.12, 0.0)), hz = wH(q + vec2(0.0, 0.12));
+    float c0 = wNoise(q * 3.1 + vec2(uTime * 1.3, uTime * 0.4));
+    vec3 N = normalize(vec3((h0 - hx) * 2.2 + (c0 - 0.5) * 0.12, 1.0, (h0 - hz) * 2.2 + (wNoise(q * 3.1 + 7.0 - uTime * 0.9) - 0.5) * 0.12));
     vec3 V = normalize(vWp - cameraPosition);
     vec3 R = reflect(V, N); R.y = abs(R.y);
-    float fr = 0.03 + 0.6 * pow(1.0 - max(dot(-V, N), 0.0), 5.0);         // capped: a bright sheet reads as ice
-    vec3 sky = vec3(0.3);
+    float fr = 0.04 + 0.52 * pow(1.0 - max(dot(-V, N), 0.0), 4.0);
+    vec3 sky = uSkyUp * 0.55;
     #ifdef USE_FOG
-      sky = dwHaze(normalize(vec3(R.x, 0.0, R.z)), fogColor) * 0.8;
+      sky = dwHaze(normalize(vec3(R.x, 0.0, R.z)), fogColor) * 0.75;
     #endif
-    sky = mix(sky, uSkyUp * 0.7, smoothstep(0.08, 0.6, R.y));
+    sky = mix(sky, uSkyUp * 0.6, smoothstep(0.03, 0.55, R.y));              // Fresnel sky: warm horizon → dusk blue up
     float across = abs(vUv.y * 2.0 - 1.0);
-    vec3 body = mix(uDeep, uShallow, smoothstep(0.35, 0.95, across) + 0.25 * h0);
-    vec3 c = mix(body, sky, fr);
+    // darker, saturated teal in the channel, olive-brown shallows toward the banks, a little depth from the ripples
+    vec3 body = mix(uDeep, uShallow, smoothstep(0.3, 0.97, across) + 0.3 * (h0 - 0.5));
+    vec3 c = mix(body, sky * vec3(0.96, 0.92, 0.8), fr);                    // the reflection takes the water's brown
+    // sun glint: tight sparkles on the ripple normals + a faint sheen, capped in HDR so bloom keeps it a sparkle strip
     float sg = max(dot(R, uSun), 0.0);
-    c += uSunCol * (pow(sg, 600.0) * 9.0 + pow(sg, 60.0) * 0.5 + pow(sg, 8.0) * 0.06);   // glint streak toward the low sun
+    c += uSunCol * min(pow(sg, 900.0) * 2.4 * step(0.55, c0) + pow(sg, 90.0) * 0.18 + pow(sg, 12.0) * 0.03, 1.7);
     float fm = texture2D(tFoam, vUv).r;
-    fm = max(fm, smoothstep(0.82, 0.96, across) * 0.55);                   // bank line
-    float fn = wNoise(q * 2.3 + vec2(uTime * 1.2, 0.0)) * 0.6 + wNoise(q * 4.1 - vec2(uTime * 0.7, uTime * 0.4)) * 0.4;
-    float foam = smoothstep(0.42, 0.7, fm * (0.45 + fn * 0.8));
-    c = mix(c, vec3(0.62, 0.58, 0.52), foam * 0.85);
-    float a = mix(0.72, 0.96, fr) * (1.0 - smoothstep(0.9, 1.0, across));  // soft shoreline
-    gl_FragColor = vec4(c, max(a, foam * 0.9 * (1.0 - smoothstep(0.93, 1.0, across))));
+    float fn = wNoise(q * 2.6 + vec2(uTime * 1.2, 0.0)) * 0.55 + wNoise(q * 6.3 - vec2(uTime * 0.7, uTime * 0.4)) * 0.45;
+    // foam: a broken collar round the stones and a lace line on the banks, never a flat decal
+    float bank = smoothstep(0.84, 0.97, across) * 0.6;
+    float foam = smoothstep(0.5, 0.78, max(fm, bank) * (0.3 + fn * 0.95));
+    c = mix(c, vec3(0.74, 0.72, 0.66), foam * 0.8);
+    float a = mix(0.84, 0.97, fr) * (1.0 - smoothstep(0.9, 1.0, across));  // soft shoreline
+    gl_FragColor = vec4(c, max(a, foam * 0.85 * (1.0 - smoothstep(0.93, 1.0, across))));
     #include <fog_fragment>
   }`;
 
@@ -517,26 +535,40 @@ function river() {
   fg.fillStyle = '#000'; fg.fillRect(0, 0, FW, FH);
   for (const [x, z, w] of stones) {
     const u = (x - X0) / W * FW, v = (z - riverZ(x) + HW) / (2 * HW) * FH, rx = (w * 0.5 + 0.2) * FW / W, ry = (w * 0.5 + 0.2) * FH / (2 * HW);
-    fg.save(); fg.translate(u, v); fg.scale(rx * 1.35, ry);
-    const gr = fg.createRadialGradient(0.28, 0, 0, 0.28, 0, 1);
-    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.55, 'rgba(255,255,255,0.8)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    fg.fillStyle = gr; fg.beginPath(); fg.arc(0.28, 0, 1, 0, 6.2832); fg.fill(); fg.restore();
+    fg.save(); fg.translate(u, v); fg.scale(rx * 1.3, ry);
+    // a collar hugging the stone (the stone hides the middle), trailing a little downstream
+    const gr = fg.createRadialGradient(0.2, 0, 0, 0.2, 0, 1);
+    gr.addColorStop(0, 'rgba(255,255,255,0.5)'); gr.addColorStop(0.55, 'rgba(255,255,255,0.95)'); gr.addColorStop(0.72, 'rgba(255,255,255,0.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    fg.fillStyle = gr; fg.beginPath(); fg.arc(0.2, 0, 1, 0, 6.2832); fg.fill(); fg.restore();
   }
   const foam = new THREE.CanvasTexture(fc);
   foam.wrapS = THREE.RepeatWrapping;
   const water = new THREE.Mesh(geo, new THREE.ShaderMaterial({
     vertexShader: WATER_VS, fragmentShader: WATER_FS, transparent: true, depthWrite: false, fog: true,
     uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), uTime: GRASS_TIME, tFoam: { value: foam }, uSun: { value: SUN_DIR },
-      uSkyUp: { value: SKY_UP }, uSunCol: { value: new THREE.Color(1.0, 0.72, 0.4) }, uDeep: { value: new THREE.Color(0x13212a) }, uShallow: { value: new THREE.Color(0x3c4038) } },
+      uSkyUp: { value: SKY_UP }, uSunCol: { value: new THREE.Color(1.0, 0.72, 0.4) }, uDeep: { value: new THREE.Color(0x0b2524) }, uShallow: { value: new THREE.Color(0x434630) } },
   }));
   water.renderOrder = 0.5;
   water.name = 'river';
   grp.add(water);
-  const sm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.8, flatShading: true }), stones.length);
+  // stones: dry tops, a dark wet band down to the waterline (+ a wet sheen), sunk into the water
+  const smMat = new THREE.MeshStandardMaterial({ roughness: 0.75, flatShading: true });
+  smMat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vStoneY;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvStoneY = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).y;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vStoneY;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float wet = 1.0 - smoothstep(${(WATER_Y + 0.04).toFixed(2)}, ${(WATER_Y + 0.13).toFixed(2)}, vStoneY);
+        diffuseColor.rgb *= mix(1.0, 0.38, wet);`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.3, wet);');
+  };
+  const sm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), smMat, stones.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color();
+  const SCOL = [0x7c7466, 0x6c685e, 0x847868, 0x686452];                        // grey-brown river stone, a little moss
   stones.forEach(([x, z, w, h], i) => {
-    sm.setMatrixAt(i, m.compose(p.set(x, WATER_Y + 0.1 - h / 2, z), q.setFromEuler(e.set(r.range(-0.15, 0.15), r.range(0, 3), r.range(-0.15, 0.15))), s.set(w, h, w * r.range(0.7, 1.1))));
-    sm.setColorAt(i, c.set(0x8a7a70).multiplyScalar(r.range(0.8, 1.15)));
+    const top = r.range(0.14, 0.3);
+    sm.setMatrixAt(i, m.compose(p.set(x, WATER_Y + top - h / 2, z), q.setFromEuler(e.set(r.range(-0.15, 0.15), r.range(0, 3), r.range(-0.15, 0.15))), s.set(w, h, w * r.range(0.7, 1.1))));
+    sm.setColorAt(i, c.set(SCOL[r.int(0, 3)]).multiplyScalar(r.range(0.8, 1.1)));
   });
   sm.receiveShadow = true;
   grp.add(sm);
@@ -650,5 +682,7 @@ function mountains() {
 export function buildTerrain(scene, fieldFires) {
   const r = makeRng(61), scorch = fieldFires.map(([x, z, s]) => [x, z, s]);
   for (let i = 0; i < 26; i++) scorch.push([r.range(-40, 40), r.range(-110, 200), r.range(0.5, 0.9)]);
+  // burnt ground where the camp and the summit were fought over (courtyard, parade ground, round the beacon)
+  scorch.push([-20, 132, 0.8], [-3, 116, 0.7], [-30, 121, 0.6], [-9, 186, 0.8], [13, 188, 0.7], [15, 215, 1.1], [-4, 176, 0.6]);
   scene.add(groundMesh(scorch), cliffs(), pines(), river(), rubble(), tufts(), boulders(), mountains());
 }
