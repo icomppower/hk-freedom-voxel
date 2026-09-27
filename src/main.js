@@ -129,7 +129,7 @@ addEventListener('resize', () => {
 const $ = (id) => document.getElementById(id);
 const menu = $('menu'), hudEl = $('hud');
 // the bindings mid-battle too (critic: checking aim meant quitting the chapter)
-menu.querySelector('.hint').insertAdjacentHTML('beforebegin', `<table>${CONTROLS.map(([zh, en, kb]) => `<tr><td>${zh}<small>${en}</small></td><td>${kb}</td></tr>`).join('')}</table>`);
+menu.querySelector('.hint').insertAdjacentHTML('beforebegin', `<table>${CONTROLS.map(([zh, en, kb, pad]) => `<tr><td>${zh}<small>${en}</small></td><td>${kb}</td><td class="pad">${pad}</td></tr>`).join('')}</table>`);
 let paused = false, state = null, ctx = {}, hold = false;   // hold: loading, no renders until the new kit is compiled
 // pause menu: title-screen vocabulary (diamond + swash on the focused item), 繼續 focused on open, ↑/↓ / pad move,
 // Enter / A confirm, Esc / B resume. 撤退 asks once (確定撤退？), a second confirm ink-wipes to the title.

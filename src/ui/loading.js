@@ -52,7 +52,7 @@ export function createLoading(el) {
       $('.l-line b').textContent = ch.lines.intro.zh; $('.l-line small').textContent = ch.lines.intro.en;
       const tips = TIPS.filter((t) => !t[2] || t[2] === ch.id), t = tips[Math.floor(Math.random() * tips.length)];   // UI only, not the sim
       $('.l-tip b').textContent = t[0]; $('.l-tip small').textContent = t[1];
-      state('整軍備戰', 'Preparing the field');
+      state('出陣準備', 'Marshalling the army');           // first stage label; deploy() then climbs 點將 → 佈陣 → 整軍備戰
       this.progress(0.06);
     },
     exit() {},

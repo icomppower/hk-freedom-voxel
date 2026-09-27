@@ -59,8 +59,11 @@ export function createWorld(scene) {
   const dressing = buildDressing(scene, { castle, fieldFires: FIELD_FIRES });
 
   // fire glow on the gate and on two field wrecks
-  const fireLights = [[GATE_X - 6.5, WALL_Z - 3.5], [GATE_X + 7, WALL_Z - 3.5], [-30, 8], [-33, -64]].map(([x, z]) => {
-    const l = new THREE.PointLight(0xff8a3a, 30, 11, 2); l.position.set(x, ground(x, z) + 2.2, z); scene.add(l); return l;
+  // (the last one, by the ford wreck, is borrowed by the select screen as the officer's warm key: select.js 'stage-key')
+  const fireLights = [[GATE_X - 6.5, WALL_Z - 3.5], [GATE_X + 7, WALL_Z - 3.5], [-30, 8], [-33, -64]].map(([x, z], i) => {
+    const l = new THREE.PointLight(0xff8a3a, 30, 11, 2); l.position.set(x, ground(x, z) + 2.2, z); scene.add(l);
+    if (i === 3) l.name = 'stage-key';
+    return l;
   });
 
   // gates: render-side eased 0 (shut) … 1 (open) toward the sim state; doors swing in ≈ 1 s, barricades collapse and char

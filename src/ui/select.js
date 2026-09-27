@@ -1,6 +1,6 @@
 // Character select (#select, ui lane). DW8 officer select over the live battlefield: the focused officer's actual voxel
 // model (kit.model on its own rig, idle clip, cloth/hair chains) stands at the foot of the pass on the right third of the frame,
-// backlit by the low sun with the field behind in deep bokeh (post.js DoF focused on him), slow turntable, a spin-in on
+// backlit by the low sun, a warm firelight key on his front (world.js stage-key), the field behind in deep bokeh (post.js DoF focused on him), slow turntable, a spin-in on
 // every focus change and warm dust motes drifting through the light. Left: 蜀 banner + officer cards (pixel portraits),
 // the info panel (brush name, courtesy name, epithet, weapon, bio, 攻/防/速/射程 bars, Musou name) and the intro line as
 // vertical calligraphy beside the model. All data comes from CHARS / CHAR_ORDER (src/chars/index.js), nothing per-hero.
@@ -54,6 +54,8 @@ export function createSelect(el, flow) {
     i = (i + cards.length) % cards.length;
     if (i === cur && !quiet) return;
     cards[cur].classList.remove('on'); cur = i; cards[cur].classList.add('on');
+    // DOM focus follows the selection (a clicked card kept focus and its ring after ↑/↓: two cards looked lit)
+    if (document.activeElement?.classList.contains('s-card')) cards[cur].focus({ preventScroll: true });
     replay(cards[cur], 'pick');                           // the chosen card flashes in
     const c = CHARS[CHAR_ORDER[i]];
     el.style.setProperty('--acc', c.accent);
@@ -111,7 +113,7 @@ export function createSelect(el, flow) {
   addEventListener('pointerup', () => { drag = null; });
 
   // ---- 3D: officer stage (render-only; every officer meshed on the first view, kept for the session)
-  let group = null, motes = null, t = 0, keyart = false;
+  let group = null, motes = null, t = 0, keyart = false, key = null, keyHome = null;
   const models = {}, pose = new Float32Array(POSE_SIZE), P = new THREE.Vector3(), tmp = new THREE.Vector3();
   // the foot of the mountain road (山道), looking up it: open ground in the long Dingjun map and inside the old arena disc
   const stageAt = () => {
@@ -140,6 +142,10 @@ export function createSelect(el, flow) {
     motes.userData.seed = seed; motes.frustumCulled = false;
     group.add(motes);
     for (const id of CHAR_ORDER) model(id).root.visible = false;   // mesh every officer now, under the ink wipe (no hitch on focus)
+    // warm key: one of the world's firelights (world.js 'stage-key') moved to his front-left while this screen is up, so
+    // his face and the ground round his feet catch fire-glow against the backlit field (same light count: no recompile)
+    key = scene.getObjectByName('stage-key');
+    keyHome = key && key.position.clone();
   }
 
   function view(scene, camera, focus, dt) {
@@ -149,6 +155,7 @@ export function createSelect(el, flow) {
     const S = STAGE, p = stageAt(), id = CHAR_ORDER[cur];
     for (const k in models) models[k].root.visible = k === id;
     const M = model(id);
+    if (key) key.position.set(p.x + 1.6, p.y + 2.3, p.z - 2.4);
     // idle clip, turntable sway + spin-in (easeOutCubic) + the player's drag, eased home when let go
     if (drag === null) userYaw *= Math.exp(-2.5 * dt);
     const u = Math.min(1, spinT / 0.75), spin = S.spin * (1 - u) ** 3;
@@ -190,6 +197,6 @@ export function createSelect(el, flow) {
       show(cur, true);
       nav.start();
     },
-    exit() { nav.stop(); drag = null; if (group) group.visible = false; },
+    exit() { nav.stop(); drag = null; if (group) group.visible = false; if (key) key.position.copy(keyHome); },
   };
 }

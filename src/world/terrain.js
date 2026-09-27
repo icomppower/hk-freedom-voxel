@@ -46,7 +46,8 @@ export function topAt(x, z) {
  *  shader adds the road term from the interpolated route distance, so the road edge is exact on the 2 m grid. */
 function paveBase(x, z) {
   if (Math.abs(z - riverZ(x)) < 9) return -9;
-  let m = noise2(x * 0.07, z * 0.07, 5) * 1.3 - 0.62;
+  // noise paving only grows out of the road (bulges joined to it): far from the route it left orphan flagstone islands
+  let m = noise2(x * 0.07, z * 0.07, 5) * 1.3 - 0.62 - 1.2 * smooth(4, 9, routeDist(x, z));
   if (z > 76 && z < 140 && x > -30 && x < 5) m += 0.55;                      // plaza + courtyard: worn paving
   if (Math.hypot(x - 2, z - 194) < 13) m += 0.7;                             // summit parade ground
   if (Math.hypot(x, z + 140) < 11) m += 0.6;                                 // 本陣 square
@@ -170,10 +171,10 @@ function splatMaterial(map, grass) {
         float pRd = vPave.y, pM = vPave.x + 1.25 * max(0.0, 1.0 - pRd / 3.4);
         float pAa = max(fwidth(vGw.x), fwidth(vGw.y)) * 1.2;                    // m per pixel (outside the branch)
         if (pM > 0.15) {
-          const float CH = 0.56;                                                 // course depth (m)
-          vec2 pw = vGw + (vec2(gNoise(vGw * 1.9), gNoise(vGw * 1.9 + 5.3)) - 0.5) * 0.16;   // hand-cut: wobbly joints
+          const float CH = 0.34;                                                 // course depth (m): ≈ a forearm, not a torso
+          vec2 pw = vGw + (vec2(gNoise(vGw * 3.0), gNoise(vGw * 3.0 + 5.3)) - 0.5) * 0.1;    // hand-cut: wobbly joints
           float row = floor(pw.y / CH), rh = gHash(vec2(row, 7.7));
-          float len = 0.6 + 0.5 * rh;                                            // stone length, per course
+          float len = 0.36 + 0.3 * rh;                                           // stone length, per course
           float xs = pw.x / len + rh * 5.0;
           vec2 cell = vec2(floor(xs), row);
           float h1 = gHash(cell), h2 = gHash(cell + 31.7);
@@ -181,20 +182,25 @@ function splatMaterial(map, grass) {
           vec2 e2 = min(f, vec2(len, CH) - f);
           if (h1 > 0.78) e2.x = min(e2.x, abs(f.x - len * (0.35 + 0.3 * h2)));   // some stones split in two
           float ed = min(e2.x, e2.y);
-          float far = smoothstep(0.03, 0.12, pAa);                               // far off: one worn paved tone, no moire
-          float jw = 0.026 + 0.018 * h2;
+          float far = smoothstep(0.02, 0.08, pAa);                               // far off: one worn paved tone, no moire
+          float jw = 0.018 + 0.012 * h2;
           float stone = smoothstep(jw - pAa, jw + pAa, ed);
-          float present = smoothstep(0.42, 0.58, pM + (h1 - 0.5) * 0.7);         // frays into the dirt stone by stone
+          // the edge: a connected, noisy boundary (low-frequency noise) that breaks into single stones only in a
+          // narrow band, the joints there filling with sand (no loose rectangles out in the dirt)
+          float pe = pM + (gNoise(vGw * 0.45 + 3.1) - 0.5) * 0.5;
+          float present = smoothstep(0.44, 0.56, pe + (h1 - 0.5) * 0.18);
+          float sand = 1.0 - smoothstep(0.5, 0.9, pe);
           vec3 dirt = diffuseColor.rgb;
           vec3 sC = mix(vec3(0.19, 0.18, 0.17), vec3(0.23, 0.18, 0.145), h1) * (0.6 + 0.66 * h2);   // grey to warm-brown stones
           sC = mix(sC, dirt, 0.2 + 0.35 * gNoise(vGw * 0.9 + h1 * 9.0));         // dust in the pores, patchy
           sC *= 1.0 + 0.16 * (1.0 - smoothstep(0.3, 1.5, pRd));                  // polished crown
           sC *= 1.0 - 0.24 * (1.0 - smoothstep(0.07, 0.24, abs(pRd - 1.0)));    // two cart ruts either side of it
-          float bev = 0.07;                                                      // relief: lit toward the key light (+x, +z)
+          float bev = 0.045;                                                      // relief: lit toward the key light (+x, +z)
           float lit = min(1.0, 2.0 - smoothstep(0.0, bev, len - f.x) - smoothstep(0.0, bev, CH - f.y));
           float shd = min(1.0, 2.0 - smoothstep(0.0, bev, f.x) - smoothstep(0.0, bev, f.y));
           sC *= 1.0 + (0.22 * lit - 0.2 * shd) * (1.0 - far);
-          vec3 paved = mix(dirt * 0.52, sC, mix(stone, 0.88, far));
+          sC = mix(sC, dirt, 0.45 * sand);                                        // dust-buried stones at the edge
+          vec3 paved = mix(mix(dirt * 0.52, dirt * 0.95, sand), sC, mix(stone, 0.88, far));
           diffuseColor.rgb = mix(dirt, paved, present);
         }`);
   };
@@ -340,7 +346,7 @@ function boulders() {
     B(-0.25, 0, -0.25, 0.5, 0.5, 0.5, 0.92), B(0.25, 0, -0.25, 0.5, 0.45, 0.5, 0.8), B(-0.25, 0, 0.25, 0.5, 0.4, 0.5, 0.86), B(0.25, 0, 0.25, 0.5, 0.5, 0.5, 0.74),
     B(-0.2, 0.5, -0.15, 0.5, 0.35, 0.55, 1.0), B(0.22, 0.45, 0.1, 0.4, 0.3, 0.45, 0.9), B(-0.05, 0.85, -0.1, 0.35, 0.18, 0.35, 1.06),
   ]);
-  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, flatShading: true }), list.length);
+  const mesh = new THREE.InstancedMesh(geo, stoneShade(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, flatShading: true }), 0.18, 0.28, 0, 0.6), list.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), p = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
   const COLS = [0x806a5e, 0x6e5d55, 0x8c7a6a, 0x756a5a];
   list.forEach(([x, z, s], i) => {
@@ -351,6 +357,27 @@ function boulders() {
   mesh.castShadow = true; mesh.receiveShadow = true;
   mesh.name = 'boulders';
   return mesh;
+}
+
+/** Loose stone (instanced boxes: rubble, boulders): world-space chisel grain, a darker contact band toward the base
+ *  (local y0 → y1) and a dusty, lifted top face, so a chunk reads as weathered masonry seated in the dirt instead of a
+ *  flat-coloured box whose top goes black under the low sun. */
+function stoneShade(mat, cell, amt, y0, y1) {
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vStP; varying float vStY; varying float vStTop;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vStP = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz; vStY = position.y; vStTop = step(0.6, normal.y);`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vStP; varying float vStY; varying float vStTop;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        vec3 stC = floor(vStP / ${cell.toFixed(3)} + 0.25);
+        float stH = fract(sin(dot(stC, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+        diffuseColor.rgb *= (1.0 + (stH - 0.5) * ${amt.toFixed(3)}) * mix(0.68, 1.0, smoothstep(${y0.toFixed(3)}, ${y1.toFixed(3)}, vStY));
+        // backlit sides get a warm dust bounce (they went black against the low sun); tops a greyer dust, not tan card
+        diffuseColor.rgb = mix(diffuseColor.rgb * 1.28 + vec3(0.03, 0.02, 0.01), mix(diffuseColor.rgb, vec3(0.52, 0.48, 0.42), 0.35), vStTop);`);
+  };
+  // the parameters live inside the shader source: without a per-call key three would share one program (same callback text)
+  mat.customProgramCacheKey = () => `stone|${cell}|${amt}|${y0}|${y1}`;
+  return mat;
 }
 
 // ---------------------------------------------------------------- cliffs
@@ -562,7 +589,8 @@ function river() {
         diffuseColor.rgb *= mix(1.0, 0.38, wet);`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.3, wet);');
   };
-  const sm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), smMat, stones.length);
+  // a faceted, flattened dodecahedron (36 tris): a water-worn rock, not a floating tile
+  const sm = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.62, 0), smMat, stones.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color();
   const SCOL = [0x7c7466, 0x6c685e, 0x847868, 0x686452];                        // grey-brown river stone, a little moss
   stones.forEach(([x, z, w, h], i) => {
@@ -592,7 +620,7 @@ function rubble() {
         r: [r.range(-0.25, 0.25), r.range(0, 3.14), r.range(-0.25, 0.25)], c: wood ? COLS[5] : COLS[r.int(0, 4)], v: r.range(0.85, 1.1) });
     }
   }
-  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.92, flatShading: true }), list.length);
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), stoneShade(new THREE.MeshStandardMaterial({ roughness: 0.92, flatShading: true }), 0.07, 0.3, -0.5, 0.3), list.length);
   mesh.name = 'rubble';
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
   list.forEach((b, i) => {

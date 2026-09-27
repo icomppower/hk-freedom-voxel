@@ -205,9 +205,20 @@ function fireSystem(scene, list) {
     transparent: true, depthWrite: false, side: THREE.DoubleSide }), cards.length);
   cm.frustumCulled = false; cm.renderOrder = 2;
   cm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cards.length * 3), 3);
-  // lensClear: ember cubes by the lens read as flat pale squares, so cut them inside 3 m
-  const add = lensClear(new THREE.MeshBasicMaterial({ color: 0xffffff, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false }), 3);
-  const fm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), add, embers.length);
+  // embers: soft round sparks (camera-facing quad, radial glow: hot core → orange rim), capped at ≈ 0.6° on screen and
+  // faded out inside 4 m of the lens — a box by the lens turned into a flat tan hexagon
+  const add = new THREE.MeshBasicMaterial({ map: glowTexture(), color: 0xffffff, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false });
+  add.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vEmNear;').replace('#include <project_vertex>', `
+      vec4 mvPosition = modelViewMatrix * vec4( instanceMatrix[3].xyz, 1.0 );
+      float emS = length(instanceMatrix[0].xyz), emD = -mvPosition.z;
+      mvPosition.xy += transformed.xy * 2.6 * min(emS, emD * 0.004);
+      vEmNear = smoothstep(2.5, 4.5, emD);
+      gl_Position = projectionMatrix * mvPosition;`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vEmNear;')
+      .replace('#include <dithering_fragment>', 'gl_FragColor.rgb *= vEmNear * mix(vec3(1.0, 0.55, 0.3), vec3(1.0), diffuseColor.a * diffuseColor.a);');
+  };
+  const fm = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), add, embers.length);
   fm.frustumCulled = false;
   fm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(embers.length * 3), 3);
   const sm = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), smokeMaterial(), puffs.length);
@@ -228,6 +239,7 @@ function fireSystem(scene, list) {
         gl_Position = projectionMatrix * mvPosition; vNear = smoothstep(5.0, 14.0, -mvPosition.z);` : '#include <project_vertex>\nvNear = smoothstep(4.0, 12.0, -mvPosition.z);');
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vNear;').replace('#include <dithering_fragment>', 'gl_FragColor.rgb *= vNear;');
     };
+    gm.customProgramCacheKey = () => 'fire-glow|' + bb;   // halo (billboard) and pool (flat) share the callback text: keep two programs
     return gm;
   };
   const flat = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
@@ -443,7 +455,17 @@ export function buildDressing(scene, { castle, fieldFires }) {
   const poles = [], cloths = [], props = [];
   // sunlight through the cloth: emissive = the banner's own texture, so 魏/蜀 read even when backlit
   // lensClear (also on the poles / props below): a banner or tent between the lens and the hero blacked out a third of the frame
-  const cm = (map, alpha = true) => lensClear(new THREE.MeshStandardMaterial({ map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: 0.22, side: THREE.DoubleSide, alphaTest: alpha ? 0.5 : 0, roughness: 0.92, flatShading: true }), 2.5);
+  // DoubleSide cloth seen from behind showed the glyph mirror-imaged (魏 read backwards): back faces sample the colour
+  // with u flipped (the alpha / tattered hem stays put, so the silhouette matches from both sides)
+  const unmirror = (m) => {
+    m.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <map_fragment>', 'vec2 bnUv = gl_FrontFacing ? vMapUv : vec2(1.0 - vMapUv.x, vMapUv.y);\ndiffuseColor *= vec4(texture2D(map, bnUv).rgb, texture2D(map, vMapUv).a);')
+        .replace('#include <emissivemap_fragment>', 'totalEmissiveRadiance *= texture2D(emissiveMap, bnUv).rgb;');
+    };
+    return m;
+  };
+  const cm = (map, alpha = true) => lensClear(unmirror(new THREE.MeshStandardMaterial({ map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: 0.22, side: THREE.DoubleSide, alphaTest: alpha ? 0.5 : 0, roughness: 0.92, flatShading: true })), 2.5);
   const mats = {
     wei: cm(bannerTexture('魏', { bg: '#7d2a1f', fg: '#1a0d0a', border: '#4a1712', seed: 3 })),
     shu: cm(bannerTexture('蜀', { bg: '#c7a574', fg: '#2a120a', border: '#8e2a1c', w: 192, h: 256, seed: 5 })),
@@ -648,7 +670,7 @@ export function buildDressing(scene, { castle, fieldFires }) {
       L(0, 0.1, 0, [0.2, 0.06, 0.2], 0x8a7a50);                                // boss
     } else if (kind === 1) {
       const len = r.range(1.2, 2.6);
-      L(0, 0.05, 0, [0.06, 0.06, len], 0x4a3222, [0, 0, 0]);
+      L(0, 0.05, 0, [0.06, 0.06, len], 0x6b4a2e, [0, 0, 0]);                                  // sun-bleached shaft, not a black bar
       L(0, 0.05, len / 2 + 0.12, [0.1, 0.04, 0.26], 0xa8adb2);                 // spearhead catches the sun
     } else L(0, 0.14, 0, [0.34, 0.26, 0.38], shade(0x3a3434, r.range(0.8, 1.2)), [r.range(-0.6, 0.6), 0, r.range(-0.6, 0.6)]);
   }
@@ -756,7 +778,7 @@ export function buildDressing(scene, { castle, fieldFires }) {
   const fallenMat = new THREE.MeshStandardMaterial({ map: fallenTex, emissiveMap: fallenTex, emissive: 0xffffff, emissiveIntensity: 0.12, side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.95 });
   for (let i = 0, n = 0; i < 60 && n < 10; i++) {
     const x = r.range(-40, 40), z = r.range(-110, 200), yaw = r.range(0, 6.28);
-    if (inAt(x, z) < 3) continue;
+    if (inAt(x, z) < 3 || routeDist(x, z) < 6) continue;             // off the road: a 4 m orange slab by the spawn filled the frame
     n++;
     const gy = ground(x, z), c = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 4.3, 3, 4), fallenMat);
     c.rotation.set(-Math.PI / 2, 0, yaw); c.position.set(x, gy + 0.06, z); c.receiveShadow = true;
@@ -809,7 +831,7 @@ export function buildDressing(scene, { castle, fieldFires }) {
       for (const c of cloths) animateCloth(c, t);
       updateFire(t, litGate);
       poseArmy(t);
-      for (const d of dusts) d.position.x = d.userData.x + Math.sin(t * 0.05 * d.userData.sp + d.userData.ph) * 4 + WIND.x * ((t * d.userData.sp) % 8);
+      for (const d of dusts) d.position.x = d.userData.x + Math.sin(t * 0.05 * d.userData.sp + d.userData.ph) * 4 + WIND.x * 3.2 * Math.sin(t * 0.021 * d.userData.sp + d.userData.ph * 1.7);
     },
   };
 }
