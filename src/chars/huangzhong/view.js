@@ -56,21 +56,52 @@ export function createMusouView(parent, game, camera) {
     }
     return -1;
   }
+  /** First standing soldier whose body the point passes (within 0.5 m, feet to helmet), else -1. */
+  function bodyAt(x, y, z) {
+    const c = game.crowd;
+    for (let i = 0; i < c.N; i++) {
+      const s = c.st[i];
+      if (s === ST.OFF || s === ST.DEAD || s === ST.AIR || s === ST.DOWN) continue;
+      const dx = c.x[i] - x, dz = c.z[i] - z;
+      if (dx * dx + dz * dz < 0.25 && y - c.y[i] >= 0 && y - c.y[i] <= ARROW.standH) return i;
+    }
+    return -1;
+  }
+  // fx r3 acc: DW5-style reticle (DOM, crisp at any resolution and outside the DoF): a ring with four ticks where the
+  // next arrow first meets a body (or ≈ 20 m down the path), closing in as the draw builds, gold and pulsing when the
+  // path takes a standing officer's head
+  const ret = document.createElement('div');
+  ret.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;pointer-events:none;z-index:4;display:none';
+  ret.innerHTML = '<svg viewBox="-50 -50 100 100" width="120" height="120" style="position:absolute;left:-60px;top:-60px;overflow:visible">' +
+    '<circle r="22" fill="none" stroke-width="3"/><circle r="3"/><path d="M0-42V-28M0 42V28M-42 0H-28M42 0H28" stroke-width="4" stroke-linecap="round"/></svg>';
+  document.body.appendChild(ret);
+  const retSvg = ret.firstChild;
+  const setRet = (on, x, y, z, d, gold) => {
+    if (!on) { if (ret.style.display !== 'none') ret.style.display = 'none'; return; }
+    _p.set(x, y + ground(x, z), z).project(camera);
+    if (_p.z > 1) { ret.style.display = 'none'; return; }
+    ret.style.display = 'block';
+    ret.style.transform = `translate(${((_p.x * 0.5 + 0.5) * innerWidth).toFixed(1)}px,${((0.5 - _p.y * 0.5) * innerHeight).toFixed(1)}px) scale(${(1.35 - 0.45 * d).toFixed(3)})`;
+    const col = gold ? '#ffd24a' : d >= 1 ? '#fff4dc' : '#f2c890';
+    retSvg.style.stroke = col; retSvg.style.fill = col;
+    retSvg.style.filter = `drop-shadow(0 0 ${gold ? 6 : 2}px ${gold ? 'rgba(255,170,40,.9)' : 'rgba(0,0,0,.85)'})`;
+  };
   function updateAim() {
     const A = mu.aim;
-    if (!A.active) { if (dots.visible) { dots.visible = false; land.visible = false; headMark.visible = false; } return; }
+    if (!A.active) { setRet(false); if (dots.visible) { dots.visible = false; land.visible = false; headMark.visible = false; } return; }
     dots.visible = true;
     const S = AIM.base, cp = Math.cos(A.pitch);
     let x = hero.x + Math.sin(A.yaw) * ARROW.ahead, y = hero.y + ARROW.heroY, z = hero.z + Math.cos(A.yaw) * ARROW.ahead;
     let vx = Math.sin(A.yaw) * cp * S.speed, vy = Math.sin(A.pitch) * S.speed, vz = Math.cos(A.yaw) * cp * S.speed;
     const life = Math.round(S.range / S.speed * 60), pulse = 0.75 + 0.25 * Math.sin(performance.now() / 90);
-    let n = 0, gold = false, hx = 0, hy = 0, hz = 0;
+    let n = 0, gold = false, hx = 0, hy = 0, hz = 0, rf = 0, rx = x, ry = y, rz = z;
     for (let f = 1; f <= 90 && n < ND; f++) {                   // same integrator as projectiles.js (flat, then spent)
       const spent = f > life;
       vy -= (spent ? 30 : S.g) / 60 * 1; if (spent) { vx *= 0.97; vz *= 0.97; }
       x += vx / 60; y += vy / 60; z += vz / 60;
       if (y <= 0) break;
-      if (!gold && headAt(x, y, z) >= 0) { gold = true; hx = x; hy = y; hz = z; }
+      if (!gold && headAt(x, y, z) >= 0) { gold = true; hx = x; hy = y; hz = z; if (!rf) { rf = f; rx = x; ry = y; rz = z; } }
+      if (!rf && (f % 2 === 0 && f > 4 && bodyAt(x, y, z) >= 0 || f === 14)) { rf = f; rx = x; ry = y; rz = z; }
       if (f % 2 === 0 && f > 2) {
         const k = 1 - n / ND, s = (0.07 + 0.03 * A.d) * (1 + f / 40);         // grows down range: reads at 20 m
         _m.compose(_p.set(x, y + ground(x, z), z), _q.identity(), _s.setScalar(s));
@@ -79,6 +110,7 @@ export function createMusouView(parent, game, camera) {
         n++;
       }
     }
+    setRet(true, rx, ry, rz, A.phase === 'draw' ? A.d : 1, gold);
     for (let i = n; i < ND; i++) dots.setMatrixAt(i, ZERO);
     dots.instanceMatrix.needsUpdate = true; dots.instanceColor.needsUpdate = true;
     headMark.visible = gold;
@@ -263,7 +295,7 @@ export function createMusouView(parent, game, camera) {
       fx.dispose();
       parent.remove(scene);
       scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
-      for (const el of [dimEl, washEl, css, cut]) el.remove();
+      for (const el of [dimEl, washEl, css, cut, ret]) el.remove();
     },
   };
 }

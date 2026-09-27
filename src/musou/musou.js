@@ -292,8 +292,10 @@ export function createMusou(game) {
       Object.assign(o, { id: 1, yaw: offSun(mu.yaw0 + Math.PI * 0.8), dist: 4.1 - 0.6 * u, pitch: 0.36, fov: 46, height: 1.0, side: 0.1 });
     } else if (t < M.chase) {                              // head-and-shoulders cut-in (slightly from above), then pull back
       const u = Math.min(1, (t - M.closeup) / (M.pullback - M.closeup)), v = Math.max(0, (t - M.pullback) / (M.chase - M.pullback));
-      Object.assign(o, { id: 2, yaw: offSun(mu.yaw0 + Math.PI * 0.88), dist: 1.85 - 0.25 * smooth(u) + 1.8 * v * v, pitch: 0.16 + 0.12 * v, fov: 32 + 10 * v,
-        height: 1.52 - 0.3 * v, side: -0.16 * (1 - v) });
+      // (fx r3 acc: square on, farther and from above with a long lens — from 0.88π at 1.85 m the raised forearm and spear
+      // filled the cut-in and hid his face)
+      Object.assign(o, { id: 2, yaw: offSun(mu.yaw0 + Math.PI), dist: 3.1 - 0.3 * smooth(u) + 1.2 * v * v, pitch: 0.2 + 0.08 * v, fov: 30 + 12 * v,
+        height: 1.62 - 0.35 * v, side: 0 });
     } else if (t < M.contact) {                            // low chase camera behind him (never into the sun)
       Object.assign(o, { id: 3, yaw: h.yaw, dist: 2.7, pitch: 0.08, fov: 54, height: 0.95 });
     } else if (t >= M.finisher - 2) {
@@ -302,8 +304,8 @@ export function createMusou(game) {
       // view). The old flank camera had the dive + coil 4–6 m from the lens and the wave dust between, a teal fog with
       // no hero in it. It is also the gameplay side of him, so the blend back to control is short.
       const u = smooth((t - M.finisher + 2) / (M.end - M.finisher + 2));
-      Object.assign(o, { id: 4, yaw: offSun(mu.ayaw + mu.side * 0.32), dist: 8.2 + 1.3 * u, pitch: -0.03 + 0.07 * u, fov: 58 - 4 * u,
-        height: 1.5 + 0.3 * u, side: 0, shake: 0.6 });
+      Object.assign(o, { id: 4, yaw: offSun(mu.ayaw + mu.side * 0.32), dist: 8.2 + 1.3 * u, pitch: 0.05 + 0.06 * u, fov: 58 - 4 * u,
+        height: 1.9 + 0.3 * u, side: 0, shake: 0.6 });   // (fx r3 acc: higher, looking down a touch — the low lens filled the bottom third with blurred grass)
     } else {
       // payoff: whip round to the sun-side-away flank of the rush (≈66° off the rush line), low, so the launch fan
       // crosses the frame front-lit and the dragon's sweep runs broadside on the far side; hold that while the bodies

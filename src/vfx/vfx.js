@@ -103,13 +103,16 @@ const DUST_FS = /* glsl */`
   varying vec3 vCol; varying float vA; varying vec2 vP; varying float vSeed;
   #include <fog_pars_fragment>
   void main() {
-    // fx r2: the dust "pixels" are ≈ 4 screen px whatever the puff's size (fixed steps per sprite turned every big
-    // near puff into a mosaic of 40 px blocks, worse at 1080p); a soft rim instead of a hard stepped one
-    float qs = 4.0 * max(fwidth(vP.x), fwidth(vP.y));
-    vec2 p = qs > 0.2 ? vP : floor(vP / qs + 0.5) * qs;
+    // fx r3 acc: a soft noise puff (no pixel quantisation at all — the 4 px steps still read as a JPEG mosaic under the
+    // DoF); the voxel feel is carried by the chunk debris, not by the smoke
+    vec2 p = vP;
     float r = length(p), th = atan(p.y, p.x);
-    float edge = 0.8 + 0.12 * sin(3.0 * th + vSeed) + 0.07 * sin(5.0 * th - 1.7 * vSeed);
-    float a = vA * (1.0 - smoothstep(edge - 0.5, edge, r));
+    vec2 q0 = p * 2.3 + vec2(vSeed * 1.7, vSeed * 0.9);
+    vec2 fi = floor(q0), ff = fract(q0); ff = ff * ff * (3.0 - 2.0 * ff);
+    float nz = mix(mix(fract(sin(dot(fi, vec2(127.1, 311.7))) * 43758.5), fract(sin(dot(fi + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5), ff.x),
+                   mix(fract(sin(dot(fi + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5), fract(sin(dot(fi + 1.0, vec2(127.1, 311.7))) * 43758.5), ff.x), ff.y);
+    float edge = 0.72 + 0.1 * sin(3.0 * th + vSeed) + 0.22 * nz;
+    float a = vA * (1.0 - smoothstep(edge - 0.55, edge, r)) * (0.75 + 0.35 * nz);
     if (a < 0.01) discard;
     vec2 q = p / edge;
     vec3 n = vec3(q, sqrt(max(0.0, 1.0 - dot(q, q))));
@@ -120,7 +123,7 @@ const DUST_FS = /* glsl */`
 
 const TRAIL_VS = /* glsl */`
   uniform vec3 uHeroA, uHeroB;            // hero feet / head in view space
-  attribute vec4 aT; varying vec4 vT; varying float vNear; varying vec3 vView; varying float vVeil;
+  attribute vec4 aT; varying vec4 vT; varying float vNear; varying vec3 vView; varying float vVeil; varying float vNdcY;
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     vT = aT; vView = mv.xyz;
@@ -140,6 +143,7 @@ const TRAIL_VS = /* glsl */`
     vVeil = (1.0 - 0.7 * (1.0 - smoothstep(0.3, 0.85, miss)) * step(d, t - 0.1)) * (0.45 + 0.55 * smoothstep(2.2, 5.5, d));
     mv.xyz *= max(0.3, (d - pull) / d);
     gl_Position = projectionMatrix * mv;
+    vNdcY = gl_Position.y / max(gl_Position.w, 0.05);   // fx r3 acc: screen coverage (fwidth vs the across coordinate)
   }`;
 // aT = (age 0 new..1 old, across 0 inner..1 outer edge, gain, hue 0 white-blue..1 musou teal)
 // The concept's arc: a translucent white veil streaked with voxel-stepped speed lines, a bold near-white core
@@ -154,10 +158,14 @@ const TRAIL_VS = /* glsl */`
 const TRAIL_FS = /* glsl */`
   uniform float uEdge; uniform vec3 uHeroA, uHeroB; uniform mat4 projectionMatrix;
   uniform vec3 uWhite, uFringe, uHot, uGlowC; uniform float uGrad;                 // the kit's ribbon colours (hue 0; hue 1 = musou teal)
-  varying vec4 vT; varying float vNear; varying vec3 vView; varying float vVeil;
+  varying vec4 vT; varying float vNear; varying vec3 vView; varying float vVeil; varying float vNdcY;
   float h1(float n) { return fract(sin(n * 91.7) * 43758.5453); }
   void main() {
     float age = clamp(vT.x, 0.0, 1.0), v = clamp(vT.y, 0.0, 1.0), g = vT.z * vNear, hue = vT.w;
+    // fx r3 acc: the band's width as a share of the screen height (v runs 0 → 1 across it): a sweep past the lens (ZY N4
+    // filled a quarter of the frame) fades out, so a near arc stays a streak instead of a slab
+    float pxV = max(fwidth(vT.y), 1e-5), cover = fwidth(vNdcY) * 0.5 / pxV;
+    g *= 1.0 - 0.85 * smoothstep(0.26, 0.55, cover);
     vec3 nrm = cross(dFdx(vView), dFdy(vView));
     float facing = abs(dot(nrm, normalize(vView))) / max(length(nrm), 1e-20);
     float graze = 1.0 - smoothstep(0.25, 0.7, facing);            // 0 face-on arc .. 1 flat spin seen edge-on
@@ -173,6 +181,33 @@ const TRAIL_FS = /* glsl */`
     // fx r2 (kit trail.grad, the bow): only the leading ≈ half of the swing carries light, a hot white leading edge
     // → amber → transparent tail; a flat spin stays a translucent crescent (a solid cream disc read as paper)
     float gd = uGrad * (1.0 - hue), tf = mix(1.0, 1.0 - smoothstep(0.08, 0.6, age), gd), hd = 1.0 - smoothstep(0.0, 0.25, age);
+    if (gd > 0.5) {
+      // fx r3 acc — the bow (kit trail.grad): purely additive and smooth (no premultiplied fill, no voxel bands: those read
+      // as an opaque banana-yellow plank / paper sheet). Across the band from the limb-tip path inward: a white-hot edge a
+      // few pixels wide → amber → clear within ≤ 30 % of the width (and ≤ ≈ 45 px), plus a few speed streaks in the amber;
+      // along it: brightest on the newest part, gone by ≈ 60 % of the 8-frame life (≈ 0.08 s). Brightness drops as the
+      // band covers more of the screen, so a spin past the lens (N5) stays a light crescent, never a sheet.
+      float e = 1.0 - v, px = pxV;
+      float edge = exp(-pow(e / max(px * 3.0, 0.02), 2.0));
+      float wa = min(0.3 - 0.14 * graze, 45.0 * px);                // (a flat spin: a narrower amber skirt)
+      float amb = exp(-e / (wa * 0.3)) * (1.0 - smoothstep(wa * 0.5, wa, e));
+      float strk = step(0.72, h1(floor(v * 36.0) + 7.0)) * step(age, 0.25 + 0.4 * h1(floor(v * 36.0))) * (1.0 - smoothstep(0.5, 0.95, e / 0.45)) * (1.0 - graze);
+      float along = (1.0 - smoothstep(0.05, 0.6, age)) * (0.55 + 0.45 * hd);
+      float k = 1.5 * g * along * mix(1.0, 0.45, smoothstep(0.1, 0.35, cover)) * mix(1.0, 0.5, graze);
+      vec3 col = (uHot * 2.0 * edge * (0.55 + 0.45 * hd) + uFringe * (amb * 0.75 + strk * 0.35) + uGlowC * 0.25 * amb) * k;
+      #ifdef DEPTH_PASS
+        if (edge * along < 0.35) discard;
+        float dd = length(vView), hh = length(mix(uHeroA, uHeroB, 0.55));
+        float zg = vView.z * clamp(dd, hh - 1.2, hh + 4.0) / dd;
+        gl_FragDepth = 0.5 + 0.5 * (projectionMatrix[2][2] * zg + projectionMatrix[3][2]) / -zg;
+        gl_FragColor = vec4(0.0);
+        return;
+      #endif
+      if (uEdge < 0.5 || uEdge > 2.5) discard;                     // one colour pass (the core pass) draws the bow ribbon
+      if (max(col.r, max(col.g, col.b)) < 0.004) discard;
+      gl_FragColor = vec4(col, 0.0);
+      return;
+    }
     rimLo += gd * graze;                                           // (one rim band, not two)
     vec4 o;
     if (uEdge > 2.5) {
@@ -374,10 +409,12 @@ const RING_VS = /* glsl */`varying vec2 vUv; void main() { vUv = uv * 2.0 - 1.0;
 const RING_FS = /* glsl */`
   uniform float uU; uniform vec3 uColor; varying vec2 vUv;
   void main() {
-    float r = floor(length(vUv) * 40.0 + 0.5) / 40.0;               // voxel-stepped radius
+    // fx r3 acc: smooth and thinner (the voxel-stepped 0.14-wide band read as an opaque stepped yellow sheet round N5)
+    float r = length(vUv), aa = fwidth(r) * 1.5;
     float front = 0.3 + 0.7 * (1.0 - (1.0 - uU) * (1.0 - uU));
-    float band = smoothstep(front - 0.14, front, r) * (1.0 - step(front, r));
-    float edge = smoothstep(front - 0.04, front, r) * (1.0 - step(front, r));
+    float out_ = 1.0 - smoothstep(front - aa, front + aa, r);
+    float band = smoothstep(front - 0.08, front, r) * out_;
+    float edge = smoothstep(front - 0.025 - aa, front, r) * out_;
     float fade = (1.0 - uU) * (1.0 - uU);
     gl_FragColor = vec4(uColor * (band * 0.22 + edge * 0.9) * fade, 1.0);
   }`;
@@ -963,7 +1000,7 @@ export function createVfx(scene, game, world) {
   // Heavy windows open → finisher volume. Charge finishers get their benchmark identity (charge-attacks notes):
   // C3 gold pillar ring (after the dark smoke arc, see afterStep), C5 fan of blue-white shafts from the ground,
   // C6 rock eruption inside a 2.5 H dust wall, jump charge a small quake; the rest is shaped by the hitbox.
-  const GOLD = [1.5, 0.72, 0.2], SHAFT = [0.28, 0.52, 0.92];
+  const GOLD = [1.5, 0.72, 0.2], SHAFT = [0.28, 0.52, 0.92], BOW_RING = [0.9, 0.5, 0.16];   // (N5 spin ring: dimmer, fx r3 acc)
   const CRACK_WARM = [2.6, 1.0, 0.25], WALL_WARM = [1.2, 0.6, 0.2];
   on('attack:swing', (e) => {
     const h = game.hero, m = h.kit.moves[e.move], hit = m && m.hits[e.win];
@@ -976,7 +1013,7 @@ export function createVfx(scene, game, world) {
     if (!e.heavy && tr && tr.moves && tr.moves.includes(e.move)) {   // fx r1: bow-limb slashes (the ribbon is the arc itself)
       // fx r2: the crescent ribbon is the cut (a straight razor beam + pulse ring over it read as a lens flare)
       if (hit.shape === 'circle') {                          // N5 spin: ground ring + dust skirt under the disc
-        ring(h.x, h.z, R * 1.2, 0.32, K.ring);
+        ring(h.x, h.z, R * 1.2, 0.3, BOW_RING);
         dustRing(h.x, h.z, 16, 0.6, R * 1.7, 0.5, 0.55);
       }
       shards(h.x + fx * R * 0.5, 1.1, h.z + fz * R * 0.5, 8, 3.5, K.glitter, 0.03);

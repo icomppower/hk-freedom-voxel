@@ -16,7 +16,7 @@ import { emit } from '../../core/events.js';
 import { setState, stickDir } from '../../hero/locomotion.js';
 import { ST, wrap } from '../../crowd/crowd.js';
 import { SUN_DIR } from '../../world/sky.js';
-import { createProjectiles, ARROW } from '../../combat/projectiles.js';
+import { createProjectiles, ARROW, AS } from '../../combat/projectiles.js';
 import { createAim } from './aim.js';
 import { live } from './model.js';
 
@@ -55,10 +55,37 @@ export function createMusou(game) {
   // they flew out of the top of the frame — the kit aim hook (camera.js, eased in / out) raises and levels the lens
   // and C6's fire burst lands 5–12 m out wherever the soft lock took it (often at a frame edge, or between him and the
   // lens, with its launched bodies smeared across the near DoF): the lens backs off and climbs to take in the ring
-  const juggle = { dist: 7.6, pitch: 0.2, fov: 52, height: 2.7, side: 0 }, blast = { dist: 9, pitch: 0.42, fov: 54, height: 1.4, side: 0 };
+  // fx r3 (acceptance): the blast shot also turns the view onto the burst point — the soft lock through N1-N5 had him
+  // loosing 66-80° off the view and the ball went off at a frame edge. yaw = the line hero → burst, swung 0.4 rad toward
+  // the side the lens already is on, with `side` putting the hero-burst midpoint on the centre line; higher and farther
+  // back, so the ball (≈ 45 % of the frame height) stands over the near helmets instead of behind them
+  const juggle = { dist: 7.6, pitch: 0.2, fov: 52, height: 2.7, side: 0 }, blast = { yaw: 0, dist: 12, pitch: 0.32, fov: 56, height: 2.2, side: 0 };
+  // (C5 rain gets the same treatment, lighter: the lens turns onto the circle it will fall in)
+  const c6 = { seq: -1, x: 0, z: 0 };
+  function c6Point(h) {
+    const P = mu.proj, c5 = h.move === 'c5';
+    if (c6.seq !== h.moveSeq) {                                   // new charge: predict the shot's own aim rule (projectiles.js)
+      c6.seq = h.moveSeq;
+      const s = h.kit.moves[h.move].shots[0], c = game.crowd, R = s.rain;
+      const tg = c5 ? P.lockOn(h.x, h.z, h.yaw, R.reach, 50 * Math.PI / 180, false) : P.lockOn(h.x, h.z, h.yaw, s.range * 0.9, s.home * Math.PI / 180, false);
+      const yaw = tg >= 0 ? Math.atan2(c.x[tg] - h.x, c.z[tg] - h.z) : h.yaw;
+      const dt = tg >= 0 ? Math.hypot(c.x[tg] - h.x, c.z[tg] - h.z) : 0;
+      const d = c5 ? (tg >= 0 ? dt : R.ahead) : tg >= 0 ? Math.max(5, Math.min(12, dt)) : s.groundAim;
+      c6.x = h.x + Math.sin(yaw) * d; c6.z = h.z + Math.cos(yaw) * d;
+    }
+    if (!c5) for (let i = 0; i < P.N; i++) {                      // in flight: where it will hit the ground
+      if (P.st[i] !== AS.FLY || !P.fire[i] || P.big[i] !== 1 || P.move[i] !== 'c6') continue;
+      const k = P.vy[i] < -1 ? P.y[i] / -P.vy[i] : 0.15;
+      c6.x = P.x[i] + P.vx[i] * k; c6.z = P.z[i] + P.vz[i] * k;
+    }
+    const L = Math.atan2(c6.x - h.x, c6.z - h.z), d = Math.hypot(c6.x - h.x, c6.z - h.z), sd = wrap(game.cam.yaw - L) < 0 ? -0.4 : 0.4;
+    blast.yaw = L + sd; blast.side = d * 0.5 * Math.sin(sd); blast.dist = (c5 ? 7.5 : 9) + d * 0.5;
+    blast.pitch = c5 ? 0.26 : 0.32; blast.height = c5 ? 1.8 : 2.2;
+    return blast;
+  }
   mu.aimShot = () => {
     const h = game.hero, t = h.moveT, atk = h.state === 'attack';
-    return mu.aim.shot() || (atk && h.move === 'c2' && t >= 22 && t <= 70 ? juggle : atk && h.move === 'c6' && t >= 20 && t <= 78 ? blast : null);
+    return mu.aim.shot() || (atk && h.move === 'c2' && t >= 22 && t <= 70 ? juggle : (atk && h.move === 'c6' && t >= 20 && t <= 84) || (atk && h.move === 'c5' && t >= 14 && t <= 66) ? c6Point(h) : null);
   };
 
   mu.start = (inp) => {
@@ -74,8 +101,17 @@ export function createMusou(game) {
     h.musouClip = 'hz_act'; h.musouT = 0;
     h.iframes = M.end + 30;
     game.freeze = 2;
-    const { r0, k } = M.aura, R1 = r0 / (1 - k);                          // activation aura: the nearest soldiers recoil
-    push.length = 0;
+    shove(h);                                                            // activation aura: the nearest soldiers recoil
+    emit('musou:start', { x: h.x, z: h.z, activation: M.closeup, burstAt: M.release + GIANT_FRAMES, contact: M.volley });
+  };
+
+  /** Aura shove: standing soldiers within r0 / (1 − k) recoil to r0 + d·k over aura.frames. fx r3 acc: repeated at the
+   *  giant draw, so the crowd that closed back in after the volley no longer stands between the over-the-shoulder lens,
+   *  the bow and the army. */
+  let pushT = 0;
+  function shove(h) {
+    const c = game.crowd, { r0, k } = M.aura, R1 = r0 / (1 - k);
+    push.length = 0; pushT = mu.t;
     for (let i = 0; i < c.N; i++) {
       const s = c.st[i];
       if (s === ST.OFF || s === ST.DEAD || c.y[i] > 0.3) continue;
@@ -86,8 +122,7 @@ export function createMusou(game) {
       c.releaseToken(i);
       c.st[i] = ST.KNOCK; c.stT[i] = 0; c.vx[i] = c.vz[i] = 0;
     }
-    emit('musou:start', { x: h.x, z: h.z, activation: M.closeup, burstAt: M.release + GIANT_FRAMES, contact: M.volley });
-  };
+  }
 
   const bow = (h, yaw) => ({ x: h.x + Math.sin(yaw) * ARROW.ahead, y: h.y + ARROW.heroY, z: h.z + Math.cos(yaw) * ARROW.ahead, yaw });
 
@@ -97,8 +132,9 @@ export function createMusou(game) {
     h.vx = h.vz = 0;
     h.musou = Math.max(0, startMusou - h.musouMax * M.cost * Math.min(1, t / M.volley));
     if (t < M.volley) game.freeze = Math.max(game.freeze, 2);
-    if (t <= M.aura.frames) {
-      const u = easeOut(t / M.aura.frames);
+    if (t === M.big) shove(h);
+    if (t - pushT <= M.aura.frames && push.length) {
+      const u = easeOut((t - pushT) / M.aura.frames);
       for (const [i, fx, fz, tx, tz] of push) if (c.st[i] === ST.KNOCK) { c.x[i] = fx + (tx - fx) * u; c.z[i] = fz + (tz - fz) * u; }
     }
     if (t < M.closeup) { h.musouClip = 'hz_act'; h.musouT = t / M.closeup; return; }
@@ -184,7 +220,7 @@ export function createMusou(game) {
       Object.assign(o, { id: 3, yaw: offSun(mu.yaw0 + 0.5 - 0.25 * u), dist: 7.2 + 1.2 * u, pitch: 0.24, fov: 58, height: 1.6, side: 1.3, shake: 0.5 });
     } else if (t < M.release + 4) {                        // over the right shoulder on the giant draw, slowly pushing in
       const u = smooth((t - M.big) / (M.release - M.big));
-      Object.assign(o, { id: 4, yaw: offSun(mu.yaw0 - 0.18), dist: 2.8 - 0.7 * u, pitch: 0.05, fov: 42 - 8 * u, height: 1.55, side: 0.62, shake: 0.2 });
+      Object.assign(o, { id: 4, yaw: offSun(mu.yaw0 - 0.22), dist: 3.4 - 0.8 * u, pitch: 0.07, fov: 44 - 6 * u, height: 1.6, side: 0.8, shake: 0.2 });   // (fx r3 acc: a step wider — bow and army in frame)
     } else {
       // cut to a flank shot square to the arrow line (on the side away from the sun): the blaze crosses the frame and
       // the aim point rides down range onto the burst point (fx r2: it used to trail the arrow and left the explosion at
