@@ -72,14 +72,16 @@ const SMOKE_VS = /* glsl */`
   void main() {
     vec4 mv = viewMatrix * vec4(aPos.xyz, 1.0);
     mv.xy += position.xy * aPos.w;
-    vP = position.xy * 2.0; vCol = aCol; vCol.a *= smoothstep(1.5, 4.0, -mv.z);
+    float hot = step(0.001, aHeat.x);
+    // (fx r3 acc: fire lumps fade out from 8 m in — near the lens the DoF blew them into flat pastel discs)
+    vP = position.xy * 2.0; vCol = aCol; vCol.a *= smoothstep(1.5 + 2.5 * hot, 4.0 + 4.0 * hot, -mv.z);
     vCol.a *= 1.0 - 0.8 * smoothstep(0.4, 1.0, aPos.w / max(-mv.z, 0.1));   // fx r3: a puff over half the frame thins out (burst at the lens)
     vSeed = aSeed; vHeat = aHeat;
     // fx r3: drawn half its size nearer along the view ray (same pixels): a flat billboard at the puff's centre was cut
     // by every soldier inside the ball and by the ground under it (a fireball in a packed crowd showed as a few orange
     // scraps between helmets); now the volume reads over the bodies it engulfs
     float d = length(mv.xyz);
-    mv.xyz *= max(0.35, (d - aPos.w * (0.5 + 0.4 * step(0.001, aHeat.x))) / d);   // (fire lumps a notch more: they engulf the rank inside the ball)
+    mv.xyz *= max(0.35, (d - aPos.w * (0.5 - 0.2 * hot)) / d);   // (fx r3 acc: fire lumps a notch less — the bodies inside the ball cut out against it)
     gl_Position = projectionMatrix * mv;
   }`;
 const SMOKE_FS = /* glsl */`
