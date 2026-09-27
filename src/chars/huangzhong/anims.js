@@ -258,7 +258,6 @@ const MUSOU_CLIPS = {
     [0.7, H(loose({ low: 0.2, ...MU_WIDE })), 'io'], [1, H(), 'io']]),
 };
 
-export const ATTACK_CLIPS = ATTACK;
 export const HZ_CLIPS = { ...ATTACK, ...LOCO, ...MUSOU_CLIPS };
 export { runPose, rollPose };
 // sanity: every move has a clip (moves.js ↔ anims.js)

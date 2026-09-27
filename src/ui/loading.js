@@ -5,9 +5,10 @@
 // Layout (DW loading card): the officer's key art full-bleed (ctx.art: the select stage's key-art still, main.js snapArt)
 // with a slow push-in and rising embers, an ink band on the left with the chapter band, brush name + red seal, the intro
 // line; a tip (心得) and a gold brush-stroke progress bar with the current set-up stage along the bottom. No art (dev
-// entry): the pixel portrait on an accent disc stands in.
-// ctx in: { mode, char, chapter, art? }. main.js drives progress(p, zh?, en?) and ready(); nothing here touches the sim.
-import { CHARS, paintPortrait } from '../chars/index.js';
+// entry): the plain background.
+// ctx in: { mode, char, art? }. main.js drives progress(p, zh?, en?) and ready(); nothing here touches the sim.
+import { CHARS } from '../chars/index.js';
+import { replay } from './menu.js';
 
 export const MODE = { story: ['第一章「定軍山」', 'Story · Chapter I · Mount Dingjun'], free: ['自由演武', 'Free battle · endless waves'] };
 // [zh, en, char id | undefined = any officer] — keep in step with the controls table (title.js CONTROLS)
@@ -25,7 +26,6 @@ const TIPS = [
 export function createLoading(el) {
   el.innerHTML = `
     <div class="l-art"></div><div class="l-embers"></div><div class="l-veil"></div>
-    <div class="l-port"><canvas width="20" height="20"></canvas></div>
     <section class="l-main">
       <p class="l-ch"><b></b><small></small></p>
       <div class="l-name"><h1></h1><i class="l-seal"></i></div>
@@ -42,10 +42,8 @@ export function createLoading(el) {
     enter(c) {
       const ch = CHARS[c.char] || CHARS.zhaoyun, [zh, en] = MODE[c.mode] || MODE.free;
       el.style.setProperty('--acc', ch.accent);
-      el.classList.toggle('noart', !c.art);
       $('.l-art').style.backgroundImage = c.art ? `url("${c.art}")` : 'none';
-      el.classList.remove('ready', 'in'); void el.offsetWidth; el.classList.add('in');
-      paintPortrait($('.l-port canvas'), ch);
+      el.classList.remove('ready'); replay(el, 'in');
       $('.l-ch b').textContent = zh; $('.l-ch small').textContent = en;
       $('.l-name h1').textContent = ch.name.zh; $('.l-seal').textContent = ch.seal;
       $('.l-en').textContent = `${ch.name.en} · ${ch.title.en}`;

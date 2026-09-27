@@ -19,7 +19,7 @@
 //   waves  reinforcement columns on/off   limit  { z: P | null, nag: line }   the hero can't pass that z (sequence gate)
 //   hush   drop dialogue still queued (a stage just fell: its officer's taunts are stale)
 //   heal f (fraction of max HP; DW's 肉包 on a stage clear)   morale ±d   retire (free idle grunts far behind)
-//   gate   open a map gate: 'pass' | 'weiCamp' | 'summit' (world/map.js GATES; all closed at a story start; story:gate)
+//   gate   open a map gate: 'pass' | 'weiCamp' | 'summit' (world/map.js GATES; all closed at a story start)
 //   win    the chapter's victory beat (slow-mo, then the result screen)
 // A position P = [zone id, fx, fz]: fractions of the zone's half width / half depth (radius) from its centre, so the
 // script follows the map lane's zone table instead of hard geometry; ['gate', dx, dz] = metres from the camp gate.
@@ -38,7 +38,7 @@ export const SPK = {
 
 // officers (crowd.spawnOfficer). HP: a default officer has 520 (≈ 5 full combos); the boss ≈ 4.5× that, so the
 // summit duel runs ~1.5-2 min with a Musou or two, like a DW8 commander.
-const OFF = {
+export const OFF = {
   shang: { name: { zh: '夏侯尚', en: 'XIAHOU SHANG' }, hp: 650 },
   duxi: { name: { zh: '杜襲', en: 'DU XI' }, hp: 650 },
   zhanghe: { name: { zh: '張郃', en: 'ZHANG HE' }, hp: 1100 },
@@ -197,7 +197,6 @@ export const BEATS = [
       zhaoyun: ['夏侯淵，已被常山趙子龍討取！', 'Xiahou Yuan has fallen to Zhao Zilong of Changshan!'] }],
   },
 ];
-export const OFFICERS = OFF;
 
 // ---- prologue (prologue.js): ink-scroll cards over the 漢中 map. cols: vertical calligraphy columns (right to left);
 // show: map marks drawn in on this card (arrows animate in, labels light up); focus: map point + zoom the view drifts to.

@@ -22,7 +22,7 @@
 import * as THREE from 'three';
 import { on } from '../core/events.js';
 import { vrng } from '../core/rng.js';
-import { mergeVoxel } from '../core/voxel.js';
+import { boxesGeometry } from '../core/voxel.js';
 import { heroPose } from '../hero/hero.js';
 import { POSE_SIZE, spearWorld, weaponWorld } from '../hero/rig.js';
 import { lensClear } from '../camera/occlusion.js';        // camera part (r3): debris never blocks the lens
@@ -34,19 +34,17 @@ const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 /** Debris chunk: a 2×2×2 voxel clump with one corner knocked out and per-voxel shade, so rocks and armour pieces read
  *  as broken voxel matter instead of smooth boxes (unit bounds; instance scale = size). */
 function clumpGeometry() {
-  const parts = [], shade = [1.0, 0.8, 0.93, 0.74, 1.06, 0.86, 0.96];
+  const boxes = [], shade = [1.0, 0.8, 0.93, 0.74, 1.06, 0.86, 0.96];
   let k = 0;
   for (const x of [-0.25, 0.25]) for (const y of [-0.25, 0.25]) for (const z of [-0.25, 0.25]) {
     if (x > 0 && y > 0 && z > 0) continue;
-    const g = new THREE.BoxGeometry(0.5, 0.5, 0.5).translate(x, y, z), v = shade[k++];
+    const v = shade[k++];
     // perf r5: drop the faces shared with a neighbour cube (never visible): 84 → 48 tris per chunk, ×1,300 chunks × 2
-    // passes at C6. BoxGeometry faces are +x −x +y −y +z −z, 6 indices each.
-    const inside = (d, s) => { const p = [x, y, z]; p[d] += s * 0.5; return Math.abs(p[d]) < 0.5 && !(p[0] > 0 && p[1] > 0 && p[2] > 0); };
-    g.setIndex(Array.from(g.index.array).filter((_, j) => !inside((j / 12) | 0, ((j / 6) | 0) % 2 ? -1 : 1)));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(new Array(g.attributes.position.count * 3).fill(v), 3));
-    parts.push(g);
+    // passes at C6. voxel.js faces are +x −x +y −y +z −z.
+    const skip = [0, 1, 2, 3, 4, 5].filter((f) => { const p = [x, y, z]; p[f >> 1] += (f % 2 ? -0.5 : 0.5); return Math.abs(p[f >> 1]) < 0.5 && !(p[0] > 0 && p[1] > 0 && p[2] > 0); });
+    boxes.push({ s: [0.5, 0.5, 0.5], p: [x, y, z], c: new THREE.Color(v, v, v), skip });   // (linear shade, may run > 1)
   }
-  return mergeVoxel(parts);
+  return boxesGeometry(boxes);
 }
 /** sRGB hex → linear rgb array, times k (k > 1 = HDR, blooms). */
 const lin = (hex, k = 1) => { _c.set(hex); return [_c.r * k, _c.g * k, _c.b * k]; };
@@ -490,10 +488,12 @@ const AURA_FS = /* glsl */`
   }`;
 
 // ------------------------------------------------------------------ particle pool
-/** Pool of instanced cubes. kind: 0 needle spark, 1 debris (tumbles, bounces, settles), 2 dust, 3 ember/mote, 4 glow shard */
+/** Pool of instanced cubes. kind: 0 needle spark, 1 debris (tumbles, bounces, settles), 2 dust, 3 ember/mote, 4 glow shard
+ *  (also src/musou/view.js's light shards: drag = its xz drag (1/s), shrink = full size until the last 1/shrink of its
+ *  life, near(p) = size factor at the world point p) */
 // Ages are frame-exact (sim frames since spawn / last update), so a capture that renders every 2nd frame shows the
 // same effect state as real-time play.
-function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = new THREE.BoxGeometry(1, 1, 1) } = {}) {
+export function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = new THREE.BoxGeometry(1, 1, 1), drag = 2.5, shrink = 1, near = null } = {}) {
   const mesh = new THREE.InstancedMesh(geo, mat, n);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
@@ -529,7 +529,7 @@ function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = 
     } else if (k === 2) { const f = 1 - 2.6 * dt; p.vx[i] *= f; p.vz[i] *= f; p.vy[i] *= 1 - 1.8 * dt; }
     else if (k === 3) { p.vx[i] += (0.7 + Math.sin(p.life[i] * 2.3 + i) * 0.9) * dt; p.vz[i] += Math.cos(p.life[i] * 1.7 + i) * 0.6 * dt; p.vy[i] *= 1 - 0.3 * dt; }
     else if (k === 5) { p.vy[i] += 2.5 * dt; const f = 1 - 3 * dt; p.vx[i] *= f; p.vz[i] *= f; }   // flame tongue: buoyant
-    else { p.vy[i] -= 6 * dt; const f = 1 - 2.5 * dt; p.vx[i] *= f; p.vz[i] *= f; }
+    else { p.vy[i] -= 6 * dt; const f = 1 - drag * dt; p.vx[i] *= f; p.vz[i] *= f; }
     p.x[i] += p.vx[i] * dt; p.y[i] += p.vy[i] * dt; p.z[i] += p.vz[i] * dt;
     p.rot[i] += p.rv[i] * dt;
   }
@@ -570,7 +570,7 @@ function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = 
         _s.set(w, w, w);
       } else {
         _q.setFromAxisAngle(_d.set(0.6, 1, 0.3).normalize(), p.rot[i]);
-        const w = p.size[i] * (k === 1 ? Math.min(1, u * 6) : u);
+        const w = p.size[i] * Math.min(1, u * (k === 1 ? 6 : shrink)) * (near ? near(_p) : 1);
         _s.set(w, w, w);
       }
       mesh.instanceColor.array.set(col.subarray(i * 3, i * 3 + 3), j * 3);
@@ -591,7 +591,7 @@ function makeQuadPool(scene, n, geo, vs, fs, premul = false) {
   geo.setAttribute('aF', aF);
   // premul: rgb + dst·(1 − a) — a = 0 is additive, a = 1 replaces the background (contact bursts)
   const mat = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: fs, transparent: true, depthWrite: false, side: THREE.DoubleSide,
-    ...(premul ? { blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor } : { blending: THREE.AdditiveBlending }) });
+    blending: premul ? THREE.NormalBlending : THREE.AdditiveBlending, premultipliedAlpha: premul });
   const mesh = new THREE.InstancedMesh(geo, mat, n);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
@@ -606,7 +606,7 @@ export function createVfx(scene, game, world) {
   // contact needles: normal blending (not additive), so red-orange reads over the bright sand and gold-tinted bodies
   const needleMat = (over) => new THREE.ShaderMaterial({ vertexShader: NEEDLE_VS, fragmentShader: NEEDLE_FS, defines: over ? { OVER: 1 } : {},
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
-    ...(over ? { blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor } : { blending: THREE.AdditiveBlending }) });
+    blending: over ? THREE.NormalBlending : THREE.AdditiveBlending, premultipliedAlpha: over });
   const hot = makePool(scene, 700, needleMat(true), now, { geo: new THREE.PlaneGeometry(1, 1) });
   const sparks = makePool(scene, 1400, needleMat(false), now, { geo: new THREE.PlaneGeometry(1, 1) });
   // camera part (r3): lensClear cuts debris closer than 2 m to the lens (a boulder at the lens blacked out the frame)
@@ -616,41 +616,49 @@ export function createVfx(scene, game, world) {
     uniforms: THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
   }), now, { fade: true, geo: new THREE.PlaneGeometry(2, 2) });
 
+  /** n hidden meshes from make(), round-robin: take(dur, delay) shows the next one, aged from now + delay s. */
+  const meshPool = (n, make) => {
+    const ms = Array.from({ length: n }, () => { const m = make(); m.visible = false; m.frustumCulled = false; scene.add(m); return m; });
+    let next = 0;
+    ms.take = (dur, delay = 0) => { const m = ms[next]; next = (next + 1) % n; m.userData.f0 = now() + delay * 60; m.userData.dur = dur; m.visible = true; return m; };
+    return ms;
+  };
+  /** Ages a mesh pool: hides the finished ones, tick(m, u, t) for the rest (u = age / dur, t = age s; < 0 while delayed). */
+  const age = (ms, tick) => {
+    for (const m of ms) {
+      if (!m.visible) continue;
+      const t = (now() - m.userData.f0) / 60, u = t / m.userData.dur;
+      if (u >= 1) m.visible = false; else tick(m, u, t);
+    }
+  };
+
   // ---- shock rings (flat, voxel-stepped radial front)
-  const rings = [];
   const ringGeo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
-  for (let i = 0; i < 8; i++) {
-    const m = new THREE.Mesh(ringGeo, new THREE.ShaderMaterial({ vertexShader: RING_VS, fragmentShader: RING_FS,
-      uniforms: { uU: { value: 0 }, uColor: { value: new THREE.Color() } },
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
-    m.visible = false; m.frustumCulled = false;
-    scene.add(m); rings.push(m);
-  }
-  let ringNext = 0;
+  const rings = meshPool(8, () => new THREE.Mesh(ringGeo, new THREE.ShaderMaterial({ vertexShader: RING_VS, fragmentShader: RING_FS,
+    uniforms: { uU: { value: 0 }, uColor: { value: new THREE.Color() } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })));
   const ring = (x, z, r, dur, rgb) => {
-    const m = rings[ringNext]; ringNext = (ringNext + 1) % rings.length;
-    m.position.set(x, ground(x, z) + 0.06, z); m.userData = { f0: now(), dur }; m.visible = true; m.scale.setScalar(r);
+    const m = rings.take(dur);
+    m.position.set(x, ground(x, z) + 0.06, z); m.scale.setScalar(r);
     m.material.uniforms.uColor.value.setRGB(rgb[0], rgb[1], rgb[2]);
     m.material.uniforms.uU.value = 0;
   };
 
   // ---- ground crack decals: conforming 20×20 grids, re-draped onto the terrain at each spawn
-  const CG = 20, cracks = [];
-  for (let i = 0; i < 6; i++) {
+  const CG = 20;
+  const cracks = meshPool(6, () => {
     const g = new THREE.PlaneGeometry(2, 2, CG, CG).rotateX(-Math.PI / 2);
     g.attributes.position.setUsage(THREE.DynamicDrawUsage);
     const m = new THREE.Mesh(g, new THREE.ShaderMaterial({ vertexShader: CRACK_VS, fragmentShader: CRACK_FS,
       uniforms: { uU: { value: 0 }, uGrow: { value: 0 }, uSeed: { value: 0 }, uGlow: { value: new THREE.Color() } },
-      transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
-      blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor }));
-    m.visible = false; m.frustumCulled = false; m.renderOrder = -1;
+      transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, premultipliedAlpha: true }));
+    m.renderOrder = -1;
     m.userData.base = Float32Array.from(g.attributes.position.array);
-    scene.add(m); cracks.push(m);
-  }
-  let crackNext = 0;
+    return m;
+  });
   /** Ground crack decal of radius r at (x, z); glow = hot fissure colour (HDR), dur s. */
   const crack = (x, z, r, glow, dur = 3.2) => {
-    const m = cracks[crackNext]; crackNext = (crackNext + 1) % cracks.length;
+    const m = cracks.take(dur);
     const pos = m.geometry.attributes.position, b = m.userData.base, gy = ground(x, z);
     for (let v = 0; v < pos.count; v++) {
       const lx = b[v * 3] * r, lz = b[v * 3 + 2] * r;
@@ -658,37 +666,29 @@ export function createVfx(scene, game, world) {
     }
     pos.needsUpdate = true;
     m.position.set(x, gy, z);                                          // (no spin: the drape is baked unrotated; uSeed varies the pattern)
-    m.userData.f0 = now(); m.userData.dur = dur; m.visible = true;
     const u = m.material.uniforms; u.uSeed.value = vrng.range(0, 100); u.uGlow.value.setRGB(glow[0], glow[1], glow[2]); u.uU.value = 0; u.uGrow.value = 0;
   };
 
   // ---- shock walls (open cylinders racing out of a slam)
-  const wallGeo = new THREE.CylinderGeometry(1, 1, 1, 48, 1, true).translate(0, 0.5, 0), walls = [];
-  for (let i = 0; i < 4; i++) {
-    const m = new THREE.Mesh(wallGeo, new THREE.ShaderMaterial({ vertexShader: WALL_VS, fragmentShader: WALL_FS,
-      uniforms: { uU: { value: 0 }, uSeed: { value: 0 }, uColor: { value: new THREE.Color() } },
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
-    m.visible = false; m.frustumCulled = false;
-    scene.add(m); walls.push(m);
-  }
-  let wallNext = 0;
+  const wallGeo = new THREE.CylinderGeometry(1, 1, 1, 48, 1, true).translate(0, 0.5, 0);
+  const walls = meshPool(4, () => new THREE.Mesh(wallGeo, new THREE.ShaderMaterial({ vertexShader: WALL_VS, fragmentShader: WALL_FS,
+    uniforms: { uU: { value: 0 }, uSeed: { value: 0 }, uColor: { value: new THREE.Color() } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })));
   const wall = (x, z, r, hgt, dur, rgb, delay = 0) => {
-    const m = walls[wallNext]; wallNext = (wallNext + 1) % walls.length;
-    m.position.set(x, ground(x, z) - 0.05, z); m.userData = { f0: now() + delay * 60, dur, r, h: hgt }; m.visible = true; m.scale.set(0.01, 0.01, 0.01);
+    const m = walls.take(dur, delay);
+    m.position.set(x, ground(x, z) - 0.05, z); m.userData.r = r; m.userData.h = hgt; m.scale.set(0.01, 0.01, 0.01);
     m.material.uniforms.uColor.value.setRGB(rgb[0], rgb[1], rgb[2]); m.material.uniforms.uSeed.value = vrng.range(0, 100); m.material.uniforms.uU.value = 0;
   };
 
-  // ---- impact lights: a pooled warm / cold point light pops on heavy contacts, KOs of officers, slams, Musou payoffs
-  // (always in the scene at 0 so the lit materials compile with them at boot)
-  const lights = [];
+  // ---- impact light: a warm / cold point light pops on heavy contacts, KOs of officers, slams, Musou payoffs
+  // (always in the scene at 0 so the lit materials compile with it at boot)
   // ponytail: one light (every lit fragment pays for each light in the scene); a second slot if flashes visibly clash
-  for (let i = 0; i < 1; i++) { const l = new THREE.PointLight(0xffffff, 0, 10, 2); l.userData = { f0: 0, dur: 1, I: 0 }; scene.add(l); lights.push(l); }
+  const light = new THREE.PointLight(0xffffff, 0, 10, 2);
+  light.userData = { f0: 0, dur: 1, I: 0 }; scene.add(light);
   const lightFlash = (x, y, z, rgb, I, dur = 0.18, dist = 10) => {
-    let l = lights[0];
-    for (const c of lights) if (c.intensity < l.intensity) l = c;                 // reuse the dimmest
-    if (l.intensity > I) return;
-    l.position.set(x, y + ground(x, z), z); l.color.setRGB(rgb[0], rgb[1], rgb[2]); l.distance = dist;
-    l.userData.f0 = now(); l.userData.dur = dur; l.userData.I = I; l.intensity = I;
+    if (light.intensity > I) return;
+    light.position.set(x, y + ground(x, z), z); light.color.setRGB(rgb[0], rgb[1], rgb[2]); light.distance = dist;
+    light.userData.f0 = now(); light.userData.dur = dur; light.userData.I = I; light.intensity = I;
   };
 
   // ---- musou aura: gold flame ring under the hero while a Musou is banked
@@ -791,7 +791,7 @@ export function createVfx(scene, game, world) {
   for (const edge of [0, 1, 2, 3]) {
     const m = new THREE.Mesh(tgeo, new THREE.ShaderMaterial({ vertexShader: TRAIL_VS, fragmentShader: TRAIL_FS,
       uniforms: { uEdge: { value: edge }, uHeroA: heroA, uHeroB: heroB, ...tU }, defines: edge === 2 ? { DEPTH_PASS: 1 } : {}, transparent: true, depthWrite: edge === 2, colorWrite: edge !== 2,
-      side: THREE.DoubleSide, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor }));   // premultiplied over
+      side: THREE.DoubleSide, premultipliedAlpha: true }));   // premultiplied over
     m.frustumCulled = false; m.renderOrder = [0, 10, 11, 9][edge];
     if (!edge) m.onBeforeRender = (r, sc, cam) => {   // render camera, read by rocks/dustColumn and the ribbon's depth pull
       const h = game.hero, gy = ground(h.x, h.z), tc = kp().trail;
@@ -811,11 +811,10 @@ export function createVfx(scene, game, world) {
   let flashDecay = 2.2;
   const flash = (v, decay = 2.2) => { if (v >= vfx.flash) { vfx.flash = v; flashDecay = decay; } };
 
-  const NO_TRAIL = { base: 1.25, baseHeavy: 1.05, tip: 2.18 }, GAIN = [0.08, 0.3];   // tip sampling still feeds the thrust streak height
+  const GAIN = [0.08, 0.3];
   const isHeavyMove = (id) => !!id && (id[0] === 'c' || id === 'jc' || id === 'n6');
   function trailActive(h) {
     const tr = h.kit.trail;
-    if (!tr) return false;                                   // kit without a weapon ribbon (src/chars/index.js)
     if (tr.moves) { if (h.state !== 'attack' || !tr.moves.includes(h.move)) return false; }   // only these moves cut
     else if (h.state === 'musou') return h.stateT > 30;      // after the activation pose
     if (h.state !== 'attack') return false;
@@ -1016,7 +1015,7 @@ export function createVfx(scene, game, world) {
     const fx = Math.sin(e.yaw), fz = Math.cos(e.yaw), K = kp();
     const R = hit.range || hit.len || 4, charge = e.move[0] === 'c' || e.move === 'jc';   // light volumes = charge finishers only
     const tr = h.kit.trail;
-    if (!e.heavy && tr && tr.moves && tr.moves.includes(e.move)) {   // fx r1: bow-limb slashes (the ribbon is the arc itself)
+    if (!e.heavy && tr.moves && tr.moves.includes(e.move)) {   // fx r1: bow-limb slashes (the ribbon is the arc itself)
       // fx r2: the crescent ribbon is the cut (a straight razor beam + pulse ring over it read as a lens flare)
       if (hit.shape === 'circle') {                          // N5 spin: ground ring + dust skirt under the disc
         ring(h.x, h.z, R * 1.2, 0.3, BOW_RING);
@@ -1164,10 +1163,10 @@ export function createVfx(scene, game, world) {
     dustColumn(e.x, e.z, 8, 2, 5, 4.6, [0.9, 1.3], 0.4);
   });
   on('scenario', () => {
-    sparks.clear(); hot.clear(); debris.clear(); dust.clear(); samples.length = 0; for (const r of rings) r.visible = false;
+    sparks.clear(); hot.clear(); debris.clear(); dust.clear(); samples.length = 0;
     B.on.fill(0); St.on.fill(0); vfx.flash = 0; lastTick = -1; auraK = 0;
-    for (const m of [...cracks, ...walls]) m.visible = false;
-    for (const l of lights) l.intensity = 0;
+    for (const m of [...rings, ...cracks, ...walls]) m.visible = false;
+    light.intensity = 0;
     for (const q of [beams, stars]) { for (let i = 0; i < q.n; i++) q.mesh.setMatrixAt(i, ZERO); q.mesh.instanceMatrix.needsUpdate = true; }
   });
 
@@ -1177,7 +1176,7 @@ export function createVfx(scene, game, world) {
     if (game.hitstop === 0 || game.hitstop % 2 === 0) clock++;   // half-rate ageing in hitstop: a heavy hit must not hang the crescent
     heroPose(h, pose);
     hpos.set(h.x, h.y, h.z);
-    const musou = h.state === 'musou', heavy = musou || (h.state === 'attack' && isHeavyMove(h.move)), tr = h.kit.trail || NO_TRAIL;
+    const musou = h.state === 'musou', heavy = musou || (h.state === 'attack' && isHeavyMove(h.move)), tr = h.kit.trail;
     if (tr.axis === 'y') { weaponWorld(pose, hpos, h.yaw, 0, tr.base, 0.02, baseNow); weaponWorld(pose, hpos, h.yaw, 0, tr.tip, 0.05, tipNow); }   // bow limb
     else spearWorld(pose, hpos, h.yaw, heavy ? tr.baseHeavy : tr.base, tr.tip, baseNow, tipNow);   // ribbon ≈ 0.9-1.1 m wide: a crisp band, not a sheet
 
@@ -1298,7 +1297,7 @@ export function createVfx(scene, game, world) {
   }
 
   // ---- ambient embers: from the fires, and drifting through the fight around the hero
-  const fires = (world && world.fires) || [];
+  const fires = world.fires;
   let emberAcc = 0, driftAcc = 0, moteAcc = 0;
 
   vfx.update = (dt) => {
@@ -1328,30 +1327,16 @@ export function createVfx(scene, game, world) {
     }
     sparks.update(); hot.update(); debris.update(); dust.update();
     updateBeams(); updateStars();
-    for (const r of rings) {
-      if (!r.visible) continue;
-      const u = (now() - r.userData.f0) / 60 / r.userData.dur;
-      if (u >= 1) { r.visible = false; continue; }
-      r.material.uniforms.uU.value = u;
-    }
-    for (const m of cracks) {
-      if (!m.visible) continue;
-      const t = (now() - m.userData.f0) / 60, u = t / m.userData.dur;
-      if (u >= 1) { m.visible = false; continue; }
-      m.material.uniforms.uU.value = u; m.material.uniforms.uGrow.value = Math.min(1, t / 0.12);
-    }
-    for (const m of walls) {
-      if (!m.visible) continue;
-      const u = (now() - m.userData.f0) / 60 / m.userData.dur;
-      if (u >= 1) { m.visible = false; continue; }
+    age(rings, (m, u) => { m.material.uniforms.uU.value = u; });
+    age(cracks, (m, u, t) => { m.material.uniforms.uU.value = u; m.material.uniforms.uGrow.value = Math.min(1, t / 0.12); });
+    age(walls, (m, u) => {
       const k = Math.max(0, u), R = m.userData.r * (0.08 + 0.92 * (1 - (1 - k) ** 3)), H = m.userData.h * (u < 0 ? 0.01 : 1 - 0.55 * k);
       m.scale.set(R, H, R);
       m.material.uniforms.uU.value = k;
-    }
-    for (const l of lights) {
-      if (l.intensity <= 0) continue;
-      const u = (now() - l.userData.f0) / 60 / l.userData.dur;
-      l.intensity = u >= 1 ? 0 : l.userData.I * (1 - u) * (1 - u);
+    });
+    if (light.intensity > 0) {
+      const u = (now() - light.userData.f0) / 60 / light.userData.dur;
+      light.intensity = u >= 1 ? 0 : light.userData.I * (1 - u) * (1 - u);
     }
     // musou aura: gold flame ring + rising tongues while a Musou is banked; eased in / out. Off during the Musou itself:
     // its close cinematic cameras turned the motes at his feet into lens-sized bokeh (the kit's musou view owns that light)

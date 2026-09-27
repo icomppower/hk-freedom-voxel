@@ -8,11 +8,11 @@
 // pixel star for its last 14 sf (a feint keeps the white star). Guards next to a striker
 // (crowd.raiseF) brandish their weapons and shout with him. Officers carry a spinning ▼ marker. Shu allies (crowd
 // indices N … T-1) are the same rig in Shu green (their own part meshes at all three LODs, a 蜀 standard); duels show no
-// wind-up glint / flare (those telegraph blows on the hero). Never writes sim state.
+// wind-up glint / flare (those telegraph blows on the hero). Struck soldiers flash (aHit, below). Never writes sim state.
 import * as THREE from 'three';
 import { sculpt, shade, boxesGeometry } from '../core/voxel.js';
 import { ST, KIND, CROWD } from './crowd.js';
-import { patchHitMaterial, hitGlow } from '../combat/hitfx.js';   // hit-impact: victim flash/tint
+import { COMBAT } from '../combat/combat.js';
 import { hash01 } from '../core/rng.js';
 import { HUD_TAG_R } from '../ui/hud.js';
 import { ground } from '../world/map.js';
@@ -292,6 +292,52 @@ float crowdSight(vec3 sP, vec3 tgt, float r, float gap) {   // 0 inside the cone
   };
 }
 
+// ---- hit readability (hit-impact): the victim flash, a per-instance "aHit" term patched into the crowd material. The
+// contact frame pops white-hot silhouette edges over a lifted body for 1 rendered frame (local: a band of 10 struck
+// soldiers must not merge into one white blob). Then a warm wash is blended into the lit albedo (≤ 0.22, so the soldiers
+// stay dark), with a bright emissive rim on the faces that turn away from the camera (the silhouette edges). It decays
+// quadratically over ≈ 10 sf: gold on a hit, deep amber on a heavy hit, red on the killing blow (the DW8 yellow wash; the
+// killing blow keeps the armour dark under a hotter red ember rim — fx r3). Weapons stay untinted (write() zeroes the
+// glow for them). KO'd bodies keep a red ember rim while airborne, so the blow-away fans read over a dark crowd. The hero
+// stays the lightest large mass (hero luma ≈ 1.3-1.6× the tinted soldiers in combo-normal). The recoil pose: recoilPose.
+// Driven by crowd.flash[i] (set by combat on the hit frame), crowd.hitHeavy[i], crowd.kod[i], crowd.st[i].
+/** Adds `aHit` (vec3 tint colour × strength; > 1 = white pop) to a MeshStandardMaterial via onBeforeCompile. */
+function patchHitMaterial(mat) {
+  const prev = mat.onBeforeCompile, key = mat.customProgramCacheKey() + '|hitfx3';   // chain other parts' patches
+  mat.customProgramCacheKey = () => key;
+  mat.onBeforeCompile = function (sh, renderer) {
+    prev.call(this, sh, renderer);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec3 aHit;\nvarying vec3 vHit;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHit = aHit;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vHit;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float hitA = max(vHit.r, max(vHit.g, vHit.b));
+        float hitRim = 1.0 - abs(dot(normal, normalize(vViewPosition)));
+        if (hitA > 1.01) {                                            // contact frame: white-hot edges, lifted body
+          // (fx r3: thinner edge, less lift — a sweep of 8+ contacts turned the struck rank into white mannequins)
+          // (fx r3 acc: on voxel boxes every side face is edge-on (rim 1), so the rim term lit whole bodies — a softer rim over
+          // a small lift; the pop is capped to one rendered frame in hitGlow, however long the hitstop)
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), 0.05);
+          totalEmissiveRadiance += (vHit - 1.0) * (0.05 + 0.5 * hitRim * hitRim * hitRim * hitRim);
+        } else if (hitA > 0.0) {
+          vec3 hitC = vHit / hitA;
+          float hitL = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+          // lit wash: albedo toward the tint, brighter where the albedo is brighter (skin, plates), so shading stays
+          // fx r3: red tints (killing blow, KO ember) keep the armour dark — the cue is a hot ember rim on the silhouette,
+          // not an albedo wash / flat glow (mass launches read as salmon-pink mannequins)
+          float hitRed = clamp((0.45 - hitC.g) * 4.0, 0.0, 1.0);
+          diffuseColor.rgb = mix(diffuseColor.rgb, hitC * (0.33 + 1.3 * hitL), 0.13 * hitA * (1.0 - 0.85 * hitRed));   // (fx r3 acc: 0.22 → 0.13, struck ranks went tan / salmon)
+          float hitFlat = 0.04 + 0.04 * hitRed;
+          totalEmissiveRadiance += hitC * hitA * (hitFlat + (0.55 + 0.7 * hitRed) * hitRim * hitRim * hitRim * hitRim);   // (fx r3 acc: rim⁴, voxel sides are all edge-on)
+        }`);
+  };
+}
+
+const HOT = [1.55, 1.53, 1.5], GOLD = [1.0, 0.6, 0.12], AMBER = [1.0, 0.4, 0.07], KILL = [1.0, 0.25, 0.12];   // HOT: 1 + white emissive
+const EMBER = 0.3;                                                 // KO'd bodies keep a dim red rim until they land
+
 export function createCrowdView(scene, game) {
   const crowd = game.crowd, N = crowd.T, NW = crowd.N;          // N: every soldier (Wei army + Shu allies ≥ NW)
   const geos = buildCrowdGeometries();
@@ -306,7 +352,22 @@ export function createCrowdView(scene, game) {
         totalEmissiveRadiance += vColor.rgb * (0.08 + cRed * 0.32 + cGreen * 0.1);
       #endif`);
   });
-  patchHitMaterial(mat);                                     // hit-impact: victim flash/tint (src/combat/hitfx.js)
+  patchHitMaterial(mat);                                     // hit-impact: victim flash/tint
+  // rendered frames soldier i has shown the hot pop for (write() runs each visible flashing soldier once a render): the
+  // flash counter holds through hitstop (6-8 sf on heavy hits), so the pop is cut to 1 frame here (fx r3 acc)
+  const popN = new Uint8Array(N);
+  /** Tint of soldier i this frame (colour × strength, or HOT on the contact frame), written into out[0..2]. */
+  const hitGlow = (i, out) => {
+    const fl = crowd.flash[i], ember = crowd.kod[i] && crowd.st[i] === ST.AIR ? EMBER : 0;
+    if (fl <= 0 && !ember) { popN[i] = 0; out[0] = out[1] = out[2] = 0; return; }
+    const heavy = crowd.hitHeavy[i];
+    const D = COMBAT.tintFrames - 1 + (heavy ? 3 : 0);               // flash value on the frame a fresh hit shows
+    if (fl >= D) { if (!popN[i]) { popN[i] = 1; out[0] = HOT[0]; out[1] = HOT[1]; out[2] = HOT[2]; return; } }
+    else popN[i] = 0;
+    const u = Math.min(1, Math.min(fl, D - 1) / (D - 1)), k = Math.max(ember, u * u);   // decays from the first frame: brief, not a held wash
+    const C = crowd.kod[i] ? KILL : heavy ? AMBER : GOLD;
+    out[0] = C[0] * k; out[1] = C[1] * k; out[2] = C[2] * k;
+  };
   const meshes = [];
   const proxyMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }), proxies = [];
   /** shadow: true (the mesh casts), false, or a proxy geometry that casts instead (shares the instance matrices) */
@@ -332,28 +393,24 @@ export function createCrowdView(scene, game) {
     return m;
   };
   const G = crowd.grunts, O = CROWD.officers, A = CROWD.allySlots, GA = G + A;
+  // one body-part set from geos[pre + part] for n soldiers (two arms / thighs / shins each). Voxel sets: the solid-box
+  // proxies cast their shadows (cast: every part casts its own — officers); far box sets: one trunk + limbs, all cast
+  const parts = (pre, n, cast = false) => ({ hips: mk(geos[pre + 'hips'], n, mat, cast), torso: mk(geos[pre + 'torso'], n, mat, cast || geos.shadow_trunk),
+    head: mk(geos[pre + 'head'], n, mat, cast), arm: mk(geos[pre + 'arm'], n * 2, mat, cast || geos.shadow_arm),
+    thigh: mk(geos[pre + 'thigh'], n * 2, mat, cast || geos.shadow_thigh), shin: mk(geos[pre + 'shin'], n * 2, mat, cast || geos.shadow_shin) });
+  const farParts = (pre, n) => ({ torso: mk(geos[pre + 'trunk'], n), arm: mk(geos[pre + 'arm'], n * 2), thigh: mk(geos[pre + 'thigh'], n * 2), shin: mk(geos[pre + 'shin'], n * 2) });
+  const PG = parts('', G);
   const M = {
-    hips: mk(geos.hips, G, mat, false), torso: mk(geos.torso, G, mat, geos.shadow_trunk), head: mk(geos.head, G, mat, false),
-    crest: mk(geos.crest, G), arm: mk(geos.arm, G * 2, mat, geos.shadow_arm), thigh: mk(geos.thigh, G * 2, mat, geos.shadow_thigh),
-    shin: mk(geos.shin, G * 2, mat, geos.shadow_shin),
+    crest: mk(geos.crest, G),
     spear: mk(geos.spear, GA), sword: mk(geos.sword, GA), shield: mk(geos.shield, GA), mid_shield: mk(geos.mid_shield, GA), far_shield: mk(geos.far_shield, GA), glaive: mk(geos.glaive, G + O), pole: mk(geos.pole, GA),
-    o_hips: mk(geos.o_hips, O), o_torso: mk(geos.o_torso, O), o_head: mk(geos.o_head, O),
-    o_arm: mk(geos.o_arm, O * 2), o_thigh: mk(geos.o_thigh, O * 2), o_shin: mk(geos.o_shin, O * 2),
   };
-  const PG = { hips: M.hips, torso: M.torso, head: M.head, arm: M.arm, thigh: M.thigh, shin: M.shin };
-  const PO = { hips: M.o_hips, torso: M.o_torso, head: M.o_head, arm: M.o_arm, thigh: M.o_thigh, shin: M.o_shin };
+  const PO = parts('o_', O, true);
   // LOD by distance from the camera, same pose and matrices: full voxel set inside MID_LOD m, the half-resolution set
   // (≈ 1.2k tris instead of ≈ 4.9k) to FAR_LOD, then the low-poly box set (one trunk + limbs)
   const MID_LOD = 8, FAR_LOD = 28;
-  const PM = { hips: mk(geos.mid_hips, G, mat, false), torso: mk(geos.mid_torso, G, mat, geos.shadow_trunk), head: mk(geos.mid_head, G, mat, false),
-    arm: mk(geos.mid_arm, G * 2, mat, geos.shadow_arm), thigh: mk(geos.mid_thigh, G * 2, mat, geos.shadow_thigh), shin: mk(geos.mid_shin, G * 2, mat, geos.shadow_shin) };
-  const PF = { torso: mk(geos.far_trunk, G), arm: mk(geos.far_arm, G * 2), thigh: mk(geos.far_thigh, G * 2), shin: mk(geos.far_shin, G * 2) };
+  const PM = parts('mid_', G), PF = farParts('far_', G);
   // Shu allies: near / mid / far sets
-  const PS = { hips: mk(geos.s_hips, A, mat, false), torso: mk(geos.s_torso, A, mat, geos.shadow_trunk), head: mk(geos.s_head, A, mat, false),
-    arm: mk(geos.s_arm, A * 2, mat, geos.shadow_arm), thigh: mk(geos.s_thigh, A * 2, mat, geos.shadow_thigh), shin: mk(geos.s_shin, A * 2, mat, geos.shadow_shin) };
-  const PSM = { hips: mk(geos.smid_hips, A, mat, false), torso: mk(geos.smid_torso, A, mat, geos.shadow_trunk), head: mk(geos.smid_head, A, mat, false),
-    arm: mk(geos.smid_arm, A * 2, mat, geos.shadow_arm), thigh: mk(geos.smid_thigh, A * 2, mat, geos.shadow_thigh), shin: mk(geos.smid_shin, A * 2, mat, geos.shadow_shin) };
-  const PSF = { torso: mk(geos.sfar_trunk, A), arm: mk(geos.sfar_arm, A * 2), thigh: mk(geos.sfar_thigh, A * 2), shin: mk(geos.sfar_shin, A * 2) };
+  const PS = parts('s_', A), PSM = parts('smid_', A), PSF = farParts('sfar_', A);
   let farNow = false, midNow = false;
   const uTime = { value: 0 };
   const flagGeo = new THREE.PlaneGeometry(0.9, 1.5, 4, 6).rotateX(Math.PI / 2).translate(0.5, 0, 1.78);
@@ -566,10 +623,10 @@ export function createCrowdView(scene, game) {
     y += ground(crowd.x[i], crowd.z[i]);                          // sim y is height above ground (world/map.js)
     _root.makeRotationFromEuler(_e.set(rx, crowd.yaw[i], 0)).setPosition(crowd.x[i] + shake, y, crowd.z[i]);
     _root.multiply(_s.makeScale(sc, sc, sc));
-    // colour: per-soldier tint; the hit flash is an emissive glow (hit-impact, src/combat/hitfx.js)
+    // colour: per-soldier tint; the hit flash is an emissive glow (hit-impact, hitGlow)
     const f = tint[i], cap = kind === KIND.CAPTAIN;
     _ch.setRGB(f, f * 0.98, f * 0.95);
-    hitGlow(crowd, i, _g);
+    hitGlow(i, _g);
     // telegraph: the last 14 sf of a blow that will really come (feints don't flare)
     const hotStrike = s === ST.ATTACK && !crowd.feint[i] && crowd.foe[i] < 0 && t >= CROWD.windup - 14 && t < CROWD.windup;
     if (cap) _c.setRGB(_ch.r * 1.45, _ch.g * 1.1, _ch.b * 0.7); else _c.copy(_ch);                  // captains: bronze armour
@@ -612,18 +669,18 @@ export function createCrowdView(scene, game) {
   // cost neither the main nor the shadow pass; they snap to their pose on re-entry (seen = 0)
   const frustum = new THREE.Frustum(), vp = new THREE.Matrix4(), sph = new THREE.Sphere(new THREE.Vector3(), 2.5);
   return {
-    /** camera (optional): cull to its frustum. */
+    /** camera: cull to its frustum, LOD by distance from it. */
     update(dt, camera) {
       time += dt; uTime.value = time; frameNo++;
-      if (camera) frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+      frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
       const h = game.hero;
       uSight.value.set(h.x, ground(h.x, h.z) + h.y + 0.95, h.z);
       for (const m of meshes) m.count = 0;
       for (let i = 0; i < N; i++) {
         const s = crowd.st[i];
         if (s === ST.OFF) { seen[i] = 0; continue; }
-        if (camera && !frustum.intersectsSphere(sph.set(sph.center.set(crowd.x[i], crowd.y[i] + 1, crowd.z[i]), 2.5))) { seen[i] = 0; continue; }
-        const d2 = camera ? (crowd.x[i] - camera.position.x) ** 2 + (crowd.z[i] - camera.position.z) ** 2 : 0;
+        if (!frustum.intersectsSphere(sph.set(sph.center.set(crowd.x[i], crowd.y[i] + 1, crowd.z[i]), 2.5))) { seen[i] = 0; continue; }
+        const d2 = (crowd.x[i] - camera.position.x) ** 2 + (crowd.z[i] - camera.position.z) ** 2;
         farNow = d2 > FAR_LOD * FAR_LOD; midNow = d2 > MID_LOD * MID_LOD;
         // standing soldiers (idle ranks) are recomputed every 4th frame and replayed in between
         if (s === ST.IDLE && seen[i] && crowd.type[i] === 0 && !crowd.flash[i] && ((frameNo + i) & 3)) replay(i);

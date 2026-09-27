@@ -6,15 +6,15 @@
 // vertical calligraphy beside the model. All data comes from CHARS / CHAR_ORDER (src/chars/index.js), nothing per-hero.
 // Input: hover only highlights a card; a click (tap) on a card focuses that officer (spin-in, info panel swaps), ↑/↓ /
 // d-pad too. Deploy = 出陣 button, Enter / A, or a double-click on the card that was already focused.
-// ctx in: { mode }. Deploy → ink wipe → flow.go('loading', { mode, char, chapter: 'ch1' }) (loading.js); back → title.
+// ctx in: { mode }. Deploy → ink wipe → flow.go('loading', { mode, char }) (loading.js); back → title.
 // 3D is render-only: view(scene, camera, focus, dt) runs after the gameplay camera rig while this screen is up.
 import * as THREE from 'three';
 import { CHARS, CHAR_ORDER, paintPortrait } from '../chars/index.js';
-import { createRig, sampleClip, POSE_SIZE, HERO_SCALE } from '../hero/rig.js';
-import { ground, zone } from '../world/map.js';
+import { sampleClip, POSE_SIZE } from '../hero/rig.js';
 import { createNav, sfx, inkWipe, wiping, afterWipe, stamp, clearStamp, replay } from './menu.js';
 import { SWASH, STAGE as TITLE } from './title.js';
 import { MODE } from './loading.js';
+import { dotTex, scatter, passPoint, standOfficer, poseOfficer } from './stage.js';
 
 const STATS = [['atk', '攻', 'Attack'], ['def', '防', 'Defence'], ['speed', '速', 'Speed'], ['range', '射程', 'Reach']];
 // stage framing: officer ≈ 6.3 m from the lens, 30° vFOV (full body + headroom), aim shifted so he stands at x ≈ 75 %
@@ -29,7 +29,7 @@ export function createSelect(el, flow) {
     <header class="s-head"><h2>選擇武將</h2><small>Choose your officer</small><span class="s-mode"><b></b><small></small></span></header>
     <aside class="s-roster"><div class="s-fac"><i>蜀</i><small>Shu Han</small></div>
       ${CHAR_ORDER.map((id, i) => { const c = CHARS[id]; return `<button class="s-card" data-i="${i}" style="--acc:${c.accent}" title="${c.name.en} — double-click to deploy">
-        <canvas width="20" height="20"></canvas><b>${c.name.zh}</b><small>${c.name.en}</small><i>${c.seal}</i>${c.ready ? '' : '<em>試作</em>'}</button>`; }).join('')}
+        <canvas width="20" height="20"></canvas><b>${c.name.zh}</b><small>${c.name.en}</small><i>${c.seal}</i></button>`; }).join('')}
     </aside>
     <article class="s-info">
       <div class="s-name"><h1></h1><div><i class="s-seal"></i><p class="s-court"></p></div></div>
@@ -37,7 +37,7 @@ export function createSelect(el, flow) {
       <p class="s-epi"><b></b><small></small></p>
       <p class="s-wpn"><span>武器</span><b></b><small></small></p>
       <p class="s-bio"></p>
-      <ul class="s-stats">${STATS.map(([k, zh, en]) => `<li data-k="${k}"><b>${zh}</b><small>${en}</small><span>${'<i></i>'.repeat(5)}</span></li>`).join('')}</ul>
+      <ul class="s-stats">${STATS.map(([k, zh, en]) => `<li data-k="${k}"><b>${zh}</b><small>${en}</small><span>${[0, 1, 2, 3, 4].map((j) => `<i style="--i:${j}"></i>`).join('')}</span></li>`).join('')}</ul>
       <div class="s-musou"><span>無雙亂舞</span><b></b><small></small>${SWASH}</div>
     </article>
     <div class="s-line"><p></p><small></small></div>
@@ -83,7 +83,7 @@ export function createSelect(el, flow) {
     busy = true;
     stamp($('.s-act'), '出陣');
     const id = CHAR_ORDER[cur];
-    setTimeout(() => inkWipe(() => flow.go('loading', { mode: ctx.mode, char: id, chapter: 'ch1' })), 520);
+    setTimeout(() => inkWipe(() => flow.go('loading', { mode: ctx.mode, char: id })), 520);
   };
   const back = () => {
     if (busy) return;
@@ -115,29 +115,13 @@ export function createSelect(el, flow) {
   // ---- 3D: officer stage (render-only; every officer meshed on the first view, kept for the session)
   let group = null, motes = null, t = 0, keyart = false, key = null, keyHome = null;
   const models = {}, pose = new Float32Array(POSE_SIZE), P = new THREE.Vector3(), tmp = new THREE.Vector3();
-  // the foot of the mountain road (山道), looking up it: open ground in the long Dingjun map and inside the old arena disc
-  const stageAt = () => {
-    const q = zone('pass'), x = q ? q.x : 0, z = q ? q.z - (q.d || 2 * q.r) / 2 + 10 : -30;
-    return P.set(x, ground(x, z), z);
-  };
-  function model(id) {
-    if (models[id]) return models[id];
-    const K = CHARS[id].kit, root = new THREE.Group(), rig = createRig();
-    root.add(rig.root); group.add(root);
-    const m = K.model(rig);
-    return (models[id] = { K, root, rig, sec: K.secondary(root, rig, m.material), fresh: true });
-  }
+  const model = (id) => models[id] || (models[id] = standOfficer(id, group));
   function build(scene) {
     group = new THREE.Group(); scene.add(group);
     // dust motes: soft round sprites, warm HDR white so the brightest catch a little bloom in the backlight
-    const cv = document.createElement('canvas'); cv.width = cv.height = 32;
-    const g = cv.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
-    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
-    const n = STAGE.motes, pos = new Float32Array(n * 3), seed = new Float32Array(n * 3);
-    for (let i = 0; i < n * 3; i++) seed[i] = (Math.sin(i * 12.9898) * 43758.5453) % 1;   // fixed scatter (render-only)
+    const n = STAGE.motes, pos = new Float32Array(n * 3), seed = scatter(n * 3);
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    motes = new THREE.Points(geo, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(cv), size: 0.035, color: new THREE.Color(2.2, 1.7, 1.1),
+    motes = new THREE.Points(geo, new THREE.PointsMaterial({ map: dotTex(0.4, 0.35), size: 0.035, color: new THREE.Color(2.2, 1.7, 1.1),
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
     motes.userData.seed = seed; motes.frustumCulled = false;
     group.add(motes);
@@ -152,7 +136,7 @@ export function createSelect(el, flow) {
     if (!group) build(scene);
     group.visible = true;
     dt = Math.min(dt || 1 / 60, 0.1); t += dt; spinT += dt;
-    const S = STAGE, p = stageAt(), id = CHAR_ORDER[cur];
+    const S = STAGE, p = passPoint(P, 0, 10), id = CHAR_ORDER[cur];   // the foot of the mountain road (山道), looking up it
     for (const k in models) models[k].root.visible = k === id;
     const M = model(id);
     if (key) key.position.set(p.x + 1.6, p.y + 2.3, p.z - 2.4);
@@ -162,11 +146,7 @@ export function createSelect(el, flow) {
     const ka = keyart && TITLE.cast.find((c) => c.id === id), F = ka ? KEYART : S;
     if (ka) sampleClip(M.K.clips[ka.clip], ka.u, pose);
     else sampleClip(M.K.clips.idle, (t % 2.5) / 2.5, pose);
-    M.rig.root.scale.set(1, 1, 1);
-    M.rig.apply(pose, p, ka ? ka.face : S.face + Math.sin(t * 0.35) * S.sway + spin + userYaw);
-    M.rig.root.scale.setScalar(HERO_SCALE); M.rig.root.updateMatrixWorld(true);
-    if (M.fresh) { M.sec.reset(); M.fresh = false; }
-    M.sec.update(dt);
+    poseOfficer(M, pose, p, ka ? ka.face : S.face + Math.sin(t * 0.35) * S.sway + spin + userYaw, dt);
     // motes: a 5 × 3 × 4 m box around him, rising slowly with a lazy sideways drift, wrapping at the top
     const a = motes.geometry.attributes.position, sd = motes.userData.seed;
     for (let i = 0; i < S.motes; i++) {

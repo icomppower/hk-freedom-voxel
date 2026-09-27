@@ -9,12 +9,14 @@
 //   176 FINISHER: the dragon dives onto Zhao Yun and coils skyward; a ring wave launches everything in tiers
 //   200 control returns (≈3.35 s)
 // Emits musou:ready/start/hit/burst/end. The camera asks mu.shot() for the shot list; src/musou/view.js renders the
-// grade, motes, dragon and payoff light from this state (dragonPath is shared so the hits land where the dragon is).
+// grade, motes, dragon and payoff light from this state (dragonAt / dragonArc are shared so the hits land where the dragon
+// is). The helpers below (easing, sun avoidance, aura shove, end, gauge) are shared with Huang Zhong's Musou.
+import * as THREE from 'three';
 import { emit } from '../core/events.js';
 import { P, clip, spearAbout } from '../hero/rig.js';
 import { setState, stickDir, turnToward } from '../hero/locomotion.js';
 import { ST, wrap } from '../crowd/crowd.js';
-import { SUN_DIR } from '../world/sky.js';
+import { SUN_AZ } from '../world/sky.js';
 
 export const MUSOU = {
   closeup: 30, pullback: 88, chase: 100, contact: 132, finisher: 176, end: 200,
@@ -56,40 +58,23 @@ const DK = [
     DK.push([s, r * Math.sin(a), 1.1 + k * 0.03 * 14, c + r * Math.cos(a)]);
   }
 }
-const cr = (a, b, c, d, u) => 0.5 * (2 * b + (c - a) * u + (2 * a - 5 * b + 4 * c - d) * u * u + (3 * b - a - 3 * c + d) * u * u * u);
-function pathRaw(s, out) {
+// The path runs through the keys (uniform Catmull-Rom; three extrapolates the end tangents); time → curve parameter is
+// piecewise linear over the keys, and the body is spaced evenly along the arc length (LEN[k]: arc length at k / AD).
+const PATH = new THREE.CatmullRomCurve3(DK.map(([, l, u, f]) => new THREE.Vector3(l, u, f)), false, 'catmullrom', 0.5);
+const AD = 1024;
+PATH.arcLengthDivisions = AD;
+const LEN = PATH.getLengths(), _a = new THREE.Vector3();
+function keyT(s) {
   let i = 0;
   while (i < DK.length - 2 && s >= DK[i + 1][0]) i++;
-  const a = DK[Math.max(0, i - 1)], b = DK[i], c = DK[i + 1], d = DK[Math.min(DK.length - 1, i + 2)];
-  const u = Math.min(1, Math.max(0, (s - b[0]) / (c[0] - b[0])));
-  for (let j = 1; j < 4; j++) out[j - 1] = cr(a[j], b[j], c[j], d[j], u);
-  return out;
+  return (i + THREE.MathUtils.clamp((s - DK[i][0]) / (DK[i + 1][0] - DK[i][0]), 0, 1)) / (DK.length - 1);
 }
-// arc-length table so the body can be spaced evenly along the path
-const TS0 = DK[0][0], TDT = 1 / 480, TN = Math.ceil((DK[DK.length - 1][0] - TS0) / TDT) + 1;
-const TAB = new Float32Array(TN * 3), ARC = new Float32Array(TN);
-{
-  const p = [0, 0, 0];
-  for (let k = 0; k < TN; k++) {
-    pathRaw(TS0 + k * TDT, p); TAB.set(p, k * 3);
-    ARC[k] = k ? ARC[k - 1] + Math.hypot(p[0] - TAB[k * 3 - 3], p[1] - TAB[k * 3 - 2], p[2] - TAB[k * 3 - 1]) : 0;
-  }
-}
-const ARC0 = ARC[Math.round(-TS0 / TDT)];                  // arc length where the dragon leaves the spear tip
+const arcAt = (t) => { const f = t * AD, k = Math.min(AD - 1, Math.floor(f)); return LEN[k] + (LEN[k + 1] - LEN[k]) * (f - k); };
+const ARC0 = arcAt(keyT(0));                               // arc length where the dragon leaves the spear tip
 /** Arc length (m past the spear tip) of the head at s seconds after contact. */
-export function dragonArc(s) {
-  const f = Math.min(TN - 1, Math.max(0, (s - TS0) / TDT)), k = Math.floor(f), u = f - k;
-  return (k + 1 < TN ? ARC[k] + (ARC[k + 1] - ARC[k]) * u : ARC[k]) - ARC0;
-}
+export function dragonArc(s) { return arcAt(keyT(s)) - ARC0; }
 /** Point on the path at arc length a (m past the spear tip), contact frame [left, up, fwd]. */
-export function dragonAt(a, out) {
-  a += ARC0;
-  let lo = 0, hi = TN - 1;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ARC[m] < a) lo = m; else hi = m; }
-  const u = ARC[hi] > ARC[lo] ? Math.min(1, Math.max(0, (a - ARC[lo]) / (ARC[hi] - ARC[lo]))) : 0;
-  for (let j = 0; j < 3; j++) out[j] = TAB[lo * 3 + j] + (TAB[hi * 3 + j] - TAB[lo * 3 + j]) * u;
-  return out;
-}
+export function dragonAt(a, out) { return PATH.getPointAt(THREE.MathUtils.clamp((a + ARC0) / LEN[AD], 0, 1), _a).toArray(out); }
 
 // ---------------------------------------------------------------- hero clips (merged into Zhao Yun's clip registry: src/chars/zhaoyun/kit.js)
 const FEET = { footL: [0.24, 0.08, 0.14, 0, 20], footR: [-0.24, 0.08, -0.14, 0, -20] };
@@ -144,13 +129,54 @@ export const MUSOU_CLIPS = {
 };
 
 const DT = 1 / 60;
-const easeOut = (u) => 1 - (1 - u) * (1 - u);
-const smooth = (u) => { u = Math.min(1, Math.max(0, u)); return u * u * (3 - 2 * u); };
+export const easeOut = (u) => 1 - (1 - u) * (1 - u);
+export const smooth = (u) => THREE.MathUtils.smoothstep(u, 0, 1);
 // Chase/payoff cameras never look into the low sun (backlit crowd + haze = an unreadable payoff): the view yaw keeps at
 // least SUN_AVOID from the sun's azimuth, and the payoff swings to the side of the rush that faces away from it.
-const SUN_AZ = Math.atan2(SUN_DIR.x, SUN_DIR.z), SUN_AVOID = 1.05;
-const offSun = (y) => { const d = wrap(y - SUN_AZ); return Math.abs(d) >= SUN_AVOID ? y : SUN_AZ + (d < 0 ? -1 : 1) * SUN_AVOID; };
+const SUN_AVOID = 1.05;
+export const offSun = (y) => { const d = wrap(y - SUN_AZ); return Math.abs(d) >= SUN_AVOID ? y : SUN_AZ + (d < 0 ? -1 : 1) * SUN_AVOID; };
 const PAYOFF_YAW = 1.15;                                   // payoff camera: this far round from the rush direction (rad)
+
+/** Activation aura: grounded soldiers within r0 / (1 − k) of the hero recoil (frozen mid-stagger until contact); fills
+ *  push with [i, fromX, fromZ, toX, toZ] (to = r0 + d·k out), eased by auraMove. */
+export function auraShove(c, h, { r0, k }, push) {
+  const R1 = r0 / (1 - k);
+  push.length = 0;
+  for (let i = 0; i < c.N; i++) {
+    const s = c.st[i];
+    if (s === ST.OFF || s === ST.DEAD || c.y[i] > 0.3) continue;
+    const dx = c.x[i] - h.x, dz = c.z[i] - h.z, d = Math.hypot(dx, dz);
+    if (d >= R1 || d < 1e-3) continue;
+    const f = (r0 + d * k) / d;
+    push.push([i, c.x[i], c.z[i], h.x + dx * f, h.z + dz * f]);
+    c.releaseToken(i);
+    c.st[i] = ST.KNOCK; c.stT[i] = 0; c.vx[i] = c.vz[i] = 0;
+  }
+}
+/** The shove at u (0..1 of its frames), eased; bodies no longer knocked back (hit meanwhile) are left alone. */
+export function auraMove(c, push, u) {
+  u = easeOut(u);
+  for (const [i, fx, fz, tx, tz] of push) if (c.st[i] === ST.KNOCK) { c.x[i] = fx + (tx - fx) * u; c.z[i] = fz + (tz - fz) * u; }
+}
+/** Control returns: the spent segment settles, a short grace, back to idle. */
+export function endMusou(mu, h, startMusou, cost) {
+  mu.active = false;
+  h.musou = Math.max(0, startMusou - h.musouMax * cost);
+  h.iframes = 30;
+  setState(h, 'idle');
+  emit('musou:end', {});
+}
+/** mu.ready (at least one full gauge segment: hero.js asks before starting a Musou) and mu.step: the gauge-ready
+ *  notification (edge-triggered), then `also` (the kit's own per-frame sim). */
+export function gauge(mu, game, cost, also) {
+  mu.ready = () => game.hero.musou >= game.hero.musouMax * cost - 1e-6;
+  mu.step = () => {
+    const ready = mu.ready() && game.hero.state !== 'musou';
+    if (ready && !mu.wasReady) emit('musou:ready', {});
+    mu.wasReady = ready;
+    also?.();
+  };
+}
 
 export function createMusou(game) {
   const mu = { active: false, t: 0, wasReady: false, yaw0: 0, ax: 0, az: 0, ayaw: 0, side: 1, waveR: 0, seq: 0 };
@@ -180,19 +206,7 @@ export function createMusou(game) {
     h.musouClip = 'mu_act'; h.musouT = 0;
     h.iframes = MUSOU.end + 30;
     game.freeze = 2;
-    // activation aura: grounded soldiers inside r0/(1-k) recoil outward (frozen mid-stagger until contact)
-    const { r0, k } = MUSOU.aura, R1 = r0 / (1 - k);
-    push.length = 0;
-    for (let i = 0; i < c.N; i++) {
-      const s = c.st[i];
-      if (s === ST.OFF || s === ST.DEAD || c.y[i] > 0.3) continue;
-      const dx = c.x[i] - h.x, dz = c.z[i] - h.z, d = Math.hypot(dx, dz);
-      if (d >= R1 || d < 1e-3) continue;
-      const f = (r0 + d * k) / d;
-      push.push([i, c.x[i], c.z[i], h.x + dx * f, h.z + dz * f]);
-      c.releaseToken(i);
-      c.st[i] = ST.KNOCK; c.stT[i] = 0; c.vx[i] = c.vz[i] = 0;
-    }
+    auraShove(c, h, MUSOU.aura, push);                                // activation aura: the nearest soldiers recoil
     emit('musou:start', { x: h.x, z: h.z, activation: MUSOU.closeup, burstAt: MUSOU.finisher, contact: MUSOU.contact });
   };
 
@@ -207,10 +221,7 @@ export function createMusou(game) {
     h.vx = h.vz = 0;
     h.musou = Math.max(0, startMusou - h.musouMax * M.cost * Math.min(1, t / M.contact));   // one segment drains by contact
     if (t < M.contact) game.freeze = Math.max(game.freeze, 2);          // world holds still until contact
-    if (t <= M.aura.frames) {                                            // aura shove (eased), then hold
-      const u = easeOut(t / M.aura.frames);
-      for (const [i, fx, fz, tx, tz] of push) if (c.st[i] === ST.KNOCK) { c.x[i] = fx + (tx - fx) * u; c.z[i] = fz + (tz - fz) * u; }
-    }
+    if (t <= M.aura.frames) auraMove(c, push, t / M.aura.frames);       // aura shove (eased), then hold
     if (t < M.closeup) { h.musouClip = 'mu_act'; h.musouT = t / M.closeup; return; }
     if (t < M.pullback) { h.musouClip = 'mu_face'; h.musouT = (t - M.closeup) / (M.pullback - M.closeup); return; }
     if (t < M.chase) { h.musouClip = 'mu_charge'; h.musouT = (t - M.pullback) / (M.chase - M.pullback); return; }
@@ -266,13 +277,7 @@ export function createMusou(game) {
         emit('musou:hit', { x: h.x + Math.sin(a) * R, y: 0.4, z: h.z + Math.cos(a) * R, stage: 'wave', yaw: a, n: w });
       }
     }
-    if (t >= M.end) {
-      mu.active = false;
-      h.musou = Math.max(0, startMusou - h.musouMax * M.cost);
-      h.iframes = 30;
-      setState(h, 'idle');
-      emit('musou:end', {});
-    }
+    if (t >= M.end) endMusou(mu, h, startMusou, M.cost);
   };
 
   /**
@@ -322,13 +327,6 @@ export function createMusou(game) {
     return o;
   };
 
-  /** At least one full gauge segment (hero.js asks before starting a Musou). */
-  mu.ready = () => game.hero.musou >= game.hero.musouMax * MUSOU.cost - 1e-6;
-  /** Gauge-ready notification (edge-triggered). */
-  mu.step = () => {
-    const ready = mu.ready() && game.hero.state !== 'musou';
-    if (ready && !mu.wasReady) emit('musou:ready', {});
-    mu.wasReady = ready;
-  };
+  gauge(mu, game, MUSOU.cost);
   return mu;
 }

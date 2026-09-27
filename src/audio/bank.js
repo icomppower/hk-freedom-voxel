@@ -1,6 +1,6 @@
 // Offline-synthesised sound bank (OfflineAudioContext, no downloads). Everything is baked once at boot into AudioBuffers
 // — formant-synth voices (Zhao Yun kiai, enemy grunts / death cries, distant army), layered spear whooshes, slash
-// impacts, armour clanks, body falls, Musou stingers, a looping battle bed, a war-drum loop and a power-chord riff loop
+// impacts, armour clanks, bowstring twangs, body falls, Musou stingers, a looping battle bed, a war-drum loop and a power-chord riff loop
 // (bake ≈ 0.9 s at boot; combat sounds are ready after ≈ 0.1 s) — and played back by
 // audio.js with random rate / gain / pan, so 50+ hits per second stay cheap and never repeat back to back.
 // Audio variation uses Math.random: it must never touch the sim or visual RNG.
@@ -74,13 +74,14 @@ function smp(oc, dst, buf, t, rate, g, p) {             // place a baked buffer 
   s.connect(gain(oc, g)).connect(pan(oc, p)).connect(dst); s.start(t);
 }
 
+/** Render fn into a buffer, normalised to `peak` (0: kept at its rendered level), trailing silence trimmed. */
 async function bake(dur, fn, ch = 1, peak = 0.9, trim = true, sr = SR) {
   const oc = new OfflineAudioContext(ch, Math.ceil(dur * sr), sr);
   fn(oc, oc.destination);
   const b = await oc.startRendering();
   let m = 0;
   for (let c = 0; c < ch; c++) { const d = b.getChannelData(c); for (let i = 0; i < d.length; i++) m = Math.max(m, Math.abs(d[i])); }
-  const k = m > 0 ? peak / m : 1, fade = Math.floor(sr * 0.006);
+  const k = m > 0 && peak ? peak / m : 1, fade = Math.floor(sr * 0.006);
   let last = 0;                                              // trim trailing silence (< -66 dBFS)
   if (!trim) last = b.length - 1;
   else for (let c = 0; c < ch; c++) { const d = b.getChannelData(c); for (let i = d.length - 1; i > last; i--) if (Math.abs(d[i]) * k > 5e-4) { last = i; break; } }
@@ -95,8 +96,8 @@ async function bake(dur, fn, ch = 1, peak = 0.9, trim = true, sr = SR) {
 }
 /** Loop: render len + tail, fold the tail back onto the start (layers must cross-fade over [0,tail) / [len,len+tail)).
  *  Loops render at 24 kHz: they are dark distance layers, and it halves the boot bake. */
-async function bakeLoop(len, tail, fn, peak, sr = 24000) {
-  const b = await bake(len + tail, fn, 2, peak, false, sr), n = Math.floor(len * sr), out = new AudioBuffer({ length: n, sampleRate: sr, numberOfChannels: 2 });
+async function bakeLoop(len, tail, fn) {
+  const sr = 24000, b = await bake(len + tail, fn, 2, 0.9, false, sr), n = Math.floor(len * sr), out = new AudioBuffer({ length: n, sampleRate: sr, numberOfChannels: 2 });
   for (let c = 0; c < 2; c++) {
     const s = b.getChannelData(c), d = out.getChannelData(c);
     d.set(s.subarray(0, n));
@@ -291,6 +292,16 @@ function fall(oc, dst, heavy) {                               // body hits the g
   if (Math.random() < 0.6) clank(oc, dst, rnd(0.01, 0.05), rnd(1100, 2000), 0.25, 0.08);
 }
 
+/** Bowstring twang (Huang Zhong): a plucked saw with a fast pitch drop through a closing resonant lowpass; heavy = lower,
+ *  louder, longer. Baked at its playing level (bake peak 0). */
+function twang(oc, dst, heavy) {
+  const f0 = heavy ? rnd(92, 104) : rnd(128, 150), o = osc(oc, 'sawtooth', 0, 0.32), lp = filt(oc, 'lowpass', 4200, 6);
+  pts(o.frequency, 0, [[0, f0 * 1.5], [0.02, f0]], true);
+  pts(lp.frequency, 0, [[0, 4200], [0.16, 420]], true);
+  const g = env(oc, 0, [[0, 0], [0.003, heavy ? 0.5 : 0.34]]); g.gain.exponentialRampToValueAtTime(0.001, heavy ? 0.3 : 0.2);
+  o.connect(lp).connect(g).connect(dst);
+}
+
 // ---- stingers
 function bell(oc, dst, t, f, g, dec) {
   [1, 2.0, 2.76, 3.9, 5.4].forEach((r, j) => osc(oc, 'sine', t, dec * 2, f * r).connect(perc(oc, t, 0.002, dec / (1 + j * 0.5), g / (1 + j * 0.9))).connect(dst));
@@ -352,7 +363,7 @@ export async function buildBank(B = {}) {
   const vox = (spec, k) => bake(spec.amp.at(-1)[0] + 0.1, (oc, d) => voice(oc, d, { ...spec, k }));
   // combat-critical first
   const put = (keys, ps) => Promise.all(ps).then((v) => keys.forEach((k, i) => { B[k] = v[i]; }));
-  await put(['slash', 'thrust', 'spin', 'heavy', 'hit', 'hitHeavy', 'crunch', 'clank', 'crowd', 'mass'], [
+  await put(['slash', 'thrust', 'spin', 'heavy', 'hit', 'hitHeavy', 'crunch', 'clank', 'crowd', 'mass', 'twang', 'twangHeavy'], [
     n(6, () => bake(0.3, (oc, d) => whoosh(oc, d, { dur: rnd(0.2, 0.27), lo: rnd(420, 560), hi: rnd(2000, 2800), pk: rnd(0.4, 0.5), q: 1.3, tear: 0.45, whistle: rnd(0.15, 0.3) }))),
     n(6, () => bake(0.2, (oc, d) => whoosh(oc, d, { dur: rnd(0.12, 0.16), lo: rnd(800, 1000), hi: rnd(3400, 4400), pk: 0.35, q: 1.1, tear: 0.8, whistle: rnd(0.2, 0.35) }))),
     n(4, () => bake(0.5, (oc, d) => whoosh(oc, d, { dur: rnd(0.38, 0.46), lo: rnd(320, 420), hi: rnd(1700, 2200), pk: 0.5, q: 1.4, tear: 0.35, whistle: 0.25, pulses: 2 }))),
@@ -363,6 +374,7 @@ export async function buildBank(B = {}) {
     n(6, () => bake(0.4, (oc, d) => clank(oc, d, 0, rnd(650, 1500), 1, rnd(0.12, 0.3)))),
     n(12, () => bake(1.5, (oc, d) => crowdVoice(oc, d, 0, rnd(130, 270), rnd(0.4, 1.3)))),
     n(6, () => bake(0.3, (oc, d) => mass(oc, d), 2)),
+    n(4, () => bake(0.32, (oc, d) => twang(oc, d, false), 1, 0)), n(4, () => bake(0.32, (oc, d) => twang(oc, d, true), 1, 0)),
   ]);
   const loops = bakeLoops(B);                                 // the loops only need crowd + clank: render them alongside the rest
   const kiai = await Promise.all(Object.entries(LINES).flatMap(([id, s]) => [0.95, 1.05].map(async (k) => [id, await vox(s, k * rnd(0.97, 1.03))])));
@@ -445,7 +457,7 @@ function bakeLoops(B) {
         if (rimP[i] === 'k') rim(oc, d, t + (bar ? 0.01 : 0), 0.35);
       }
       taiko(oc, d, 0, 1.3, 0.6); taiko(oc, d, 4, 1.3, 0.6);  // odaiko downbeats
-    }, 0.9),
+    }),
     bakeLoop(16, 2, (oc, d) => {                             // distant battle: army voices, clashes, wind, rumble, fire
       const far = filt(oc, 'lowpass', 3400); far.connect(d);        // distance: dark; the runtime reverb send adds the space
       for (let i = 0; i < 52; i++) smp(oc, far, pick(B.crowd), rnd(0, 16), rnd(0.85, 1.15), rnd(0.25, 1), rnd(-1, 1));
@@ -461,7 +473,7 @@ function bakeLoops(B) {
       hlfo.connect(hm).connect(hg.gain);
       nz(oc, 0, 18).connect(hl).connect(xf(oc)).connect(hg).connect(d);
       for (let i = 0; i < 90; i++) { const t = rnd(0, 16); nz(oc, t, 0.01).connect(filt(oc, 'bandpass', rnd(2500, 5000), 1.2)).connect(perc(oc, t, 0.0005, rnd(0.003, 0.01), rnd(0.08, 0.25))).connect(pan(oc, rnd(-0.5, 0.5))).connect(d); }
-    }, 0.9),
-    bakeLoop(16, 1, (oc, d) => riff(oc, d), 0.9),              // 2 × the drum loop length: both start together and stay locked
+    }),
+    bakeLoop(16, 1, (oc, d) => riff(oc, d)),              // 2 × the drum loop length: both start together and stay locked
   ]).then(([drums, bed, music]) => { B.drums = drums; B.bed = bed; B.music = music; });
 }

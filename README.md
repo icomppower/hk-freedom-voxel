@@ -1,36 +1,38 @@
-**English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
-
-# Voxel Musou — Zhao Yun (趙雲)
+# Voxel Musou
 
 <p align="center">
-  <a href="https://voxel-musou.vercel.app"><img src="media/gameplay.gif" alt="Zhao Yun vs 300 soldiers — the Musou" width="100%"></a>
+  <a href="https://voxel-musou.vercel.app"><img src="media/gameplay.gif" alt="Zhao Yun and Huang Zhong vs 300 soldiers — the Musou" width="100%"></a>
 </p>
 
 <p align="center"><b><a href="https://voxel-musou.vercel.app">▶ Play in your browser — voxel-musou.vercel.app</a></b></p>
 
 | | |
 | --- | --- |
-| ![Crowd fight, 400+ hit chain](media/crowd.jpg) | ![Charge sweep](media/sweep.jpg) |
-| Crowd fight, 400+ hit chain | Charge sweep |
-| ![Musou cut-in](media/musou.jpg) | ![Musou dragon, 150 K.O.](media/dragon.jpg) |
-| Musou cut-in | Musou dragon, 150 K.O. |
+| ![Zhao Yun in the crowd](media/zhaoyun.jpg) | ![Huang Zhong's Musou volley](media/volley.jpg) |
+| Zhao Yun — spear string through the crowd | Huang Zhong — Musou 百步穿楊, flaming volley |
+| ![Zhao Yun's Musou dragon](media/dragon.jpg) | ![Huang Zhong's giant arrow](media/arrow.jpg) |
+| Zhao Yun — Musou 蒼龍破陣, the dragon | Huang Zhong — the giant arrow |
+| ![Character select](media/select.jpg) | ![Chapter I prologue](media/story.jpg) |
+| Choose your officer | Chapter I 「定軍山」 prologue |
 
-A browser-playable voxel action game in the style of Dynasty Warriors, built with Three.js. Take the field as Zhao Yun and cut through hundreds of Wei soldiers with his spear.
+A browser-playable voxel action game in the style of Dynasty Warriors, built with Three.js. Take the field as Zhao Yun (趙雲) with his spear or Huang Zhong (黃忠) with his great bow, and cut through hundreds of Wei soldiers — in the story chapter at Mount Dingjun or in an endless free battle.
 
 No build step: plain ES modules, Three.js r186 vendored in `vendor/three/`, deterministic fixed 60 Hz simulation.
 
 ## Features
 
-- Flowing normal combos (N1–N6) and charge attacks (C1–C6)
-- Jump, jump attack and dodge
-- Hit-stop and impact VFX
-- Dense voxel crowds of Wei soldiers (~300, InstancedMesh) blasted apart into voxel debris
+- Two playable officers with their own movesets, models and Musou:
+  - **Zhao Yun** — spear: normal combos (N1–N6), charge attacks (C1–C6), Musou 蒼龍破陣 with a dragon
+  - **Huang Zhong** — bow: limb slashes and point-blank shots, charge shots (fan, barrage, arrow rain, fire arrow), aim mode, Musou 百步穿楊 (a flaming volley and a giant arrow)
+- Story mode, Chapter I 「定軍山」: prologue, scripted battle with dialogue, objectives, enemy officers and gates, result screen; play it as either officer (the other one joins the dialogue)
+- Free battle: endless waves
+- Jump, jump attack, dodge; hit-stop and impact VFX
+- Dense voxel crowds of Wei soldiers (~300, InstancedMesh) blasted apart into voxel debris, allied Shu troops
 - Enemy officers with name and HP tags
-- Musou special attack with a dragon and screen color grade
-- Golden-hour castle battlefield with fires and banners
+- Golden-hour valley battlefield with a river, camps, castle, fires and banners
 - Custom post-processing: atmospheric haze, depth of field, bloom, retro pixel look
 - Procedural WebAudio sound
-- Calligraphy-style HUD
+- Calligraphy-style title, character select, HUD and ink-wipe transitions
 
 ## Run
 
@@ -44,33 +46,37 @@ Then open http://localhost:8000 . Requires a WebGL2 browser; a desktop GPU is re
 
 ## Controls
 
-Keyboard and mouse; a gamepad is optional.
+Keyboard and mouse, or a gamepad.
 
-| Action | Keys |
-| --- | --- |
-| Move (camera-relative) | WASD / arrow keys |
-| Normal attack | J / left mouse |
-| Charge attack | K / right mouse |
-| Jump | Space |
-| Dodge | L / Shift |
-| Musou | I |
-| Camera orbit | mouse drag / Q E |
-| Pause / controls | Esc |
-| Start | Enter / click 出陣 |
+| Action | Keys | Gamepad |
+| --- | --- | --- |
+| Move (camera-relative) | WASD / arrow keys | left stick |
+| Attack | J / left click | X □ |
+| Charge | K / right click (mid-combo) | Y △ |
+| Jump | Space | A × |
+| Dodge | L / Shift | R1 R2 |
+| Musou (gauge full) | I | B ○ |
+| Camera | mouse (click the field to lock it) / Q E | right stick |
+| Recenter / face nearest officer | R | L1 L2 |
+| Aim (Huang Zhong) | hold K / right click, release to loose | hold Y △ |
+| Pause / controls | Esc | |
 
-![Title screen with the full controls](media/title.jpg)
+![Title screen](media/title.jpg)
 
 ## Options
 
 | URL parameter | Description |
 | --- | --- |
 | `?enemies=N` | Number of enemy soldiers, 0–2000 (default 300) |
+| `?go=free\|story&char=zhaoyun\|huangzhong` | Skip the menus straight into a battle |
+| `?hq` | Pin full render quality (no automatic MSAA downgrade) |
 
 ## Project layout
 
 ```
-index.html      entry point, importmap, HUD CSS
-src/            core, hero, combat, crowd, musou, camera, vfx, post, world, audio, ui
+index.html      entry point, importmap, all screen CSS
+src/            core, hero, chars (per-character kits), combat, crowd, musou, camera, vfx, post, world, audio,
+                story (chapter script, prologue, result), ui
 vendor/three/   Three.js r186
 media/          README screenshots and GIF
 ```

@@ -15,12 +15,12 @@
 import { emit } from '../../core/events.js';
 import { setState, stickDir } from '../../hero/locomotion.js';
 import { ST, wrap } from '../../crowd/crowd.js';
-import { SUN_DIR } from '../../world/sky.js';
+import { SUN_AZ } from '../../world/sky.js';
+import { smooth, offSun, auraShove, auraMove, endMusou, gauge } from '../../musou/musou.js';
 import { createProjectiles, ARROW, AS } from '../../combat/projectiles.js';
 import { createAim } from './aim.js';
 import { clearance } from '../../camera/occlusion.js';
 import { ground } from '../../world/map.js';
-import { live } from './model.js';
 
 export const HZ_MUSOU = {
   closeup: 30, plant: 76, volley: 84, volleyEnd: 150, big: 150, release: 182, end: 244,
@@ -36,13 +36,7 @@ export const HZ_MUSOU = {
 const M = HZ_MUSOU;
 export const GIANT_FRAMES = Math.round(M.giant.range / M.giant.speed * 60) + 1;   // release → explosion
 
-const easeOut = (u) => 1 - (1 - u) * (1 - u);
-const smooth = (u) => { u = Math.min(1, Math.max(0, u)); return u * u * (3 - 2 * u); };
-const SUN_AZ = Math.atan2(SUN_DIR.x, SUN_DIR.z), SUN_AVOID = 1.05;
-const offSun = (y) => { const d = wrap(y - SUN_AZ); return Math.abs(d) >= SUN_AVOID ? y : SUN_AZ + (d < 0 ? -1 : 1) * SUN_AVOID; };
-
 export function createMusou(game) {
-  live.game = game;
   const mu = { active: false, t: 0, wasReady: false, yaw0: 0, seq: 0, giantI: -1, side: 1 };
   const shot = { id: 0, yaw: 0, dist: 0, pitch: 0, fov: 50, height: 1.2, side: 0, shake: 1 };
   const push = [];
@@ -122,20 +116,7 @@ export function createMusou(game) {
    *  giant draw, so the crowd that closed back in after the volley no longer stands between the over-the-shoulder lens,
    *  the bow and the army. */
   let pushT = 0;
-  function shove(h) {
-    const c = game.crowd, { r0, k } = M.aura, R1 = r0 / (1 - k);
-    push.length = 0; pushT = mu.t;
-    for (let i = 0; i < c.N; i++) {
-      const s = c.st[i];
-      if (s === ST.OFF || s === ST.DEAD || c.y[i] > 0.3) continue;
-      const dx = c.x[i] - h.x, dz = c.z[i] - h.z, d = Math.hypot(dx, dz);
-      if (d >= R1 || d < 1e-3) continue;
-      const f = (r0 + d * k) / d;
-      push.push([i, c.x[i], c.z[i], h.x + dx * f, h.z + dz * f]);
-      c.releaseToken(i);
-      c.st[i] = ST.KNOCK; c.stT[i] = 0; c.vx[i] = c.vz[i] = 0;
-    }
-  }
+  function shove(h) { auraShove(game.crowd, h, M.aura, push); pushT = mu.t; }
 
   const bow = (h, yaw) => ({ x: h.x + Math.sin(yaw) * ARROW.ahead, y: h.y + ARROW.heroY, z: h.z + Math.cos(yaw) * ARROW.ahead, yaw });
 
@@ -146,10 +127,7 @@ export function createMusou(game) {
     h.musou = Math.max(0, startMusou - h.musouMax * M.cost * Math.min(1, t / M.volley));
     if (t < M.volley) game.freeze = Math.max(game.freeze, 2);
     if (t === M.big) shove(h);
-    if (t - pushT <= M.aura.frames && push.length) {
-      const u = easeOut((t - pushT) / M.aura.frames);
-      for (const [i, fx, fz, tx, tz] of push) if (c.st[i] === ST.KNOCK) { c.x[i] = fx + (tx - fx) * u; c.z[i] = fz + (tz - fz) * u; }
-    }
+    if (t - pushT <= M.aura.frames) auraMove(c, push, (t - pushT) / M.aura.frames);
     if (t < M.closeup) { h.musouClip = 'hz_act'; h.musouT = t / M.closeup; return; }
     if (t < M.plant) { h.musouClip = 'hz_face'; h.musouT = (t - M.closeup) / (M.plant - M.closeup); return; }
     if (t < M.volley) {                                                   // plant: the stick may still aim the volley
@@ -208,13 +186,7 @@ export function createMusou(game) {
     if (g >= 0 && P.st[g] && P.big[g] === 2 && (t - M.release) % 3 === 0) {   // the flight: ticks for the audio build-up
       emit('musou:hit', { x: P.x[g], y: P.y[g], z: P.z[g], stage: 'front', yaw: h.yaw, n: t - M.volley });
     }
-    if (t >= M.end) {
-      mu.active = false;
-      h.musou = Math.max(0, startMusou - h.musouMax * M.cost);
-      h.iframes = 30;
-      setState(h, 'idle');
-      emit('musou:end', {});
-    }
+    if (t >= M.end) endMusou(mu, h, startMusou, M.cost);
   };
 
   /** Camera shot for the current Musou frame (render side; id change = hard cut). Terms as src/musou/musou.js shot(). */
@@ -245,12 +217,6 @@ export function createMusou(game) {
     return o;
   };
 
-  mu.ready = () => game.hero.musou >= game.hero.musouMax * M.cost - 1e-6;
-  mu.step = () => {
-    const ready = mu.ready() && game.hero.state !== 'musou';
-    if (ready && !mu.wasReady) emit('musou:ready', {});
-    mu.wasReady = ready;
-    mu.proj.step();
-  };
+  gauge(mu, game, M.cost, () => mu.proj.step());
   return mu;
 }

@@ -14,16 +14,16 @@
 // over-the-shoulder aim shot from the active kit (see aim below).
 // Render smoothing uses sim time elapsed between renders and shake uses sim frames, so captures are deterministic.
 //
-// Kit aim hook (optional, hz lane): kit.aimShot(game) → null | { dist, pitch, fov, height, side, yaw? }. Pure read of
+// Kit aim hook (optional, hz lane): game.musou.aimShot() → null | { dist, pitch, fov, height, side, yaw? }. Pure read of
 // sim state; called from the sim step (yaw only: the view eases onto `yaw` when given) and from the rig (the rest,
 // eased in/out at aimRate, never a cut). Fields as in a Musou shot: `side` = aim offset to screen-right (m).
 import * as THREE from 'three';
 import { on } from '../core/events.js';
-import { ST } from '../crowd/crowd.js';
-import { ground } from '../world/map.js';
+import { ST, wrap } from '../crowd/crowd.js';
+import { ground, smooth } from '../world/map.js';
 import { clearance } from './occlusion.js';
 
-const DEG = Math.PI / 180;
+const { clamp, damp, DEG2RAD: DEG } = THREE.MathUtils;
 const BLEND = 0.45;                                   // s, Musou → gameplay blend (bench: 0.3-0.6 s, no pop)
 const CAM = {
   // Default rig: vFOV 48°, boom 5.8 m at 17° (≈5.55 m behind, 3.05 m above the feet), aim 1.35 m over the feet →
@@ -57,9 +57,6 @@ const CAM = {
   cutJump: 40,                              // hero moved faster than this (m/s, ≥ 1 m) between two renders: teleport → cut
 };
 
-const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-const { clamp } = THREE.MathUtils;
-const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 const ease = (rate, dt) => 1 - Math.exp(-rate * dt);
 /** Camera offset from its aim point: `dist` back along view yaw, raised by `pitch`. */
 const behind = (v, yaw, pitch, dist) => v.set(-Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, -Math.cos(yaw) * Math.cos(pitch) * dist);
@@ -96,7 +93,7 @@ export function createCamSim() {
   s.step = (game, inp) => {
     const h = game.hero, musou = h.state === 'musou';
     const held = Math.hypot(inp.mx, inp.my) >= 0.1;
-    const aim = h.kit.aimShot ? h.kit.aimShot(game) : null;          // aiming: the look steers the bow (aim.js), not tilt
+    const aim = game.musou.aimShot?.() ?? null;                      // aiming: the look steers the bow (aim.js), not tilt
     if (inp.orbit || inp.tilt) {                                     // the player's look always wins
       s.yaw += inp.orbit; s.ctrl += inp.orbit; if (!aim) s.tilt = clamp(s.tilt + inp.tilt, CAM.tiltMin, CAM.tiltMax);
       s.manualT = CAM.lookHold; s.turn = null;
@@ -182,9 +179,9 @@ export function createCameraRig(game, width, height) {
       yaw = snap ? camYaw : yaw + wrap(camYaw - yaw) * ease(shot ? CAM.yawLerpShot : CAM.yawLerp, dt);
       if (!cine) {
         // kit aim shot (over the shoulder): eased in and out, the last one held while it fades
-        const aim = h.kit.aimShot ? h.kit.aimShot(game) : null;
+        const aim = game.musou.aimShot?.() ?? null;
         if (aim) Object.assign(aimLast, aim);
-        aimK = snap ? +!!aim : aimK + (+!!aim - aimK) * ease(CAM.aimRate, dt);
+        aimK = snap ? +!!aim : damp(aimK, +!!aim, CAM.aimRate, dt);
         if (aimK > 1e-3) {
           const k = aimK;
           dist += (aimLast.dist - dist) * k; pitch += (aimLast.pitch - pitch) * k; fov += (aimLast.fov - fov) * k;
@@ -197,7 +194,7 @@ export function createCameraRig(game, width, height) {
         else tierT = 0;
         const kt = snap ? 1 : ease(CAM.tierRate, dt);
         pull += (CAM.tiers[tier][2] - pull) * kt; pullPitch += (CAM.tiers[tier][3] - pullPitch) * kt;
-        tiltS = snap ? game.cam.tilt : tiltS + (game.cam.tilt - tiltS) * ease(CAM.yawLerp, dt);
+        tiltS = snap ? game.cam.tilt : damp(tiltS, game.cam.tilt, CAM.yawLerp, dt);
         dist *= (1 + pull) * (1 - aimK) + aimK;
         pitch += (pullPitch + tiltS - Math.max(0, h.y - CAM.hop) * CAM.airTilt) * (1 - aimK);
       }
@@ -221,7 +218,7 @@ export function createCameraRig(game, width, height) {
       const rx = -Math.cos(yaw), rz = Math.sin(yaw);                        // screen-right on the ground
       const lift = shot ? 0.6 : CAM.airLift, air = shot ? h.y : Math.max(0, h.y - CAM.hop);
       const leadY = shot || h.grounded || h.vy >= 0 ? 0 : Math.max(-CAM.leadYMax, h.vy * lift * 2 / CAM.followDown);
-      leadYs = snap ? leadY : leadYs + (leadY - leadYs) * ease(CAM.leadYRate, dt);
+      leadYs = snap ? leadY : damp(leadYs, leadY, CAM.leadYRate, dt);
       const tx = gx + leadX + rx * side, tz = gz + leadZ + rz * side;
       const ty = air * lift + height + leadYs + ground(h.x, h.z);          // sim y is above ground
       if (snap) { fx.x = tx; fz.x = tz; fy.x = ty; fx.v = fz.v = fy.v = 0; }
@@ -234,7 +231,7 @@ export function createCameraRig(game, width, height) {
       // boom clearance: walls / cliffs / rising slope behind him slide the camera in along the boom
       behind(want, yaw, pitch, dist).add(api.focus);
       const c = clearance(fx.x, fy.x, fz.x, want.x, want.y, want.z);
-      clear = snap ? c : clear + (c - clear) * ease(c < clear ? CAM.clearIn : CAM.clearOut, dt);
+      clear = snap ? c : damp(clear, c, c < clear ? CAM.clearIn : CAM.clearOut, dt);
       if (clear < 1) behind(want, yaw, pitch, Math.max(CAM.minDist, dist * clear)).add(api.focus);
       if (snap) { pos.copy(want); camera.fov = fov; }
       else { pos.lerp(want, bk); camera.fov += (fov - camera.fov) * (bk < 1 ? bk : ease(8, dt)); }

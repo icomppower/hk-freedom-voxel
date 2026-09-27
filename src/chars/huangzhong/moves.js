@@ -108,7 +108,6 @@ export const MOVES = {
   aim: { frames: 30, cancel: 999, dodgeCancel: 0, steer: 0, tell: 14 },
 };
 
-export const NEUTRAL = { attack: 'n1', charge: 'c1', dash: 'dash', air: 'jatk', airCharge: 'jc' };
 export const AIR_CHAIN_MAX = 6;   // downward shots per jump
 /** C1 from neutral with △ still held on this move frame → aim mode (a tap under ≈ 0.17 s is the knockback shot). */
 export const AIM_AT = 10;

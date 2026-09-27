@@ -9,9 +9,10 @@
 //  · rubble, pines on the heights, and layered hazy mountains with Dingjun's peak behind the summit.
 import * as THREE from 'three';
 import { makeRng, hash01 } from '../core/rng.js';
-import { boxesGeometry } from '../core/voxel.js';
-import { hazeColor, SUN_DIR, SUN_AZ } from './sky.js';
-import { TERRAIN as G, PIECE_IDS, ground, noise2, smooth, riverZ, routeDist, onProp, SUMMIT_H, CAMP_H, WALL_Z, GATE_X } from './map.js';
+import { boxesGeometry, makeBuilder } from '../core/voxel.js';
+import { hazeColor, SUN_DIR, SUN_AZ, NOISE_GLSL } from './sky.js';
+import { TERRAIN as G, PIECE_IDS, ground, noise2, smooth, riverZ, routeDist, onProp, node, SUMMIT_H } from './map.js';
+import { wrap } from '../crowd/crowd.js';
 
 const { x0: X0, z0: Z0, step: S, nx: NX, nz: NZ } = G;
 
@@ -107,7 +108,7 @@ function groundTexture() {
  * the fight runs, lush on the river banks, bare in the Wei camp's plaza/courtyard. Also seeds the grass tufts.
  */
 function grassAt(x, z) {
-  const k = Math.round((x - X0) / S) + Math.round((z - Z0) / S) * NX, inside = G.in[k] ?? -9;
+  const inside = G.in[node(x, z)] ?? -9;
   let g = smooth(0.2, 0.52, noise2(x * 0.05 + 13, z * 0.05 - 7, 41));
   g *= smooth(2.5, 7.5, routeDist(x, z)) * (1 - paveMask(x, z));
   if (inside > 5) g *= 0.5 + 0.5 * smooth(0.42, 0.7, noise2(x * 0.11, z * 0.11, 43));   // trampled where the fight runs
@@ -152,15 +153,11 @@ function splatMaterial(map, grass) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGrass = aGrass; vGw = position.xz; vPave = aPave;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
       uniform sampler2D tGrass; varying float vGrass; varying vec2 vGw; varying vec2 vPave;
-      float gHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float gNoise(vec2 p) {
-        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), f.x), mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), f.x), f.y);
-      }`)
+      ${NOISE_GLSL}`)
       .replace('#include <map_fragment>', `#include <map_fragment>
         // macro: sun-dried ochre drifts vs cooler, darker trampled earth, with defined (not smeared) edges and a
         // mid-scale mottling, so the 8-40 m band has value and hue separation instead of one beige
-        float mN = gNoise(vGw / 29.0) * 0.6 + gNoise(vGw / 9.1 + 11.0) * 0.3 + gNoise(vGw / 2.3 + 5.0) * 0.1;
+        float mN = dwNoise(vGw / 29.0) * 0.6 + dwNoise(vGw / 9.1 + 11.0) * 0.3 + dwNoise(vGw / 2.3 + 5.0) * 0.1;
         diffuseColor.rgb *= mix(vec3(0.72, 0.76, 0.84), vec3(1.12, 1.0, 0.84), smoothstep(0.4, 0.6, mN));
         vec4 gT = texture2D(tGrass, vGw / 8.0);
         float gF = texture2D(tGrass, vGw / 61.0 + 0.37).a;                       // macro: lusher / drier patches
@@ -172,12 +169,12 @@ function splatMaterial(map, grass) {
         float pAa = max(fwidth(vGw.x), fwidth(vGw.y)) * 1.2;                    // m per pixel (outside the branch)
         if (pM > 0.15) {
           const float CH = 0.26;                                                 // course depth (m): small setts, not slabs
-          vec2 pw = vGw + (vec2(gNoise(vGw * 3.0), gNoise(vGw * 3.0 + 5.3)) - 0.5) * 0.1;    // hand-cut: wobbly joints
-          float row = floor(pw.y / CH), rh = gHash(vec2(row, 7.7));
+          vec2 pw = vGw + (vec2(dwNoise(vGw * 3.0), dwNoise(vGw * 3.0 + 5.3)) - 0.5) * 0.1;    // hand-cut: wobbly joints
+          float row = floor(pw.y / CH), rh = dwHash(vec2(row, 7.7));
           float len = 0.28 + 0.22 * rh;                                          // stone length, per course
           float xs = pw.x / len + rh * 5.0;
           vec2 cell = vec2(floor(xs), row);
-          float h1 = gHash(cell), h2 = gHash(cell + 31.7);
+          float h1 = dwHash(cell), h2 = dwHash(cell + 31.7);
           vec2 f = vec2(fract(xs) * len, fract(pw.y / CH) * CH);                // metres inside the stone
           vec2 e2 = min(f, vec2(len, CH) - f);
           if (h1 > 0.78) e2.x = min(e2.x, abs(f.x - len * (0.35 + 0.3 * h2)));   // some stones split in two
@@ -187,12 +184,12 @@ function splatMaterial(map, grass) {
           float stone = smoothstep(jw - pAa, jw + pAa, ed);
           // the edge: a connected, noisy boundary (low-frequency noise) that breaks into single stones only in a
           // narrow band, the joints there filling with sand (no loose rectangles out in the dirt)
-          float pe = pM + (gNoise(vGw * 0.45 + 3.1) - 0.5) * 0.5;
+          float pe = pM + (dwNoise(vGw * 0.45 + 3.1) - 0.5) * 0.5;
           float present = smoothstep(0.44, 0.56, pe + (h1 - 0.5) * 0.18);
           float sand = 1.0 - smoothstep(0.5, 0.9, pe);
           vec3 dirt = diffuseColor.rgb;
           vec3 sC = mix(vec3(0.19, 0.18, 0.17), vec3(0.23, 0.18, 0.145), h1) * (0.8 + 0.34 * h2);   // grey to warm-brown stones, close in value
-          sC = mix(sC, dirt, 0.2 + 0.35 * gNoise(vGw * 0.9 + h1 * 9.0));         // dust in the pores, patchy
+          sC = mix(sC, dirt, 0.2 + 0.35 * dwNoise(vGw * 0.9 + h1 * 9.0));         // dust in the pores, patchy
           sC *= 1.0 + 0.16 * (1.0 - smoothstep(0.3, 1.5, pRd));                  // polished crown
           sC *= 1.0 - 0.24 * (1.0 - smoothstep(0.07, 0.24, abs(pRd - 1.0)));    // two cart ruts either side of it
           float bev = 0.045;                                                      // relief: lit toward the key light (+x, +z)
@@ -310,7 +307,7 @@ function tufts() {
   const r = makeRng(404), spots = [];
   for (let n = 0; n < 80000 && spots.length < 9000; n++) {
     const x = r.range(X0 + 4, X0 + (NX - 1) * S - 4), z = r.range(-160, 222);
-    const k = Math.round((x - X0) / S) + Math.round((z - Z0) / S) * NX;
+    const k = node(x, z);
     if (TOP[k] > G.h[k] || G.in[k] < -1.2 || Math.abs(z - riverZ(x)) < 4.8) continue;   // not in the rock or the water
     const gm = grassAt(x, z);
     if (r.next() > (gm - 0.35) * 2.2) continue;
@@ -408,16 +405,12 @@ export function voxelGrain(mat, cell, amt) {
  * haze carries into the mountains' tone; lighter dusty tops, a few mossy ones on the heights.
  */
 function cliffs() {
-  const pos = [], nor = [], col = [], idx = [];
+  const vb = makeBuilder();
   // tops a shade darker than the valley dust (the low sun lights them flat-on: a paler top reads as snow)
   const c = new THREE.Color(), ROCK = new THREE.Color(0x735a50), DARK = new THREE.Color(0x4a3a37), TOPC = new THREE.Color(0x7d6656), MOSS = new THREE.Color(0x5a5a3c), GRASSY = new THREE.Color(0x6f6c3e);
   // ao: [bottom, top] brightness of a face quad (vertex order: bottom pair, top pair) — baked voxel AO: dark at the foot
   // of every face, a sunlit lip on the top course
-  const quad = (a, b, cc, d, n, ao = [1, 1]) => {
-    const o = pos.length / 3;
-    [a, b, cc, d].forEach((q, vi) => { const k = vi < 2 ? ao[0] : ao[1]; pos.push(q[0], q[1], q[2]); nor.push(n[0], n[1], n[2]); col.push(c.r * k, c.g * k, c.b * k); });
-    idx.push(o, o + 1, o + 2, o, o + 2, o + 3);
-  };
+  const quad = (a, b, cc, d, n, ao = [1, 1]) => vb.quad([a, b, cc, d], n, c.r, c.g, c.b, [ao[0], ao[0], ao[1], ao[1]]);
   const lowAt = (i, j) => {                                                    // neighbour's surface (outside the grid: below the plain)
     if (i < 0 || j < 0 || i >= NX || j >= NZ) return -2;
     const k = i + j * NX, t = TOP[k];
@@ -447,13 +440,7 @@ function cliffs() {
       }
     }
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  geo.setIndex(idx);
-  geo.computeBoundingSphere();
-  const m = new THREE.Mesh(geo, voxelGrain(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }), 0.5, 0.2));
+  const m = new THREE.Mesh(vb.build(), voxelGrain(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }), 0.5, 0.2));
   m.receiveShadow = true;
   m.name = 'cliffs';
   return m;
@@ -493,7 +480,7 @@ function rubble() {
   const COLS = [0x6a5e56, 0x5e544e, 0x74685e, 0x564a44, 0x6e6660, 0x3a2a22];
   for (let k = 0; k < 420 && list.length < 2400; k++) {
     const cx = r.range(-60, 60), cz = r.range(-156, 215);
-    const ii = Math.round((cx - X0) / S), jj = Math.round((cz - Z0) / S), f = G.in[ii + jj * NX];
+    const f = G.in[node(cx, cz)];
     if (f < 0.5 || routeDist(cx, cz) < 3 || Math.abs(cz - riverZ(cx)) < 6) continue;   // on the field, off the road and the water
     const n = r.int(3, 10), spread = r.range(0.6, 1.6), gy = ground(cx, cz);
     for (let i = 0; i < n; i++) {
@@ -545,8 +532,7 @@ function mountains() {
     const n1 = ringNoise(11, ly.seed), n2 = ringNoise(29, ly.seed + 1), n3 = ringNoise(83, ly.seed + 2), n4 = ringNoise(190, ly.seed + 3);
     const ridge = (a) => {
       const v = n1(a) * 0.5 + n2(a) * 0.3 + n3(a) * 0.14 + n4(a) * 0.06;
-      const da = Math.atan2(Math.sin(a - SUN_AZ), Math.cos(a - SUN_AZ));      // a saddle where the sun sets: the disc stays clear
-      const dp = Math.atan2(Math.sin(a - PEAK_A), Math.cos(a - PEAK_A));
+      const da = wrap(a - SUN_AZ), dp = wrap(a - PEAK_A);                  // a saddle where the sun sets: the disc stays clear
       return (ly.lo + (ly.hi - ly.lo) * Math.pow(Math.max(0, v - 0.18) / 0.82, 1.7)) * (1 - 0.8 * Math.exp(-((da / 0.2) ** 2))) + ly.peak * Math.exp(-((dp / 0.09) ** 2)) * (0.85 + 0.3 * n4(a));
     };
     // radial profile rows: [radius offset, height fraction, jitter]

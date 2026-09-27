@@ -14,6 +14,7 @@ import { vrng } from '../../core/rng.js';
 import { ST } from '../../crowd/crowd.js';
 import { createArrowView } from '../../vfx/arrows.js';
 import { createFx } from './fx.js';
+import { createOverlay, ramp } from '../../musou/overlay.js';
 import { heroPose } from '../../hero/hero.js';
 import { POSE_SIZE, spearWorld } from '../../hero/rig.js';
 import { ARROW } from '../../combat/projectiles.js';
@@ -23,8 +24,7 @@ import { HZ_MUSOU as M, GIANT_FRAMES } from './musou.js';
 
 const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _q = new THREE.Quaternion(), _c = new THREE.Color();
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
-const clamp01 = (v) => Math.min(1, Math.max(0, v));
-const ramp = (t, a, b) => clamp01((t - a) / (b - a));
+const { clamp } = THREE.MathUtils;
 
 export function createMusouView(parent, game, camera) {
   const mu = game.musou, hero = game.hero;
@@ -45,25 +45,15 @@ export function createMusouView(parent, game, camera) {
   land.visible = false; land.renderOrder = 20; scene.add(land);
   const headMark = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.27, 24), Object.assign(addMat(), { depthTest: false }));   // gold ring on the head it will take
   headMark.visible = false; headMark.renderOrder = 21; scene.add(headMark);
-  /** Officer whose head the point (x, y, z) passes (standing, within 0.5 m and y in the head band), else -1. */
-  function headAt(x, y, z) {
+  /** First standing soldier from index `from` whose body the point (x, y, z) passes (horizontal distance² < r2, height
+   *  over his feet in [y0, y1]), else -1. from = c.grunts: officers only. */
+  function hitAt(x, y, z, from, r2, y0, y1) {
     const c = game.crowd;
-    for (let i = c.grunts; i < c.N; i++) {
+    for (let i = from; i < c.N; i++) {
       const s = c.st[i];
       if (s === ST.OFF || s === ST.DEAD || s === ST.AIR || s === ST.DOWN) continue;
       const dx = c.x[i] - x, dz = c.z[i] - z;
-      if (dx * dx + dz * dz < 0.5 * 0.5 && y - c.y[i] >= ARROW.headY && y - c.y[i] <= ARROW.standH + 0.25) return i;
-    }
-    return -1;
-  }
-  /** First standing soldier whose body the point passes (within 0.5 m, feet to helmet), else -1. */
-  function bodyAt(x, y, z) {
-    const c = game.crowd;
-    for (let i = 0; i < c.N; i++) {
-      const s = c.st[i];
-      if (s === ST.OFF || s === ST.DEAD || s === ST.AIR || s === ST.DOWN) continue;
-      const dx = c.x[i] - x, dz = c.z[i] - z;
-      if (dx * dx + dz * dz < 0.25 && y - c.y[i] >= 0 && y - c.y[i] <= ARROW.standH) return i;
+      if (dx * dx + dz * dz < r2 && y - c.y[i] >= y0 && y - c.y[i] <= y1) return i;
     }
     return -1;
   }
@@ -100,12 +90,12 @@ export function createMusouView(parent, game, camera) {
       vy -= (spent ? 30 : S.g) / 60 * 1; if (spent) { vx *= 0.97; vz *= 0.97; }
       x += vx / 60; y += vy / 60; z += vz / 60;
       if (y <= 0) break;
-      if (!gold && headAt(x, y, z) >= 0) { gold = true; hx = x; hy = y; hz = z; if (!rf) { rf = f; rx = x; ry = y; rz = z; } }
+      if (!gold && hitAt(x, y, z, game.crowd.grunts, 0.25, ARROW.headY, ARROW.standH + 0.25) >= 0) { gold = true; hx = x; hy = y; hz = z; if (!rf) { rf = f; rx = x; ry = y; rz = z; } }
       // fx r5: from the bow, 3 samples a frame (was every 2nd frame from f 6 = 8.8 m: the reticle skipped the soldiers
       // 2-8 m in front that the arrow hits first and floated ≈ 20 m down range over the HUD; a 2.9 m stride also stepped
       // over bodies), and it sits on the path abreast of the struck body's axis, not on the sample past it
       for (let k = 2; k >= 0 && !rf; k--) {
-        const sx = x - vx / 180 * k, sy = y - vy / 180 * k, sz = z - vz / 180 * k, b = bodyAt(sx, sy, sz);
+        const sx = x - vx / 180 * k, sy = y - vy / 180 * k, sz = z - vz / 180 * k, b = hitAt(sx, sy, sz, 0, 0.25, 0, ARROW.standH);
         if (b < 0) continue;
         const vh = Math.hypot(vx, vz), t = ((game.crowd.x[b] - sx) * vx + (game.crowd.z[b] - sz) * vz) / (vh * vh);
         rf = f; rx = sx + vx * t; ry = sy + vy * t; rz = sz + vz * t;
@@ -132,28 +122,10 @@ export function createMusouView(parent, game, camera) {
   }
 
   // ---- Musou grade (DOM layers above the canvas, below the HUD) + cut-in
-  const layer = (blend) => { const d = document.createElement('div'); d.style.cssText = `position:fixed;inset:0;pointer-events:none;opacity:0;display:none;mix-blend-mode:${blend}`; return d; };
-  const dimEl = layer('multiply'), washEl = layer('screen');
-  (document.getElementById('c') || document.body.firstChild).after(dimEl, washEl);
-  const css = document.createElement('style');
-  css.textContent = `
-    .hz-cut { position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0; display: none; font-family: "Xingkai SC", "STXingkai", "Libian SC", "Kaiti SC", "STKaiti", serif; }
-    .hz-cut .big { position: absolute; right: 11%; top: 36%; writing-mode: vertical-rl; font-size: 18vh; line-height: 1; color: #fbf1e2; transform-origin: 50% 40%;
-      -webkit-text-stroke: .5vh #1a0905; paint-order: stroke fill;
-      text-shadow: 0 0 .3vh #1a0c06, .6vh .8vh 0 rgba(20,6,2,.75), 0 0 3vh rgba(255,150,60,.55); letter-spacing: -1vh; }
-    .hz-cut .seal { position: absolute; right: 21.5%; top: 64%; width: 7vh; height: 7vh; background: #a8261b; color: #f3e2c8; border-radius: 0.8vh;
-      font: 3.1vh/3.4vh "Kaiti SC", "STKaiti", serif; writing-mode: vertical-rl; display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 0 0 0.35vh rgba(243,226,200,.25) inset, 3px 4px 0 rgba(0,0,0,.4); transform-origin: 50% 50%; }
-    .hz-cut .sub { position: absolute; right: 22.5%; top: 37%; writing-mode: vertical-rl; font: 3vh/1 "Kaiti SC", "STKaiti", serif; letter-spacing: 1.2vh;
-      color: #ffe2b8; text-shadow: 0 0 10px rgba(255,140,40,.75), 2px 2px 0 rgba(0,0,0,.6); }`;
-  document.head.appendChild(css);
-  const cut = document.createElement('div');
-  cut.className = 'hz-cut';
-  cut.innerHTML = '<div class="sub">老將 黃漢升</div><div class="big">無雙</div><div class="seal">老將</div>';
-  document.body.appendChild(cut);
-  const [cutSub, cutBig, cutSeal] = cut.children;
-  const setStyle = (el, k, v) => { if (el.style[k] !== v) el.style[k] = v; };
-  const show = (el, v) => { setStyle(el, 'display', v > 0 ? 'block' : 'none'); setStyle(el, 'opacity', v.toFixed(3)); };
+  const ov = createOverlay({ sub: '老將 黃漢升', seal: '老將', css: {
+    big: 'color: #fbf1e2; -webkit-text-stroke: .5vh #1a0905; paint-order: stroke fill; text-shadow: 0 0 .3vh #1a0c06, .6vh .8vh 0 rgba(20,6,2,.75), 0 0 3vh rgba(255,150,60,.55);',
+    sub: 'color: #ffe2b8; text-shadow: 0 0 10px rgba(255,140,40,.75), 2px 2px 0 rgba(0,0,0,.6);' } });
+  const { dim: dimEl, wash: washEl, setStyle, show } = ov;
 
   // ---- Musou energy (fx): bow / arrowhead positions from the rendered pose
   const pose = new Float32Array(POSE_SIZE), hpos = new THREE.Vector3(), tip = new THREE.Vector3(), nock = new THREE.Vector3(), bowTop = new THREE.Vector3();
@@ -162,8 +134,6 @@ export function createMusouView(parent, game, camera) {
   on('musou:start', () => { tv = 0; });
   on('musou:burst', () => { burstF = game.frame; });
   on('scenario', () => { tv = -1; });
-
-  function hideAll() { show(dimEl, 0); show(washEl, 0); show(cut, 0); }
 
   function updateGrade(t) {
     // dim: warm ember night on him (≈ 0.7× centre, 0.3× edges), lifting from the plant into the volley
@@ -176,7 +146,7 @@ export function createMusouView(parent, game, camera) {
     if (d > 0.003) {
       const mul = (v) => Math.round(255 * (1 - d * (1 - v / 255)));
       _p.set(hero.x, 1.4 + ground(hero.x, hero.z), hero.z).project(camera);
-      const hx = (clamp01(_p.x * 0.5 + 0.5) * 100).toFixed(1), hy = ((1 - clamp01(_p.y * 0.5 + 0.5)) * 100).toFixed(1);
+      const hx = (clamp(_p.x * 0.5 + 0.5, 0, 1) * 100).toFixed(1), hy = ((1 - clamp(_p.y * 0.5 + 0.5, 0, 1)) * 100).toFixed(1);
       // fx r1: he stays lit (centre ≈ neutral), the world falls to ember-dark at the edges
       setStyle(dimEl, 'background', `radial-gradient(ellipse 34% 62% at ${hx}% ${hy}%, rgb(${mul(252)},${mul(240)},${mul(226)}) 0%, ` +
         `rgb(${mul(186)},${mul(128)},${mul(100)}) 50%, rgb(${mul(70)},${mul(42)},${mul(40)}) 100%)`);
@@ -185,16 +155,6 @@ export function createMusouView(parent, game, camera) {
     const wash = Math.max(flash, washB);
     show(washEl, wash);
     if (wash > 0) setStyle(washEl, 'background', flash ? '#fff' : 'radial-gradient(ellipse at 50% 55%, rgba(255,246,226,1) 0%, rgba(255,200,140,.7) 35%, rgba(230,140,80,.3) 100%)');
-  }
-  function updateCut(t) {
-    const k = ramp(t, M.closeup, M.closeup + 2) * (1 - ramp(t, M.plant - 4, M.plant + 4));
-    show(cut, k);
-    if (k <= 0) return;
-    const st = ramp(t, M.closeup, M.closeup + 4), se = ramp(t, M.closeup + 8, M.closeup + 12);
-    setStyle(cutBig, 'transform', `scale(${(1.6 - 0.6 * st * st).toFixed(3)}) translateY(${((t - M.closeup) * -0.06).toFixed(2)}vh)`);
-    setStyle(cutSeal, 'transform', `scale(${(2.2 - 1.2 * se).toFixed(3)}) rotate(-8deg)`);
-    setStyle(cutSeal, 'opacity', se.toFixed(3));
-    setStyle(cutSub, 'opacity', ramp(t, M.closeup + 10, M.closeup + 20).toFixed(3));
   }
   const G = [2.6, 1.75, 0.6];
   function updateEnergy(t, dt) {
@@ -283,30 +243,27 @@ export function createMusouView(parent, game, camera) {
     }
   }
 
-  let warm = 2;
-  const finish = (dt) => { fx.update(dt); fx.applyKick(); };
   return {
     update(dt) {
       arrows.update(dt);
       updateAim();
-      if (warm > 0 && tv < 0) { warm--; dots.visible = true; fx.warm(); finish(dt); return; }   // compile at boot, not mid-Musou
       if (mu.active) tv = mu.t;
       else if (tv >= 0) { tv += dt * 60; if (tv > M.end + GIANT_FRAMES) tv = -1; }
       if (!mu.active) { lastT = -1; ringAcc = 0; }
-      if (tv < 0) hideAll();
+      if (tv < 0) ov.hide();
       else {
         updateGrade(tv);
-        updateCut(tv);
+        ov.cut(tv, M.closeup, ramp(tv, M.closeup, M.closeup + 2) * (1 - ramp(tv, M.plant - 4, M.plant + 4)), ramp(tv, M.closeup, M.closeup + 4));
         updateEnergy(tv, dt);
       }
-      finish(dt);
+      fx.update(dt); fx.applyKick();
     },
     dispose() {
       arrows.dispose();
       fx.dispose();
       parent.remove(scene);
       scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
-      for (const el of [dimEl, washEl, css, cut, ret]) el.remove();
+      ov.dispose(); ret.remove();
     },
   };
 }

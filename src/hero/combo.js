@@ -1,5 +1,6 @@
 // Combo state machine: input buffer, move start/advance, cancel windows, lunge, steering, air moves.
-// Character-agnostic: the move table, neutral entries and air-chain cap come from the hero's kit (h.kit).
+// Character-agnostic: the move table and air-chain cap come from the hero's kit (h.kit); every kit shares the neutral
+// entries (n1 / c1 / dash / jatk / jc).
 import { lungeAt } from './moveset.js';
 import { stickDir, turnToward, startDodge, startJump, setState, LOCO } from './locomotion.js';
 import { ST, CROWD } from '../crowd/crowd.js';
@@ -168,7 +169,7 @@ export function stepCombo(h, inp, game) {
 
 /** Free state: start attacks, dodges and jumps when allowed. */
 function neutral(h, inp, game) {
-  const s = h.state, NEUTRAL = h.kit.neutral;
+  const s = h.state;
   if (s === 'hurt') return false;
   const dodgeOk = h.grounded && (s !== 'dodge' || h.stateT >= LOCO.dodgeRedodge);
   if (h.dodgeBuf && dodgeOk && s !== 'land') { h.dodgeBuf = 0; startDodge(h, inp, game.cam.yaw); return false; }
@@ -179,12 +180,12 @@ function neutral(h, inp, game) {
       // per-jump cap — was once per jump, so only a mash inside the cancel window kept the hero up. A press in the last
       // metre of a fall stays buffered and comes out as the ground attack on touchdown (dash when running) instead of
       // a knee-high hover.
-      if (h.airN < h.kit.airChainMax && (h.vy >= 0 || h.y > 1)) { startMove(h, h.buf === 'attack' ? NEUTRAL.air : NEUTRAL.airCharge, inp, game); return true; }
+      if (h.airN < h.kit.airChainMax && (h.vy >= 0 || h.y > 1)) { startMove(h, h.buf === 'attack' ? 'jatk' : 'jc', inp, game); return true; }
     } else {
       // dash attack from a run, or out of the landing of a running jump with the stick still held (runT survives the jump)
       const dash = h.runT >= LOCO.dashAfter && (s === 'run' || (s === 'land' && stickDir(inp, game.cam.yaw)[2] > 0));
-      if (h.buf === 'attack') startMove(h, dash ? NEUTRAL.dash : NEUTRAL.attack, inp, game);
-      else startMove(h, NEUTRAL.charge, inp, game);
+      if (h.buf === 'attack') startMove(h, dash ? 'dash' : 'n1', inp, game);
+      else startMove(h, 'c1', inp, game);
       return true;
     }
   }

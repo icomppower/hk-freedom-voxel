@@ -3,7 +3,7 @@
 // Flow: title → select → loading → (story: prologue →) battle → result → title. Each non-battle state is a DOM screen (index.html
 // #title #select #loading #prologue #result, modules below: createX(el, flow) → { enter(ctx), exit(), view? }; view(scene, camera,
 // focus, dt) = optional render-only camera/stage hook run after the gameplay rig while that screen is up); the sim only steps in
-// 'battle' and not paused (Esc: pause menu #menu). startBattle() resets the sim for a character / mode / chapter.
+// 'battle' and not paused (Esc: pause menu #menu). startBattle() resets the sim for a character / mode.
 // flow.go() returns a promise that settles once the new state's materials are compiled and two frames have presented
 // (menu.js inkWipe holds the ink until then; the page boots under it, inkBoot). Every screen change but prologue →
 // battle (its own fade onto the live field) goes through the ink wipe; the HUD slides in on each battle entry (#hud.in).
@@ -102,10 +102,10 @@ function render(real) {
   hud.update();
 }
 
-/** New battle: { char: CHARS id, mode: 'story' | 'free', chapter: 'ch1' }. Resets every sim module (deterministic from
+/** New battle: { char: CHARS id, mode: 'story' | 'free' }. Resets every sim module (deterministic from
  *  here: both RNGs reseeded, frame 0), rebuilds the kit views on a character change, lets the story spawn the field. */
-function startBattle({ char = 'zhaoyun', mode = 'free', chapter = 'ch1' } = {}) {
-  const ch = CHARS[char] || CHARS.zhaoyun, p = spawnPoint(ch.id, mode), newKit = ch.kit !== game.hero.kit;
+function startBattle({ char = 'zhaoyun', mode = 'free' } = {}) {
+  const ch = CHARS[char] || CHARS.zhaoyun, p = spawnPoint(mode), newKit = ch.kit !== game.hero.kit;
   Object.assign(game, { mode, frame: 0, hitstop: 0, freeze: 0 });
   lastRenderFrame = 0;
   vrng.seed(7936); rng.seed(1);
@@ -114,10 +114,10 @@ function startBattle({ char = 'zhaoyun', mode = 'free', chapter = 'ch1' } = {}) 
   game.crowd.reset(); game.combat.reset(); game.musou.reset(); game.cam.reset(p.yaw); game.cam.tilt = p.tilt || 0;
   if (newKit) buildViews();
   heroView.reset();
-  game.story.reset({ mode, chapter, char: ch.id });
+  game.story.reset({ mode, char: ch.id });
   menu.querySelector('.t').innerHTML = `${ch.name.zh}<i>${ch.seal}</i>`;
   document.title = `${ch.name.zh} — Voxel Musou`;
-  emit('scenario', { name: mode === 'story' ? chapter : 'arena', mode, char: ch.id, chapter });
+  emit('scenario', { mode, char: ch.id });
 }
 
 addEventListener('resize', () => {
@@ -162,7 +162,6 @@ mBtns.forEach((b, i) => {
   b.addEventListener('click', () => { mFocus(i); mOk(); });
 });
 const flow = {
-  get state() { return state; },
   /** Enter a flow state: 'title' | 'select' | 'loading' | 'prologue' | 'battle' | 'result' (ctx: see each screen module). */
   go(s, c = {}) {
     if (s === 'loading' && state === 'select') c.art = arts[c.char] = snapArt();
@@ -245,5 +244,5 @@ const frame = (now) => {
 
 const dev = params.get('go');
 // the page opens under full ink (index.html): the first screen is built and compiled under it, then the ink sweeps off
-inkBoot(() => dev ? flow.go('battle', { mode: dev === 'story' ? 'story' : 'free', char: params.get('char') || 'zhaoyun', chapter: 'ch1' }) : flow.go('title'));
+inkBoot(() => dev ? flow.go('battle', { mode: dev === 'story' ? 'story' : 'free', char: params.get('char') || 'zhaoyun' }) : flow.go('title'));
 requestAnimationFrame(frame);

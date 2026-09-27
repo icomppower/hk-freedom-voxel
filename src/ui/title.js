@@ -14,10 +14,11 @@
 // Screen contract: createTitle(el, flow) → { enter(ctx), exit(), view } (src/main.js header).
 import * as THREE from 'three';
 import { CHARS } from '../chars/index.js';
-import { createRig, sampleClip, POSE_SIZE, HERO_SCALE, CH } from '../hero/rig.js';
+import { sampleClip, POSE_SIZE, CH } from '../hero/rig.js';
 import { heroLook } from '../hero/model.js';
-import { createNav, sfx, inkWipe, wiping, afterWipe, stamp, clearStamp } from './menu.js';
-import { ground, zone } from '../world/map.js';
+import { createNav, sfx, inkWipe, wiping, afterWipe, stamp, clearStamp, replay } from './menu.js';
+import { ground } from '../world/map.js';
+import { dotTex, scatter, passPoint, standOfficer, poseOfficer } from './stage.js';
 
 // brush swash drawn under the focused item (revealed left → right) — one tapered stroke, dry tail
 export const SWASH = `<svg class="swash" viewBox="0 0 400 26" preserveAspectRatio="none" aria-hidden="true"><path d="M3 15C40 7 118 4 214 8
@@ -85,7 +86,7 @@ export function createTitle(el, flow) {
       <div class="t-logo"><i class="t-seal">三國</i><h1 data-t="無雙"><span>無雙</span></h1>
         <p class="t-en"><span>VOXEL MUSOU</span></p></div>
       <div class="t-press"><b>按任意鍵開始</b><small><kbd>Enter</kbd> Press any key</small></div>
-      <nav class="t-menu">${ITEMS.map((it, i) => `<button data-i="${i}"><b>${it.zh}</b><small>${it.en}</small>${SWASH}</button>`).join('')}</nav>
+      <nav class="t-menu">${ITEMS.map((it, i) => `<button data-i="${i}" style="--i:${i}"><b>${it.zh}</b><small>${it.en}</small>${SWASH}</button>`).join('')}</nav>
     </div>
     <section class="t-ctl"><h2>操作說明<small>Controls</small></h2>
       <table>${CONTROLS.map(([zh, en, kb, pad]) => `<tr><th>${zh}<small>${en}</small></th><td>${kb}</td><td class="pad">${pad}</td></tr>`).join('')}</table>
@@ -155,10 +156,6 @@ export function createTitle(el, flow) {
     tags.forEach((e, i) => { tagW[i] = e.offsetWidth; });
   };
   addEventListener('resize', measure); document.fonts?.ready.then(measure);
-  const stagePoint = () => {
-    const q = zone('pass'), x = q ? q.x : 0, z = q ? q.z - q.d / 2 + q.d * STAGE.at : 20;
-    return S0.set(x, ground(x, z), z);
-  };
 
   function bannerTex(glyph) {
     const cv = document.createElement('canvas'); cv.width = 128; cv.height = 320;
@@ -188,17 +185,14 @@ export function createTitle(el, flow) {
   function build(scene) {
     group = new THREE.Group(); scene.add(group);
     for (const c of STAGE.cast) {
-      const K = CHARS[c.id].kit, root = new THREE.Group(), rig = createRig();
-      root.add(rig.root); group.add(root);
-      const m = K.model(rig);
+      const o = standOfficer(c.id, group), m = o.m, parts = [];
       heroLook(m.material, ...c.look);          // key-art grade: brighter camera-side fill, hot sun rim (title copies only)
       // the raised fist: the dark glove went to a flat black cube against the sky; a firelit gauntlet here (title only)
       if (c.arm && m.meshes?.handL) m.meshes.handL.material = heroLook(new THREE.MeshStandardMaterial({ vertexColors: true,
         color: new THREE.Color(2.6, 2.3, 2), emissive: 0x5a2c10, roughness: 0.4, metalness: 0.35, flatShading: true }), 0.9, 2.4);
-      const sec = K.secondary(root, rig, m.material), parts = [];
       // the body, weapon and cloth for the framing box (not the unculled world-space overlays: bow string etc.)
-      root.traverse((o) => { if (o.isMesh && o.frustumCulled) parts.push(o); });
-      cast.push({ c, K, rig, parts, sec, fresh: true });
+      o.root.traverse((e) => { if (e.isMesh && e.frustumCulled) parts.push(e); });
+      cast.push(Object.assign(o, { c, parts }));
       // surname standard: pole + a nobori cloth (CPU wave on a 5 × 12 grid)
       const tex = bannerTex(CHARS[c.id].name.zh[0]);
       const cloth = new THREE.PlaneGeometry(1.15, 3.1, 4, 12);
@@ -210,15 +204,10 @@ export function createTitle(el, flow) {
       banners.push({ c, mesh, pole, base: Float32Array.from(cloth.attributes.position.array), ph: banners.length * 1.7 });
     }
     // embers: soft round sprites, HDR orange so they bloom; flicker via vertex colours
-    const cv = document.createElement('canvas'); cv.width = cv.height = 32;
-    const g = cv.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
-    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
-    const n = STAGE.embers, geo = new THREE.BufferGeometry(), seed = new Float32Array(n * 4);
-    for (let i = 0; i < n * 4; i++) seed[i] = Math.abs((Math.sin(i * 12.9898 + 4.1) * 43758.5453) % 1);   // fixed scatter (render-only)
+    const n = STAGE.embers, geo = new THREE.BufferGeometry(), seed = scatter(n * 4, 4.1).map(Math.abs);
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
     geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
-    embers = new THREE.Points(geo, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(cv), size: 0.085, vertexColors: true,
+    embers = new THREE.Points(geo, new THREE.PointsMaterial({ map: dotTex(0.35, 0.5), size: 0.085, vertexColors: true,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
     embers.userData.seed = seed; embers.frustumCulled = false;
     group.add(embers);
@@ -239,24 +228,20 @@ export function createTitle(el, flow) {
     if (!group) build(scene);
     group.visible = true;
     dt = Math.min(dt || 1 / 60, 0.1); t += dt;
-    const S = STAGE, O = stagePoint();
+    const S = STAGE, O = passPoint(S0, S.at);
     // narrower than 16:9 the art column shrinks: an officer with `narrow` [x, z] moves toward it (0 at 16:9, all of it at
     // ≤ 4:3), so the pair stays large without the silhouettes merging
     const nk = Math.min(1, Math.max(0, (1.78 - camera.aspect) / 0.45));
     // officers: a held frame of their own clip + breath (hips bob, chest swell) and the cloth/hair chains in the wind
     for (let i = 0; i < cast.length; i++) {
-      const { c, K, rig, sec } = cast[i], br = Math.sin(t * 1.5 + i * 2.1);
-      sampleClip(K.clips[c.clip], c.u, pose);
+      const o = cast[i], c = o.c, br = Math.sin(t * 1.5 + i * 2.1);
+      sampleClip(o.K.clips[c.clip], c.u, pose);
       if (c.arm) for (let k = 0; k < 4; k++) pose[CH.armL + k] = c.arm[k] * Math.PI / 180;   // key-art arm (free left arm FK)
       if (c.head) for (let k = 0; k < 3; k++) pose[CH.head + k] = c.head[k] * Math.PI / 180; // key-art look (root-space aim)
       pose[1] += br * 0.008; pose[9] += br * 0.02; pose[12] -= br * 0.015;
       const nx = c.narrow ? c.x + (c.narrow[0] - c.x) * nk : c.x, nz = c.narrow ? c.z + (c.narrow[1] - c.z) * nk : c.z;
       P.set(O.x + nx, 0, O.z + nz); P.y = ground(P.x, P.z);
-      rig.root.scale.set(1, 1, 1);
-      rig.apply(pose, P, c.face + Math.sin(t * 0.4 + i) * 0.03);
-      rig.root.scale.setScalar(HERO_SCALE); rig.root.updateMatrixWorld(true);
-      if (cast[i].fresh) { sec.reset(); cast[i].fresh = false; }
-      sec.update(dt);
+      poseOfficer(o, pose, P, c.face + Math.sin(t * 0.4 + i) * 0.03, dt);
     }
     for (let i = 0; i < smoke.length; i++) {
       const [x, y, z] = smoke[i].userData.at;
@@ -357,7 +342,7 @@ export function createTitle(el, flow) {
       busy = false; clearStamp(el); setCtl(false);
       el.classList.toggle('pre', pre);
       focus(cur, true); btns[cur].classList.add('on');
-      el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');   // logo ink-in
+      replay(el, 'in');                                                     // logo ink-in
       enterT = t; measure();
       for (const m of cast) m.fresh = true;
       nav.start(); active = true;

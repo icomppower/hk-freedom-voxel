@@ -8,6 +8,7 @@ import { createRig, sampleClip, blendStep, turnPose, POSE_SIZE, HERO_SCALE } fro
 import { moveClip } from './moveset.js';
 import { bufferInput, stepCombo } from './combo.js';
 import { stepLocomotion, stepPhysics, setState, LOCO } from './locomotion.js';
+import { applyRoll, createDodgeGhosts } from './anims/locomotion.js';
 import { clampWalk, ground } from '../world/map.js';
 import { emit } from '../core/events.js';
 import { CHARS } from '../chars/index.js';
@@ -17,7 +18,7 @@ export function createHero(game) {
 
   /** New battle: position, facing and (optionally) a new character. */
   h.reset = ({ x = 0, z = 0, yaw = 0, char = h.char } = {}) => {
-    h.char = char; h.kit = char.kit; h.hpMax = h.kit.hpMax; h.musouMax = h.kit.musouMax;
+    h.char = char; h.kit = char.kit; h.hpMax = 400; h.musouMax = 100;
     Object.assign(h, { dead: false, x, y: 0, z, vx: 0, vy: 0, vz: 0, yaw, hp: h.hpMax, musou: 0, state: 'idle', stateT: 0, move: null,
       moveT: 0, moveSeq: 0, grounded: true, airAttack: false, iframes: 0, speed: 0, runT: 0, runPhase: 0, combo: 0, comboT: 0,
       kos: 0, buf: null, bufT: 0, dodgeBuf: 0, jumpBuf: 0, musouBuf: 0, musouClip: null, musouT: 0,
@@ -36,15 +37,14 @@ export function createHero(game) {
     h.musou = Math.min(h.musouMax, h.musou + dmg * 0.15);
     const armored = !!h.move && h.move !== 'aim' && (!officer || h.kit.moves[h.move].armor);   // aim: a stance, not a swing
     emit('hero:hurt', { dmg, hp: h.hp, x: h.x, y: h.y + 1.2, z: h.z, armored });
+    const dx = h.x - fromX, dz = h.z - fromZ, l = Math.hypot(dx, dz) || 1;   // knockback away from the striker
     if (!h.hp) {                                 // story mode: down for good (flow shows the result on story:end)
       h.dead = true; h.move = null; h.musouBuf = 0; setState(h, 'hurt');
-      const dx = h.x - fromX, dz = h.z - fromZ, l = Math.hypot(dx, dz) || 1;
       h.vx = dx / l * 3.5; h.vz = dz / l * 3.5;
       emit('hero:down', { x: h.x, z: h.z });
       return true;
     }
     if (armored) return true;
-    const dx = h.x - fromX, dz = h.z - fromZ, l = Math.hypot(dx, dz) || 1;
     h.move = null; setState(h, 'hurt');
     h.vx = dx / l * 3.5; h.vz = dz / l * 3.5;
     h.iframes = 40;
@@ -98,7 +98,7 @@ function updateAnim(h) {
   if (id !== a.id || seq !== a.seq) {
     heroPose(h, _F); a.from.set(_F); turnPose(a.from, a.yaw - h.yaw);   // spear-anim: feet keep their ground spots
     a.fx = a.px; a.fz = a.pz;
-    a.blendN = h.kit.attackClips[id] ? 5 : id === 'dodge' ? 3 : id === 'run' ? 6 : 8;
+    a.blendN = h.kit.moves[id] ? 5 : id === 'dodge' ? 3 : id === 'run' ? 6 : 8;
     a.blendF = 1; a.id = id; a.seq = seq;          // spear-anim: the first frame of a move already moves off the old pose
   } else if (a.blendF < a.blendN) a.blendF++;
   a.t = t; a.k = k; a.yaw = h.yaw; a.px = h.x; a.pz = h.z;
@@ -134,8 +134,8 @@ export function createHeroView(scene, hero) {
   const rig = createRig();
   root.add(rig.root);
   const model = K.model(rig);
-  const secondary = K.secondary(root, rig, model.material);
-  const ghosts = K.ghosts(root, model);             // dodge afterimages + i-frame flash (locomotion-dodge)
+  const secondary = K.secondary(root, rig, model.material, hero);
+  const ghosts = createDodgeGhosts(root, model);    // dodge afterimages + i-frame flash (locomotion-dodge)
   const pose = new Float32Array(POSE_SIZE);
   const pos = new THREE.Vector3();
   return {
@@ -144,7 +144,7 @@ export function createHeroView(scene, hero) {
       rig.root.scale.set(1, 1, 1);               // locomotion-dodge r3: applyRoll's squash & stretch is per frame; IK needs scale 1
       rig.apply(pose, pos.set(hero.x, hero.y + ground(hero.x, hero.z), hero.z), hero.yaw);   // sim y is height above ground
       rig.root.scale.setScalar(HERO_SCALE); rig.root.updateMatrixWorld(true);   // after IK: grow the posed body about the ground point
-      K.applyRoll(rig, hero.anim);               // dive roll: whole-body pitch about the tucked ball (locomotion-dodge)
+      applyRoll(rig, hero.anim);                 // dive roll: whole-body pitch about the tucked ball (locomotion-dodge)
       ghosts.update(hero, rig, dt);
       secondary.update(dt);
     },

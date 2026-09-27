@@ -4,7 +4,7 @@
 // you keep.
 //
 // Catalogue (emitter → payload fields):
-//  scenario      main     {name, mode, char, chapter}                   after a battle reset (name: 'arena' free | chapter id)
+//  scenario      main     {mode, char}                                  after a battle reset
 //  flow          main     {state, ctx}                                  flow state entered: title|select|prologue|battle|result
 //  attack:start  combo    {move, x,y,z, yaw, charge, tell}              a move begins (charge: C1–C6/jump charge;
 //                                                                        tell: frames until its first active frame)
@@ -15,7 +15,7 @@
 //  ko            combat   {i, x,y,z, dx,dz, officer}                    enemy KO'd (counted on the killing hit)
 //  enemy:attack  combat   {x,z, officer}                                an enemy strike reaches its active frame
 //  enemy:land    combat   {x,z, bounce}                                 launched soldier touches down (bounce or lands; allies too)
-//  clash         combat   {x,y,z, dx,dz, killed, ally}                  a duel blow lands (Shu ally ↔ Wei grunt; ally: the victim is Shu)
+//  clash         combat   {x,y,z, dx,dz, killed}                        a duel blow lands (Shu ally ↔ Wei grunt)
 //  dodge         loco     {x,y,z, dx,dz}
 //  jump          loco     {x,y,z}          land {x,y,z, hard}
 //  footstep      loco     {x,y,z, foot, speed, kick?}                   a foot plants in the run (≥2.5 m/s) / out of a dodge roll
@@ -33,14 +33,13 @@
 //  crowd:wave    crowd    {x,z}                                         reinforcements spawned
 //  crowd:allies  crowd    {x,z}                                         a Shu column spawned (runs up the road behind the hero)
 //  story:say     story    {speaker, zh, en, dur, portrait, side}        dialogue line (HUD, top left). speaker: {zh, en} name
-//                                                                       (omitted = the hero); portrait: CHARS id | {face, pal} |
-//                                                                       {seal: glyph, side} | null (omitted = the hero's if the
-//                                                                       hero speaks); side 'shu' (default) | 'wei'; dur: sim frames
+//                                                                       (omitted = the hero); portrait: CHARS id | {seal: glyph}
+//                                                                       (omitted = the hero's); side 'shu' (default) | 'wei';
+//                                                                       dur: sim frames
 //  story:banner  story    {html, en, dur, big?}                         system banner (HUD band; html may use <em>; big: slain/boss)
 //  story:objective story  {zh, en}                                      current objective (HUD, top left; empty zh clears it)
-//  story:gate    story    {id, open}                                    a map gate opens (world/map.js GATES id)
 //  story:end     story    {win, stats}                                  battle over → flow goes to the result screen.
-//                                                                       stats: {kos, time (s), hp, hpMax, maxChain, dmg, char, rank?}
+//                                                                       stats: {kos, time (s), hpMax, maxChain, dmg, rank?}
 //  arrow:fire    projectiles {x,y,z, yaw, n, heavy, fire, big, sky, move}  a shot leaves the bow (n arrows; big 1 heavy, 2 Musou giant)
 //  arrow:burst   projectiles {x,z, r, fire, heavy, big, count}           a burst arrow explodes (fire arrow, jump shots, Musou giant)
 //  arrow:headshot projectiles {i, x,y,z}                                 an aim-mode arrow takes a standing officer in the head

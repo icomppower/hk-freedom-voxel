@@ -3,11 +3,11 @@
 // S/A/B/C, rules in index.js rank()), and the epilogue (ch1.js EPILOGUE) closes the chapter.
 // Win → 繼續 (title). Defeat → 再戰 (the loading card, then straight back into the battle, no prologue) or 返回 (title).
 // Every exit is an ink wipe (ui lane menu.js). ctx.art (the officer's key-art still, main.js snapArt) fills the right side.
-// Keys: Enter / Space press the focused button (← → move between them), Esc → title.
-// ctx in: { win, stats: { kos, time, hp, hpMax, maxChain, dmg, char, rank? }, mode, char, chapter }.
+// Keys (menu.js createNav, + gamepad): Enter / Space press the focused button (← → move between them), Esc → title.
+// ctx in: { win, stats: { kos, time, hpMax, maxChain, dmg, rank? }, mode, char }.
 import { CHARS, paintPortrait } from '../chars/index.js';
 import { EPILOGUE } from './ch1.js';
-import { inkWipe, afterWipe } from '../ui/menu.js';
+import { inkWipe, afterWipe, createNav } from '../ui/menu.js';
 
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
@@ -18,17 +18,14 @@ export function createResult(el, flow) {
   el.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.act === 'retry') leave(() => flow.go('loading', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter, art: ctx.art, retry: true }));
+    if (b.dataset.act === 'retry') leave(() => flow.go('loading', { mode: ctx.mode, char: ctx.char, art: ctx.art, retry: true }));
     else leave(() => flow.go('title'));
   });
-  const key = (e) => {
-    if (e.code === 'Escape') return leave(() => flow.go('title'));
-    if (e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
-      const bs = [...el.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
-      bs[(i + (e.code === 'ArrowLeft' || e.code === 'ArrowUp' ? bs.length - 1 : 1)) % bs.length]?.focus();
-      e.preventDefault();
-    }
-  };
+  const nav = createNav({
+    move: (d) => { const bs = [...el.querySelectorAll('button')], i = bs.indexOf(document.activeElement); bs[(i + d + bs.length) % bs.length]?.focus(); },
+    ok: () => (el.querySelector('button:focus') || el.querySelector('button'))?.click(),
+    back: () => leave(() => flow.go('title')),
+  });
 
   return {
     enter(c) {
@@ -72,8 +69,8 @@ export function createResult(el, flow) {
       };
       raf = requestAnimationFrame(tick);
       setTimeout(() => { if (!el.hidden) el.querySelector('button')?.focus({ preventScroll: true }); }, 50);
-      addEventListener('keydown', key);
+      nav.start();
     },
-    exit() { cancelAnimationFrame(raf); removeEventListener('keydown', key); },
+    exit() { cancelAnimationFrame(raf); nav.stop(); },
   };
 }

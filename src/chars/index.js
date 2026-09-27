@@ -2,7 +2,7 @@
 // hero, combat, musou, vfx and audio code reads from game.hero.kit instead of importing a character's modules).
 //
 // char = {
-//   id, ready          ready:false = selectable but still on a stand-in kit (the select screen may badge it)
+//   id
 //   name {zh, en}, courtesy {zh, en}, seal (red HUD seal: 2 glyphs), title {zh, en} (epithet), motto (HUD intro subline)
 //   weapon {zh, en}, bio {zh: [2 lines], en: [2 lines]}, stats {atk, def, speed, range} 1-5, musou {zh, en} (Musou name)
 //   accent             CSS colour of the character (select screen / HUD highlights)
@@ -14,23 +14,21 @@
 // }
 //
 // kit = {
-//   moves              move table (format: src/hero/moves.js header), prepared with prepMoves (src/hero/moveset.js)
-//   neutral            { attack, charge, dash, air, airCharge }: the move ids that start from neutral
+//   moves              move table (format: src/hero/moves.js header), prepared with prepMoves (src/hero/moveset.js); every
+//                      kit has n1 c1 dash jatk jc (combo.js starts these from neutral); an `aim` move = aim mode (hud.js)
 //   airChainMax        air-string length per jump
 //   clips              clip registry sampled by heroPose (attack + locomotion + musou clips; ids = move ids / states:
-//                      idle run dodge air airFall land hurt + whatever the musou sets in h.musouClip)
-//   attackClips        subset of clips that are attack clips (short 5-frame blend in)
+//                      idle run dodge air airFall land hurt + whatever the musou sets in h.musouClip); a clip id that
+//                      is a move id is an attack clip (short 5-frame blend in)
 //   feet               { moveId: (u, pose) => void } baked feet applied over a borrowed clip (moves.js `anim`)
 //   runPose(phase, k, out, lean), rollPose(u, out)   procedural run / dive roll poses
 //   dashPlant          dash move frame where the lunge lands (footstep dust), or -1
-//   hpMax, musouMax
 //   model(rig) → { material, meshes }            voxel model on the shared rig (src/hero/rig.js)
-//   secondary(scene, rig, material) → { update(dt), reset() }   cloth / hair chains
-//   ghosts(scene, model) → { update(hero, rig, dt) }            dodge afterimages
-//   applyRoll(rig, anim)                         post-IK squash & stretch / roll pitch
+//   secondary(scene, rig, material, hero?) → { update(dt), reset() }   cloth / hair chains (hero: the battle view's)
 //   trail              weapon ribbon {base, baseHeavy, tip} (m along the rig's weapon, vfx.js spearWorld) or null = none
 //   createMusou(game) → musou sim (interface: src/musou/musou.js createMusou — active, t, reset, start(inp),
-//                      stepHero(inp), shot(), ready(), step(); emits musou:* events; hits via game.combat.strike(..., 'musou'))
+//                      stepHero(inp), shot(), ready(), step(), optional aimShot() (camera.js aim shot); emits musou:* events;
+//                      hits via game.combat.strike(..., 'musou'))
 //   createMusouView(scene, game, camera) → { update(dt), dispose() }   render-only
 // }
 import { ZHAOYUN_KIT } from './zhaoyun/kit.js';
@@ -86,7 +84,7 @@ const PAL = { K: '#1d1514', k: '#4a3834', S: '#efc3a0', s: '#c38a6c', E: '#140c0
 
 export const CHARS = {
   zhaoyun: {
-    id: 'zhaoyun', ready: true,
+    id: 'zhaoyun',
     name: { zh: '趙雲', en: 'Zhao Yun' }, courtesy: { zh: '子龍', en: 'Zilong' }, seal: '常山',
     title: { zh: '常山龍膽', en: 'The Dragon of Changshan' }, motto: '常山龍膽 · 單騎無雙 · 義貫雲天',
     weapon: { zh: '龍膽槍', en: 'Dragon-Heart Spear' },
@@ -104,7 +102,7 @@ export const CHARS = {
     kit: ZHAOYUN_KIT,
   },
   huangzhong: {
-    id: 'huangzhong', ready: true,
+    id: 'huangzhong',
     name: { zh: '黃忠', en: 'Huang Zhong' }, courtesy: { zh: '漢升', en: 'Hansheng' }, seal: '老將',
     title: { zh: '老當益壯', en: 'The Veteran Who Never Ages' }, motto: '老當益壯 · 百步穿楊 · 定軍斬將',
     weapon: { zh: '破軍弓', en: 'Army-Breaker Longbow' },

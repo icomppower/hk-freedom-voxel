@@ -6,7 +6,7 @@
 // the upper arms (also secondary.js). The hero material gets a camera fill + warm rim so he reads in a dark crowd.
 import * as THREE from 'three';
 import { hash01 } from '../core/rng.js';
-import { shade } from '../core/voxel.js';
+import { shade, FACES, makeBuilder } from '../core/voxel.js';
 
 export const V = 0.025;          // body voxel (m); spear 0.02/0.012, blade 0.011
 export const HV = 0.0175;        // head voxel: 13-voxel head ≈ 0.23 m (× HERO_SCALE) → ≈ 7.5 heads tall
@@ -21,17 +21,8 @@ export const C = {
   blue: 0x2a78e0, blueH: 0x78c8ff, blueD: 0x1c4aa8, ribbon: 0x8ccbe8, ribbonD: 0x5c9ccc,
   cape: 0xebe6dc, capeD: 0xd6d0c4, emb: 0x2f5fa6,
 };
-let K = C;                        // palette the body-part builders read (bodyParts swaps it for another character)
 
 // ---------------------------------------------------------------- voxel mesher with AO
-const FACES = [
-  { n: [1, 0, 0], v: [[1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]] },
-  { n: [-1, 0, 0], v: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]] },
-  { n: [0, 1, 0], v: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]] },
-  { n: [0, -1, 0], v: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]] },
-  { n: [0, 0, 1], v: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]] },
-  { n: [0, 0, -1], v: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]] },
-];
 const _col = new THREE.Color();
 
 /**
@@ -56,9 +47,9 @@ export function vox(boxes, v = V, { off = [0, 0, 0], jitter = 0.05, ao = 0.42 } 
         }
   }
   const full = (i, j, k) => i >= 0 && j >= 0 && k >= 0 && i < n[0] && j < n[1] && k < n[2] && grid[id(i, j, k)] >= 0 ? 1 : 0;
-  const pos = [], nor = [], col = [], idx = [];
+  const vb = makeBuilder();
   const AO = [1 - ao, 1 - ao * 0.6, 1 - ao * 0.25, 1];
-  const lv = [0, 0, 0, 0];
+  const lv = [0, 0, 0, 0], kq = [0, 0, 0, 0];
   for (let k = 1; k < n[2] - 1; k++) for (let j = 1; j < n[1] - 1; j++) for (let i = 1; i < n[0] - 1; i++) {
     const c = grid[id(i, j, k)];
     if (c < 0) continue;
@@ -67,30 +58,20 @@ export function vox(boxes, v = V, { off = [0, 0, 0], jitter = 0.05, ao = 0.42 } 
       const [nx, ny, nz] = f.n;
       if (full(i + nx, j + ny, k + nz)) continue;
       const ax = f.n[0] ? [1, 2] : f.n[1] ? [0, 2] : [0, 1];
-      const base = pos.length / 3;
-      f.v.forEach((cv, q) => {
+      const corners = f.v.map((cv, q) => {
         const p = [i + nx, j + ny, k + nz];
         const s1 = [...p], s2 = [...p];
         s1[ax[0]] += cv[ax[0]] ? 1 : -1; s2[ax[1]] += cv[ax[1]] ? 1 : -1;
         const cc = [...s1]; cc[ax[1]] += cv[ax[1]] ? 1 : -1;
         const a = full(...s1), b = full(...s2);
         lv[q] = a && b ? 0 : 3 - a - b - full(...cc);
-        pos.push((i + o[0] + cv[0] + off[0]) * v, (j + o[1] + cv[1] + off[1]) * v, (k + o[2] + cv[2] + off[2]) * v);
-        nor.push(nx, ny, nz);
-        const m = AO[lv[q]];
-        col.push(_col.r * m, _col.g * m, _col.b * m);
+        kq[q] = AO[lv[q]];
+        return [(i + o[0] + cv[0] + off[0]) * v, (j + o[1] + cv[1] + off[1]) * v, (k + o[2] + cv[2] + off[2]) * v];
       });
-      if (lv[0] + lv[2] < lv[1] + lv[3]) idx.push(base, base + 1, base + 3, base + 1, base + 2, base + 3);
-      else idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      vb.quad(corners, f.n, _col.r, _col.g, _col.b, kq, lv[0] + lv[2] < lv[1] + lv[3]);
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  g.setIndex(idx);
-  g.computeBoundingSphere();
-  return g;
+  return vb.build();
 }
 
 // ---------------------------------------------------------------- authoring helpers (voxel units)
@@ -106,7 +87,7 @@ const mirX = (bx, sx, c2 = 0) => (sx > 0 ? bx : { ...bx, a: [c2 - bx.b[0], bx.a[
  * (the rows overlap like scales; AO darkens under every lip) and the voxel tucked under the next lip is shaded, so every
  * row reads as plates with dark gaps. `trim` colours the lip of the lowest row; `jag` knocks out every 3rd voxel of it.
  */
-export function lamellar(a, b, { base = K.W, rowH = 3, pw = 4, trim = null, jag = false, lipX = true } = {}) {
+export function lamellar(a, b, { base = C.W, rowH = 3, pw = 4, trim = null, jag = false, lipX = true } = {}) {
   const out = [], dark = shade(base, 0.6), tuck = shade(base, 0.8), hi = shade(base, 1.04);
   const seam = (x, y, z) => md(x + z + (Math.floor((y - a[1]) / rowH) & 1) * (pw >> 1), pw) === 0;
   out.push(B(a, b, (x, y, z) => (seam(x, y, z) ? dark : (y - a[1]) % rowH === rowH - 1 ? tuck : base)));
@@ -119,8 +100,7 @@ export function lamellar(a, b, { base = K.W, rowH = 3, pw = 4, trim = null, jag 
 }
 
 // ---------------------------------------------------------------- body parts
-function torso() {
-  const k = K;                    // palette captured now: colour functions run later, inside vox()
+function torso(k) {               // k: palette (C or another character's, bodyParts)
   const P_ = {};
   // hips (pelvis, narrow): gunmetal core, teal sash + leather belt with the gold buckle, white faulds at the back
   P_.hips = [
@@ -129,7 +109,7 @@ function torso() {
     B([-7, 2, -5], [7, 3, 5], k.leather),
     B([-1, 0, 5], [1, 3, 6], k.gold),
     B([5, -4, -2], [8, 1, 2], k.T),                                  // sash knot on the left hip
-    ...lamellar([-6, -6, -6], [6, -1, -5], { rowH: 2, lipX: false, trim: k.T, jag: true }),   // back fauld (front: apron chain)
+    ...lamellar([-6, -6, -6], [6, -1, -5], { base: k.W, rowH: 2, lipX: false, trim: k.T, jag: true }),   // back fauld (front: apron chain)
   ];
   // waist (narrow): gunmetal with grey-white belly lamellar and a teal band under the breastplate
   P_.spine = [
@@ -159,18 +139,17 @@ function torso() {
   return P_;
 }
 
-function limbs(P_) {
-  const k = K;
+function limbs(P_, k) {
   for (const [s, sx] of [['R', -1], ['L', 1]]) {
     // upper arm: gunmetal sleeve under small white lamellar with a teal hem (pauldron is separate)
     P_['upperArm' + s] = [
       B([-2, -12, -2], [2, 1, 2], k.G),
-      ...lamellar([-2, -11, -2], [2, -5, 2], { rowH: 2, pw: 3, trim: k.T }),
+      ...lamellar([-2, -11, -2], [2, -5, 2], { base: k.W, rowH: 2, pw: 3, trim: k.T }),
     ];
     // forearm: banded white vambrace (plate rows with dark gaps), dark wrist band, teal line, silver elbow cop
     P_['foreArm' + s] = [
       B([-2, -11, -2], [3, 0, 3], k.Gd),
-      ...lamellar([-2, -9, -2], [3, -2, 3], { rowH: 2, trim: k.S }),
+      ...lamellar([-2, -9, -2], [3, -2, 3], { base: k.W, rowH: 2, trim: k.S }),
       P([-3, -3, -3], [4, -2, 4], k.T),
       B([-2, -1, -3], [3, 1, 3], k.S),
     ];
@@ -178,12 +157,12 @@ function limbs(P_) {
     // thigh: gunmetal trousers, flared scale tasset on the outside/front/back (rotates with the leg)
     P_['thigh' + s] = [
       B([-3, -18, -3], [4, 1, 4], (x, y) => (y % 5 === 0 ? k.Gd : k.G)),
-      ...lamellar([-2, -9, -4], [5, 2, 5], { rowH: 2, trim: k.T, jag: true }).map((b) => mirX(b, sx, 1)),
+      ...lamellar([-2, -9, -4], [5, 2, 5], { base: k.W, rowH: 2, trim: k.T, jag: true }).map((b) => mirX(b, sx, 1)),
     ];
     // shin: plated greave over the front/sides with a silver ridge and knee cop, teal band, gunmetal calf
     P_['shin' + s] = [
       B([-2, -17, -2], [3, 0, 3], k.G),                               // slim calf, gunmetal wrap
-      ...lamellar([-2, -15, -1], [3, -3, 4], { rowH: 3, pw: 4 }),     // greave plates
+      ...lamellar([-2, -15, -1], [3, -3, 4], { base: k.W, rowH: 3, pw: 4 }),     // greave plates
       B([0, -14, 4], [1, -3, 5], k.S),                                // centre ridge
       B([-3, -17, -3], [4, -15, 4], (x, y) => (y === -17 ? k.T : k.S)),            // greave cuff over the boot
       B([-2, -3, 0], [3, 2, 5], k.S),                                 // knee cop
@@ -201,8 +180,7 @@ function limbs(P_) {
 }
 
 /** Big flared three-tier scale pauldron + upturned wing, chest-aligned, u = outward (voxels). */
-function pauldronBoxes(sx) {
-  const k = K;
+function pauldronBoxes(sx, k) {
   const b = [
     ...lamellar([-4, 2, -4], [2, 5, 4], { base: k.W, rowH: 3 }),
     ...lamellar([-2, -1, -5], [3, 2, 5], { base: k.W, rowH: 3 }),
@@ -313,15 +291,13 @@ export function heroLook(mat, fill = 0.4, rim = 0.9) {
 /** Torso / limb / pauldron boxes of this body in another palette (same keys as C): other characters (src/chars/*)
  *  share the build and the armour cut, then add their own head, weapon and trim. → { parts: {joint: boxes}, pauldron(sx) } */
 export function bodyParts(pal) {
-  K = pal;
-  try { const pd = [pauldronBoxes(-1), pauldronBoxes(1)]; return { parts: limbs(torso()), pauldron: (sx) => pd[sx > 0 ? 1 : 0] }; } finally { K = C; }
+  const pd = [pauldronBoxes(-1, pal), pauldronBoxes(1, pal)];
+  return { parts: limbs(torso(pal), pal), pauldron: (sx) => pd[sx > 0 ? 1 : 0] };
 }
 
-export function createHeroModel(rig) {
-  // integration r1: albedo × 0.8 so the ivory lamellar keeps its scale rows under the environment's light + post-fx grade
-  // (at 1.0 the armour clipped to flat white)
-  const mat = heroLook(new THREE.MeshStandardMaterial({ color: new THREE.Color(0.8, 0.8, 0.8), vertexColors: true, roughness: 0.58, metalness: 0.08, flatShading: true }));
-  const P_ = limbs(torso());
+/** Meshes a body (bodyParts) and its head boxes onto the rig, one mesh per joint. → { meshes, add(parent, geo, name, m) }
+ *  (add: the character's weapon and extras, into the same meshes). */
+export function buildBody(rig, mat, { parts, pauldron }, headBoxes) {
   const meshes = {};
   const add = (parent, geo, name, m = mat) => {
     const mesh = new THREE.Mesh(geo, m);
@@ -330,19 +306,27 @@ export function createHeroModel(rig) {
     meshes[name] = mesh;
     return mesh;
   };
-  for (const [joint, boxes] of Object.entries(P_)) {
+  for (const [joint, boxes] of Object.entries(parts)) {
     const odd = /foreArm|thigh|shin/.test(joint);                    // odd-width parts: centre them
     add(rig.joints[joint], vox(boxes, V, { off: odd ? [-0.5, 0, -0.5] : [0, 0, 0] }), joint);
   }
-  add(rig.joints.head, vox(head(), HV, { off: [-0.5, 0, 0], jitter: 0.04 }), 'head');
+  add(rig.joints.head, vox(headBoxes, HV, { off: [-0.5, 0, 0], jitter: 0.04 }), 'head');
   // pauldrons ride on a helper under each shoulder; secondary.js turns it halfway with the upper arm
   for (const [s, sx] of [['R', -1], ['L', 1]]) {
     const pd = new THREE.Object3D();
     pd.name = 'pauldron' + s;
     rig.joints['shoulder' + s].add(pd);
     rig.joints['pauldron' + s] = pd;
-    add(pd, vox(pauldronBoxes(sx), V), 'pauldron' + s);
+    add(pd, vox(pauldron(sx), V), 'pauldron' + s);
   }
+  return { meshes, add };
+}
+
+export function createHeroModel(rig) {
+  // integration r1: albedo × 0.8 so the ivory lamellar keeps its scale rows under the environment's light + post-fx grade
+  // (at 1.0 the armour clipped to flat white)
+  const mat = heroLook(new THREE.MeshStandardMaterial({ color: new THREE.Color(0.8, 0.8, 0.8), vertexColors: true, roughness: 0.58, metalness: 0.08, flatShading: true }));
+  const { meshes, add } = buildBody(rig, mat, bodyParts(C), head());
   const [shaft, collar] = spearGeo();
   add(rig.joints.weapon, shaft, 'spear');
   add(rig.joints.weapon, collar, 'collar', heroLook(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.55, flatShading: true }), 0.25, 0.6));

@@ -2,7 +2,9 @@
 // lean), dive-roll dodge with i-frames and run/attack/re-dodge cancels, high jump arc with air-attack hover, landing.
 // Targets (bench/notes/locomotion-dodge.md): run 4.3-4.9 H/s with no ramp, 180° turn ≤ 6 sf, 5.3 steps/s,
 // jump apex 1.3-1.6 H at ≈0.45 s (v0 ≈ 12 m/s, g ≈ 28), dodge back to running ≤ 0.40 s.
+import * as THREE from 'three';
 import { emit } from '../core/events.js';
+import { wrap } from '../crowd/crowd.js';
 
 export const LOCO = {
   runSpeed: 8.5,        // m/s = 4.6 H/s (DW8 ≈ 4.6 H/s)
@@ -19,8 +21,7 @@ export const LOCO = {
 };
 const DT = 1 / 60, TAU = Math.PI * 2;
 const ROLL_PLANT = 13;                  // dodge frame where the roll comes round onto the feet (pose: anims/locomotion.js)
-const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const { clamp } = THREE.MathUtils;
 
 /** Run cadence in steps/s for a ground speed (m/s): 5.3 at top speed (DW8), ≈3.4 at a walk. Shared with the pose. */
 export function cadence(v) { return 2.2 + 0.365 * v; }
