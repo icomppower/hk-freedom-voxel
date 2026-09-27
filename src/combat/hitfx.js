@@ -3,8 +3,9 @@
 // struck soldiers must not merge into one white blob). Then a warm wash is blended into the lit albedo (≤ 0.22, so the
 // soldiers stay dark), with a bright emissive rim on the faces that turn away from the camera (the silhouette edges).
 // It decays quadratically over ≈ 10 sf: gold on a hit, deep amber on a heavy hit, red on the killing blow (the DW8
-// yellow / red-pink wash). Weapons stay untinted (crowd/view.js zeroes the glow for them). Red tints also glow flat and
-// KO'd bodies keep a red ember while airborne, so the blow-away fans read over a dark crowd. The hero stays the lightest
+// yellow wash; the killing blow keeps the armour dark under a hotter red ember rim — fx r3). Weapons stay untinted
+// (crowd/view.js zeroes the glow for them). KO'd bodies keep a red ember rim while airborne, so the blow-away fans read
+// over a dark crowd. The hero stays the lightest
 // large mass (hero luma ≈ 1.3-1.6× the tinted soldiers in combo-normal). The recoil pose lives in crowd/view.js.
 // Driven by crowd.flash[i] (set by combat on the hit frame), crowd.hitHeavy[i], crowd.kod[i], crowd.st[i].
 import { COMBAT } from './combat.js';
@@ -25,16 +26,19 @@ export function patchHitMaterial(mat) {
         float hitA = max(vHit.r, max(vHit.g, vHit.b));
         float hitRim = 1.0 - abs(dot(normal, normalize(vViewPosition)));
         if (hitA > 1.01) {                                            // contact frame: white-hot edges, lifted body
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), 0.15);
-          totalEmissiveRadiance += (vHit - 1.0) * (0.1 + 1.3 * hitRim * hitRim);
+          // (fx r3: thinner edge, less lift — a sweep of 8+ contacts turned the struck rank into white mannequins)
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), 0.06);
+          totalEmissiveRadiance += (vHit - 1.0) * (0.04 + 1.2 * hitRim * hitRim * hitRim);
         } else if (hitA > 0.0) {
           vec3 hitC = vHit / hitA;
           float hitL = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
           // lit wash: albedo toward the tint, brighter where the albedo is brighter (skin, plates), so shading stays
-          diffuseColor.rgb = mix(diffuseColor.rgb, hitC * (0.33 + 1.3 * hitL), 0.22 * hitA);
-          // red tints (killing blow, KO ember) also glow flat, so thrown bodies fly as embers over the crowd
-          float hitFlat = 0.04 + 0.2 * clamp((0.45 - hitC.g) * 4.0, 0.0, 1.0);
-          totalEmissiveRadiance += hitC * hitA * (hitFlat + 0.9 * hitRim * hitRim * hitRim);
+          // fx r3: red tints (killing blow, KO ember) keep the armour dark — the cue is a hot ember rim on the silhouette,
+          // not an albedo wash / flat glow (mass launches read as salmon-pink mannequins)
+          float hitRed = clamp((0.45 - hitC.g) * 4.0, 0.0, 1.0);
+          diffuseColor.rgb = mix(diffuseColor.rgb, hitC * (0.33 + 1.3 * hitL), 0.22 * hitA * (1.0 - 0.85 * hitRed));
+          float hitFlat = 0.04 + 0.04 * hitRed;
+          totalEmissiveRadiance += hitC * hitA * (hitFlat + (0.9 + 0.5 * hitRed) * hitRim * hitRim * hitRim);
         }`);
   };
 }

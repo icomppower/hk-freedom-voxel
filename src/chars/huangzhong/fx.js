@@ -73,7 +73,13 @@ const SMOKE_VS = /* glsl */`
     vec4 mv = viewMatrix * vec4(aPos.xyz, 1.0);
     mv.xy += position.xy * aPos.w;
     vP = position.xy * 2.0; vCol = aCol; vCol.a *= smoothstep(1.5, 4.0, -mv.z);
+    vCol.a *= 1.0 - 0.8 * smoothstep(0.4, 1.0, aPos.w / max(-mv.z, 0.1));   // fx r3: a puff over half the frame thins out (burst at the lens)
     vSeed = aSeed; vHeat = aHeat;
+    // fx r3: drawn half its size nearer along the view ray (same pixels): a flat billboard at the puff's centre was cut
+    // by every soldier inside the ball and by the ground under it (a fireball in a packed crowd showed as a few orange
+    // scraps between helmets); now the volume reads over the bodies it engulfs
+    float d = length(mv.xyz);
+    mv.xyz *= max(0.35, (d - aPos.w * (0.5 + 0.4 * step(0.001, aHeat.x))) / d);   // (fire lumps a notch more: they engulf the rank inside the ball)
     gl_Position = projectionMatrix * mv;
   }`;
 const SMOKE_FS = /* glsl */`
@@ -94,7 +100,7 @@ const SMOKE_FS = /* glsl */`
     float ca = cos(vSeed), sa = sin(vSeed);
     vec2 q = mat2(ca, -sa, sa, ca) * vP;
     vec2 o = vec2(vSeed * 3.7, vSeed * 1.3 - vHeat.y * 1.2);      // billows churn upward as it ages
-    float n = vn(q * 2.2 + o) * 0.6 + vn(q * 4.7 - o * 1.7) * 0.4;
+    float n = vn(q * 2.2 + o) * 0.5 + vn(q * 4.7 - o * 1.7) * 0.3 + vn(q * 9.3 + o * 2.3) * 0.2;   // (3 octaves: cauliflower billows)
     float edge = 0.62 + 0.36 * n;
     float dens = 1.0 - smoothstep(edge - 0.42, edge, r);
     dens *= 0.85 + 0.3 * n;
@@ -104,10 +110,13 @@ const SMOKE_FS = /* glsl */`
     float sh = 0.5 + 0.62 * max(0.0, dot(normalize(nr + vec3(0.0, 0.0, 0.2) * (n - 0.5)), vec3(0.25, 0.85, 0.45)));
     vec3 col = vCol.rgb * sh * a;
     if (vHeat.x > 0.001) {
-      float t = vHeat.x * (1.15 - 1.45 * r) * (0.7 + 0.6 * n);      // hot heart (inner ≈ 40 %), a dark churning rim
-      float fire = smoothstep(0.03, 0.3, t);
-      col = mix(col, fireRamp(t) * dens * vCol.a, fire);
-      a *= 1.0 - 0.15 * fire;                                       // opaque enough that the sand behind never pastels it
+      // fx r3: heat broken up by the billows (not a radial gradient per lump: every lump read as an orange disc with a
+      // brown outline — a cluster of polka dots); while hot the rim goes translucent instead of dark, so overlapping lumps
+      // merge into one ball, and only cooled lumps (outer / older) turn into the dark smoke that frames it
+      float t = vHeat.x * (1.2 - 1.1 * r) + (n - 0.5) * 0.9 * vHeat.x;
+      float fire = smoothstep(0.02, 0.26, t);
+      col = mix(col, fireRamp(t) * (0.75 + 0.5 * n) * dens * vCol.a, fire);
+      a *= mix(1.0, 0.45 + 0.5 * fire, smoothstep(0.12, 0.45, vHeat.x));
     }
     gl_FragColor = vec4(col, a);
   }`;
@@ -326,6 +335,7 @@ export function createFx(parent, camera) {
   };
 
   /** World size (m) of one 720p pixel at (x, y, z) (y above the ground): cap sprites near the lens to a screen size. */
+  fx.cam = camera.position;                                      // (read-only: recipes keep volumes off the lens side)
   fx.px = (x, y, z) => Math.hypot(camera.position.x - x, camera.position.y - y - ground(x, z), camera.position.z - z) * 2 * Math.tan(camera.fov * Math.PI / 360) / 720;
 
   fx.clear = () => { G.clear(); S.clear(); K.clear(); R.clear(); D.clear(); Bp.clear(); lk[0].k = lk[1].k = 0; kickA = 0; };

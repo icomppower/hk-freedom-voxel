@@ -179,11 +179,11 @@ const TRAIL_FS = /* glsl */`
       // glow pass (additive, smooth — under the stepped core): an HDR halo hugging the cutting edge with a soft falloff
       // into the ribbon, brightest on the newest part of the swing and tapering to nothing toward the tail, so the arc
       // blooms like a blade of light instead of a flat sticker; plus a faint wide haze over the whole swept area
-      float edgeG = exp(-pow((v - 0.9) / (0.16 + 0.1 * graze), 2.0));
+      float edgeG = exp(-pow((v - 0.9) / mix(0.16 + 0.1 * graze, 0.08, gd), 2.0));   // (fx r3, bow: a thin halo on the edge — the wide one read as a solid banana band)
       float haze = pow(v, 2.0) * mix(0.22, 0.05, gd);             // fx r2: the bow disc: no yellow sheet
       float along = pow(life, 1.6) * (0.6 + 0.4 * head);
       vec3 gc = mix(uGlowC, vec3(0.1, 1.0, 1.2), hue);
-      vec3 col = gc * (edgeG * 0.75 + haze) * along * g * mix(1.0, 0.7, graze) * (0.5 + 0.5 * vVeil) * mix(1.0, 0.55 * tf, gd);
+      vec3 col = gc * (edgeG * 0.75 + haze) * along * g * mix(1.0, 0.7, graze) * (0.5 + 0.5 * vVeil) * mix(1.0, 0.45 * tf, gd);
       if (max(col.r, max(col.g, col.b)) < 0.004) discard;
       gl_FragColor = vec4(col, 0.0);
       return;
@@ -398,7 +398,7 @@ const CRACK_FS = /* glsl */`
     for (int j = -1; j <= 1; j++) {
       float s = mod(sec + float(j) + N, N);
       float ang = (s + 0.5) / N * 6.2832 - 3.1416 + (h(s) - 0.5) * 0.45;
-      float wig = 0.1 * sin(r * 13.0 + h(s + 3.0) * 6.28) + 0.05 * sin(r * 29.0 + h(s + 5.0) * 6.28);
+      float wig = 0.035 * sin(r * 11.0 + h(s + 3.0) * 6.28) + 0.03 * sin(r * 31.0 + h(s + 5.0) * 6.28);   // (fx r3: jagged, not noodles)
       float d = abs(mod(th - ang - wig + 3.1416, 6.2832) - 3.1416) * r;
       d += step(0.5 + 0.5 * h(s + 7.0), r);                          // each fissure has its own length
       // one fork per fissure
@@ -413,8 +413,8 @@ const CRACK_FS = /* glsl */`
     float scorch = (1.0 - smoothstep(0.0, 0.42, r)) * 0.45;
     float fade = 1.0 - smoothstep(0.5, 1.0, uU), edge = 1.0 - smoothstep(0.85, 1.0, r);
     float a = max(crack * 0.8, scorch) * fade * edge;
-    float hot = pow(max(0.0, 1.0 - uU * 4.0), 2.0);
-    vec3 glow = uGlow * crack * hot * (1.3 - r) + uGlow * scorch * hot * 0.12;   // (a hot scorch disc bloomed into a fog)
+    float hot = pow(max(0.0, 1.0 - uU * 6.0), 2.0);                   // (fx r3: cools in ≈ 0.5 s; glowing gold worms lay on the grass for 1 s)
+    vec3 glow = uGlow * crack * hot * (1.0 - r) * 0.6 + uGlow * scorch * hot * 0.08;   // (a hot scorch disc bloomed into a fog)
     if (a < 0.01 && hot <= 0.0) discard;
     gl_FragColor = vec4(vec3(0.045, 0.032, 0.028) * a + glow, a);
   }`;
@@ -442,8 +442,8 @@ const AURA_FS = /* glsl */`
     // fx r2: a soft breathing glow ring (no hard tongue starburst: from above it read as a clip-art sun sticker)
     float r = length(vUv), th = atan(vUv.y, vUv.x);
     float wob = 0.75 + 0.25 * sin(th * 5.0 - uT * 1.7) * sin(th * 3.0 + uT * 1.1);
-    float ring = exp(-pow((r - 0.6) / 0.17, 2.0)) * wob;
-    float inner = (1.0 - smoothstep(0.0, 0.75, r)) * 0.12;
+    float ring = exp(-pow((r - 0.62) / 0.11, 2.0)) * wob;          // (fx r3: thinner, dimmer, deeper amber — a heat ring, not a yellow disc)
+    float inner = (1.0 - smoothstep(0.0, 0.75, r)) * 0.05;
     float a = (ring * 0.6 + inner) * (1.0 - smoothstep(0.8, 1.0, r));
     gl_FragColor = vec4(uColor * a * uK * (0.9 + 0.1 * sin(uT * 5.0)), 1.0);
   }`;
@@ -656,7 +656,7 @@ export function createVfx(scene, game, world) {
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
   aura.frustumCulled = false; aura.visible = false; scene.add(aura);
   let auraK = 0, auraAcc = 0;
-  const AURA_GOLD = [1.6, 0.75, 0.16];
+  const AURA_GOLD = [1.2, 0.46, 0.08];
 
   // ---- beams: thrust streaks, rays, pillars
   const beamGeo = new THREE.BufferGeometry();
@@ -911,7 +911,7 @@ export function createVfx(scene, game, world) {
       // fx r1: one hot core per frame, 2-4 frames (≈ 5 HDR stars a frame stacked into the cyan fog over the launch fan)
       if (hitN <= 1) star(e.x, e.y, e.z, 0.7 * vrng.range(0.9, 1.1), 0.07, K.flash);
     } else {
-      const tier = hitN <= 5 ? 0 : hitN <= 12 ? 1 : 2;
+      const tier = hitN <= (e.heavy ? 3 : 5) ? 0 : hitN <= 12 ? 1 : 2;   // (fx r3: a heavy pierce line: 3 full bursts, not a wall of confetti)
       const cx = camPos.x - e.x, cy = camPos.y - e.y, cz = camPos.z - e.z, cl = Math.hypot(cx, cy, cz) || 1, o = 0.45 / cl;
       const x = e.x + cx * o, y = e.y + cy * o, z = e.z + cz * o;
       // a burst near the lens (close finisher cameras) shrinks; fx r2: under the aim lens the contact is a small
@@ -1318,7 +1318,7 @@ export function createVfx(scene, game, world) {
     if (aura.visible) {
       const col = AURA_GOLD, gy = ground(h.x, h.z);
       aura.position.set(h.x, gy + 0.05, h.z); aura.scale.setScalar(1.5 + 0.1 * Math.sin(now() * 0.11));
-      const u = aura.material.uniforms; u.uT.value = now() / 60; u.uK.value = auraK * 0.8; u.uColor.value.setRGB(col[0], col[1], col[2]);
+      const u = aura.material.uniforms; u.uT.value = now() / 60; u.uK.value = auraK * 0.55; u.uColor.value.setRGB(col[0], col[1], col[2]);
       // soft flame wisps rising round him (fx r2: sparks is a soft streak pool now — the old pale boxes read as confetti);
       // none while the lens is close (the aim camera), and the live ones are killed so none drifts over the shot
       const close = Math.hypot(camPos.x - h.x, camPos.z - h.z) <= 4.2;

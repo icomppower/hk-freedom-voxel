@@ -26,7 +26,7 @@ export const HUANGZHONG_KIT = {
     burst: [0.52, 0.2, 0.03], flash: [2.6, 1.5, 0.45], slash: [3.0, 1.8, 0.6], pulse: [1.8, 0.8, 0.18],
     light: [1, 0.6, 0.25], crack: [2.8, 1.1, 0.25], wall: [1.3, 0.55, 0.12], ring: [2.0, 1.05, 0.3], shard: [2.6, 1.4, 0.4],
     glint: null, glitter: [2.8, 1.8, 0.7],
-    glow: [0xffa040, 0xffc070],                                       // jump-charge body glow / rim (anims/locomotion.js)
+    glow: [0x9a3c0c, 0xe07828],   // jump-charge body glow (additive) / rim (opaque back-face outline), anims/locomotion.js — fx r3: deep amber, the cream rim turned him into a yellow cut-out
     trail: { white: [1.1, 0.95, 0.68], fringe: [1.0, 0.42, 0.06], hot: [1.7, 1.3, 0.7], glow: [1.6, 0.72, 0.14], grad: true },   // grad: white leading edge → amber → clear tail (vfx.js)
   },
   createMusou, createMusouView,
