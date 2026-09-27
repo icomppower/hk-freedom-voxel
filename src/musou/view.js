@@ -428,7 +428,9 @@ export function createMusouView(parent, game, camera) {
     // r3: the dim is a teal-night vignette (display-space multiply) centred on Zhao Yun — ≈0.7× on him, ≈0.27× at the
     // frame edge — so the intro sits at ≈0.6× gameplay luma (DW8 0.52–0.77×) while his ivory lamellar stays readable
     // (the pose shot is ≈1.7× the pre-press gameplay frame undimmed, so the cut frame already carries part of the dim)
-    const dim = (t < 1 ? 0.45 : t < 2 ? 0.8 : 1) * (1 - ramp(t, M.chase + 4, M.contact));
+    // fx r5: the cut frame is dimmed 0.9 (was 0.45: under the 0.09 white kick the ≈1.7× undimmed pose shot
+    // read ≈1.6× gameplay luma — one blown-out frame); the white kick alone is the flash now, full dim from the next frame
+    const dim = (t < 1 ? 0.9 : 1) * (1 - ramp(t, M.chase + 4, M.contact));
     const cool = 0.45 * ramp(t, M.chase + 4, M.contact) * (1 - ramp(t, M.contact + 8, M.contact + 30));   // tint the dark-to-bright cut only, not the payoff
     const mul = (d, c) => Math.round(255 * (1 - dim * (1 - d / 255)) * (1 - cool * (1 - c / 255)));
     const C = [186, 222, 240];
