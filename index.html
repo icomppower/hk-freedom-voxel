@@ -296,6 +296,8 @@
   .inkhold .ink-wait { opacity: 1; transition: opacity .4s .3s; }
   .ink-wait svg { position: absolute; inset: 0; width: 100%; height: 100%; animation: inkTurn 2.4s linear infinite; }
   .ink-wait circle { fill: none; stroke: #d9a53a; stroke-linecap: round; filter: drop-shadow(0 0 .4rem rgba(242,193,78,.5)); }
+  .ink-wait p { width: 40rem; text-align: center; font: 700 3rem/1.4 var(--kai); color: #f4ead8; }
+  .ink-wait p small { display: block; font-size: 1.3rem; color: #cfc1a2; }
   .ink-wait i { font: 700 3.4rem/1.02 var(--brush); font-style: normal; color: #fbe9d6; background: var(--sealr); writing-mode: vertical-rl;
     padding: .7rem .5rem; border-radius: .4rem; transform: rotate(-5deg);
     box-shadow: inset 0 0 0 .24rem var(--sealr), inset 0 0 0 .42rem rgba(251,233,214,.85), 0 .4rem 1.2rem rgba(0,0,0,.6); }
@@ -801,6 +803,14 @@
 <div id="result" class="scr" hidden></div>
 <div id="ink" class="boot"><div class="ink-wait"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" stroke-width="2.6" stroke-dasharray="120 163"/>
   <circle cx="50" cy="50" r="41" stroke-width="1.2" stroke-dasharray="36 222" stroke-dashoffset="-150" opacity=".6"/></svg><i>無雙</i></div></div>
+<script>
+  // boot failure (a module that 404s or won't link, e.g. a stale cached copy next to fresh ones): the page opens under the
+  // ink and only main.js lifts it, so say what happened instead of turning the seal forever
+  addEventListener('error', () => {
+    const w = document.querySelector('#ink.boot .ink-wait');
+    if (w) w.innerHTML = '<p>載入失敗<small>Failed to load · force-reload (Ctrl/Cmd+Shift+R)</small></p>';
+  }, true);
+</script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
