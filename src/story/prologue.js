@@ -126,7 +126,7 @@ export function createPrologue(el, flow) {
   function go() {
     if (phase === 'out') return;
     phase = 'out'; el.classList.add('out');
-    later(() => flow.go('battle', ctx), 0.45);
+    later(() => flow.go('battle', ctx), 0.55);          // index.html #prologue.out: the fade off the field
   }
 
   // tap = next card (on the title: start now); hold = skip to the title. Keys and pointer share one hold clock.

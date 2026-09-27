@@ -91,40 +91,48 @@ export function createNav(cb) {
 }
 
 // ---------------------------------------------------------------- ink wipe
-// One 220vw-wide ink layer whose two long edges are dry-brush ragged (SVG turbulence displacement, stretched
-// horizontally so the rag reads as bristle streaks). Cover: slides in from the right until its solid middle spans the
-// screen; mid() swaps screens under it; uncover: continues off to the left.
+// One 220vw-wide ink layer (index.html #ink) whose two long edges are dry-brush ragged (SVG turbulence displacement,
+// stretched horizontally so the rag reads as bristle streaks). Cover: slides in from the right until its solid middle
+// spans the screen; mid() swaps screens under it; uncover: continues off to the left. While it holds (body.inkhold) the
+// new screen's CSS intros wait (index.html pauses them), so they play as it is revealed, not under the ink; a hold past
+// ~0.3 s (shader compiles) fades in the waiting seal on the ink, its brush ring turned by the compositor (it keeps
+// turning through a main-thread block), instead of a flat black stall. The page itself boots under full ink (inkBoot).
 const RAG = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 100' preserveAspectRatio='none'>
 <filter id='f' filterUnits='userSpaceOnUse' x='0' y='-100' width='1000' height='300'>
 <feTurbulence type='fractalNoise' baseFrequency='0.006 0.11' numOctaves='3' seed='11'/>
 <feDisplacementMap in='SourceGraphic' scale='150' xChannelSelector='R' yChannelSelector='G'/></filter>
 <g filter='url(#f)'><rect x='120' y='-100' width='760' height='300'/>
 <rect x='60' y='22' width='80' height='5'/><rect x='80' y='61' width='60' height='3'/><rect x='860' y='38' width='90' height='4'/><rect x='870' y='79' width='50' height='6'/></g></svg>`;
-let ink = null, busy = false, pend = null;
+const ink = document.getElementById('ink'), body = document.body;
+ink.style.webkitMaskImage = ink.style.maskImage = `url("data:image/svg+xml,${encodeURIComponent(RAG)}")`;
+let busy = false, pend = null;
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 /** Cover the screen with ink, run mid() (screen swap), uncover once the promise mid() returns (flow.go: the new screen
  *  compiled and presented) settles. Ignored while a wipe is running. */
 export function inkWipe(mid) {
   if (busy) return;
   busy = true;
-  if (!ink) {
-    ink = document.createElement('div');
-    ink.id = 'ink';
-    const url = `url("data:image/svg+xml,${encodeURIComponent(RAG)}")`;
-    ink.style.webkitMaskImage = ink.style.maskImage = url;
-    document.body.append(ink);
-  }
-  const r = reduced(), ease = 'cubic-bezier(.7,0,.35,1)';
   ink.hidden = false;
   sfx('swish');
   ink.animate([{ transform: 'translateX(100vw)' }, { transform: 'translateX(-60vw)' }],
-    { duration: r ? 1 : 420, easing: ease, fill: 'forwards' }).finished.then(mid).catch((e) => console.error(e)).then(() => {
+    { duration: reduced() ? 1 : 420, easing: 'cubic-bezier(.7,0,.35,1)', fill: 'forwards' }).finished.then(() => hold(mid));
+}
+/** Boot: index.html opens under full ink (#ink.boot + body.inkhold); uncover once mid() settles. */
+export function inkBoot(mid) { busy = true; hold(mid); }
+function hold(mid) {
+  body.classList.add('inkhold');
+  // mid() runs once a frame has committed inkhold: a synchronous compile in it would otherwise hold back the seal's fade-in
+  requestAnimationFrame(() => setTimeout(() => Promise.resolve().then(mid).catch((e) => console.error(e)).then(() => {
     // two frames under full ink: the swapped screen lays out and the 3D view re-frames before the reveal
     requestAnimationFrame(() => requestAnimationFrame(() => {
+      body.classList.remove('inkhold'); ink.classList.remove('boot');
       ink.animate([{ transform: 'translateX(-60vw)' }, { transform: 'translateX(-230vw)' }],
-        { duration: r ? 1 : 520, easing: 'cubic-bezier(.45,0,.2,1)', fill: 'forwards' }).finished.then(() => { ink.hidden = true; busy = false; const f = pend; pend = null; f?.(); });
+        { duration: reduced() ? 1 : 520, easing: 'cubic-bezier(.45,0,.2,1)', fill: 'forwards' }).finished.then(() => {
+        ink.hidden = true; ink.getAnimations().forEach((a) => a.cancel());   // fill-forwards: they would pile up, one pair per wipe
+        busy = false; const f = pend; pend = null; f?.();
+      });
     }));
-  });
+  })));
 }
 export const wiping = () => busy;
 /** Run fn now, or once the running wipe has uncovered (a confirm pressed while the screen is still being revealed is

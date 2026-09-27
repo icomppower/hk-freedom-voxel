@@ -194,7 +194,7 @@ export function createSelect(el, flow) {
       ctx = c; busy = false; armed = false; clearStamp($('.s-act'));
       const [zh, en] = MODE[c.mode] || MODE.free;
       $('.s-mode b').textContent = zh; $('.s-mode small').textContent = en;
-      show(cur, true);
+      show(cur, true); replay(el, 'in');                   // header, roster and actions slide in as the ink uncovers
       nav.start();
     },
     exit() { nav.stop(); drag = null; if (group) group.visible = false; if (key) key.position.copy(keyHome); },
