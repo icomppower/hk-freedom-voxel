@@ -1,7 +1,8 @@
 // Title screen (#title, ui lane). DW-style key art over the live battlefield: Zhao Yun in front (spear planted, free fist
-// thrown up) and Huang Zhong a step behind and to the right at full draw, looking into the lens, on their real voxel
-// models (kit.model on their own rigs, cloth/hair chains), backlit by the low sun up the pass with the burning Wei camp,
-// their 趙 / 黃 standards and rising embers behind them in deep bokeh; a slow push-in on enter, then a breathing drift
+// thrown up) and Huang Zhong half a metre behind and to the right, drawing toward the lens-right and looking into it, on
+// their real voxel models (kit.model on their own rigs, cloth/hair chains), backlit by the low sun up the pass with the
+// burning Wei camp, smoke over the right cliff, their 趙 / 黃 standards and rising embers behind them in deep bokeh, low
+// sunlit haze over the ground under the menu; a slow push-in on enter (from farther back), then a breathing drift
 // (+ a little mouse parallax). The lens is fitted every frame to the pair's posed bounds, so both stay whole in the
 // column right of the logo/menu band at any window shape (16:9, ultrawide, 4:3).
 // Render-only: view(scene, camera, focus, dt) runs after the gameplay camera rig while this screen is up (main.js header).
@@ -47,23 +48,34 @@ export const STAGE = {
   at: 0.56,                    // stage point: this far up the pass zone (0 = south edge, 1 = north); the lens stays north
                                // of the origin, where the idle gameplay hero stands before any battle
   eye: 1.05, fov: 32,          // low heroic eye (m above the road), tilted up to the pair
-  fitR: 0.93, fitT: 0.05, fitK: 0.98,   // framing (title.js view): right edge, top of the highest point, Zhao Yun's knees
-  push: -0.3, pushT: 3.2,      // enter: start this much closer (on Zhao Yun), pull back to the pair over pushT s (the path
-                               // stays between the lens and the officers: nothing on the road can cross it)
-  embers: 240,
-  // Zhao Yun in front (arm: armL FK override, degrees — the fist goes up, never toward Huang Zhong); Huang Zhong behind
-  // and right at full draw (the aim clip), turned toward the lens (head: root-space look override) with the whole bow in
-  // frame. x/z in metres; Huang Zhong's x closes in on narrow windows. tag = [x, y] rem from the head to the tag's top
-  // centre. banner = the surname standard, behind its officer in the DoF (趙 over Zhao Yun's fist, 黃 behind Huang Zhong).
+  fitR: 0.975, fitT: 0.05, fitK: 0.97,   // framing (title.js view): right edge, top of the highest point, Zhao Yun's knees
+  push: 0.22, pushT: 3.2,      // enter: start this much farther back and push in to the fitted frame over pushT s (the pair
+                               // only grows into the frame: nothing is ever cropped mid-move)
+  embers: 340,
+  // Zhao Yun in front (arm: armL FK override, degrees — the fist straight up, clear of Huang Zhong); Huang Zhong half a
+  // metre behind and right, drawing (the aim clip early in the draw: the string meets his hand in front of the chest, not
+  // across his eyes), the arrow aimed toward the lens-right, head turned to the lens (root-space look override), his head
+  // at Zhao Yun's shoulder line with air between them. x/z in metres; narrow = [x, z] on ≤ 4:3 windows (nk in view()).
+  // tag = [x, y] rem from the head to the tag's bottom centre. banner = the surname standard behind its officer (DoF).
   cast: [
-    { id: 'zhaoyun', clip: 'mu_act', u: 1, x: 0.2, z: 0, face: Math.PI + 0.1, arm: [-10, 0, 150, 15], look: [0.7, 1.8], tag: [-16, -2], banner: [-0.2, 7.5] },
-    { id: 'huangzhong', clip: 'aim', u: 14 / 30, x: -1.7, z: 2, face: Math.PI + 0.6, head: [-4, -30, 0], look: [1.0, 2.0], tag: [-9, -1], banner: [-3.6, 9] },
+    { id: 'zhaoyun', clip: 'mu_act', u: 1, x: 0.2, z: 0, face: Math.PI + 0.1, arm: [-6, 0, 172, 8], look: [0.7, 1.8], tag: [-4.5, 6, 'L'], banner: [-0.2, 7.5] },
+    { id: 'huangzhong', clip: 'aim', u: 5 / 30, x: -1.0, z: 0.7, face: Math.PI + 0.25, head: [-4, -10, 0], look: [1.0, 2.0], tag: [-1.5, -6],
+      narrow: [-0.95, 0.5], banner: [-4.6, 10] },
   ],
 };
 
-// warm glows [x, y, z, width, height, r, g, b] in the stage frame
+// warm glows [x, y, z, width, height, r, g, b, flicker] in the stage frame (additive soft sprites, blurred by the DoF)
 const GLOWS = [[1, 2.5, 30, 46, 16, 0.55, 0.24, 0.07], [-7, 1.2, 12, 9, 6, 0.9, 0.38, 0.08], [6, 0.8, 16, 7, 4, 0.7, 0.3, 0.06],
-  [11, 3.5, 22, 26, 13, 0.42, 0.17, 0.05]];   // last: backlit smoke-glow behind the logo side (screen-left), no dead black
+  [11, 3.5, 22, 26, 13, 0.42, 0.17, 0.05],        // backlit smoke-glow behind the logo side (screen-left), no dead black
+  [-18, 7, 40, 34, 16, 0.55, 0.22, 0.05, 0.25], [-10, 4, 27, 14, 9, 0.7, 0.28, 0.06, 0.3],   // fires under the smoke, right
+  // low sunlit smoke and fire bounce over the empty ground under the logo / menu (screen-left), slow breathing
+  [4, 0.5, 12, 14, 2.2, 0.32, 0.15, 0.05, 0.08], [9, 1.0, 20, 24, 3.6, 0.3, 0.14, 0.05, 0.08], [2.5, 0.35, 7, 9, 1.4, 0.34, 0.15, 0.05, 0.08]];
+
+// smoke from the burning camp [x, y, z, width, height, r, g, b, opacity]: soft normal-blended plumes over the backlit
+// cliff at the top-right (it read as a black block with sky specks through its blurred voxels), lit warm from below by
+// the fires above; drifting slowly
+const SMOKE = [[-17, 16, 40, 38, 24, 0.2, 0.1, 0.06, 0.9], [-26, 22, 46, 44, 26, 0.24, 0.12, 0.07, 0.85], [-9, 12, 34, 22, 14, 0.26, 0.13, 0.07, 0.6],
+  [-29, 25, 52, 42, 26, 0.22, 0.11, 0.07, 0.85]];
 
 export function createTitle(el, flow) {
   el.innerHTML = `
@@ -130,12 +142,18 @@ export function createTitle(el, flow) {
 
   // ---- 3D stage (render-only; built on the first view, hidden on exit, kept for the session)
   let group = null, embers = null, t = 0, enterT = 0;
-  const cast = [], banners = [], glows = [];
-  const pose = new Float32Array(POSE_SIZE), S0 = new THREE.Vector3(), P = new THREE.Vector3(), V = new THREE.Vector3();
+  const cast = [], banners = [], glows = [], smoke = [];
+  const pose = new Float32Array(POSE_SIZE), S0 = new THREE.Vector3(), P = new THREE.Vector3(), V = new THREE.Vector3(), Q = new THREE.Vector3();
   const BOX = [new THREE.Box3(), new THREE.Box3()];
   // left edge of the key art = right edge of the logo/menu band + a gutter (measured on resize, not per frame)
   let fitL = 0.45, fitLe = 0.45;   // measured, eased (a late webfont widens the band: the frame glides, never jumps)
-  const measure = () => { const r = $('.t-band').getBoundingClientRect(); if (r.width) fitL = Math.min(0.6, (r.right + innerHeight / 72 * 3) / innerWidth); };
+  // menuR: right edge of the menu text (the name tag left of the spear stays clear of it); tagW: the tags' widths
+  let menuR = 0; const tagW = [0, 0];
+  const measure = () => {
+    const r = $('.t-band').getBoundingClientRect(); if (r.width) fitL = Math.min(0.6, (r.right + innerHeight / 72 * 3) / innerWidth);
+    menuR = Math.max(...[...el.querySelectorAll('.t-menu b, .t-menu small')].map((e) => e.getBoundingClientRect().right)) + innerHeight / 72 * 1.2;
+    tags.forEach((e, i) => { tagW[i] = e.offsetWidth; });
+  };
   addEventListener('resize', measure); document.fonts?.ready.then(measure);
   const stagePoint = () => {
     const q = zone('pass'), x = q ? q.x : 0, z = q ? q.z - q.d / 2 + q.d * STAGE.at : 20;
@@ -174,6 +192,9 @@ export function createTitle(el, flow) {
       root.add(rig.root); group.add(root);
       const m = K.model(rig);
       heroLook(m.material, ...c.look);          // key-art grade: brighter camera-side fill, hot sun rim (title copies only)
+      // the raised fist: the dark glove went to a flat black cube against the sky; a firelit gauntlet here (title only)
+      if (c.arm && m.meshes?.handL) m.meshes.handL.material = heroLook(new THREE.MeshStandardMaterial({ vertexColors: true,
+        color: new THREE.Color(2.6, 2.3, 2), emissive: 0x5a2c10, roughness: 0.4, metalness: 0.35, flatShading: true }), 0.9, 2.4);
       const sec = K.secondary(root, rig, m.material), parts = [];
       // the body, weapon and cloth for the framing box (not the unculled world-space overlays: bow string etc.)
       root.traverse((o) => { if (o.isMesh && o.frustumCulled) parts.push(o); });
@@ -207,6 +228,11 @@ export function createTitle(el, flow) {
         transparent: true, depthWrite: false, fog: false }));
       sp.scale.set(sx, sy, 1); sp.userData.at = [x, y, z]; glows.push(sp); group.add(sp);
     }
+    for (const [x, y, z, sx, sy, r, g2, b, a] of SMOKE) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: embers.material.map, color: new THREE.Color(r, g2, b), opacity: a,
+        transparent: true, depthWrite: false, fog: false }));
+      sp.scale.set(sx, sy, 1); sp.userData.at = [x, y, z]; smoke.push(sp); group.add(sp);
+    }
   }
 
   function view(scene, camera, focus, dt) {
@@ -214,8 +240,9 @@ export function createTitle(el, flow) {
     group.visible = true;
     dt = Math.min(dt || 1 / 60, 0.1); t += dt;
     const S = STAGE, O = stagePoint();
-    // narrower than 16:9 the art column shrinks: Huang Zhong closes in behind Zhao Yun so the pair stays large
-    const sq = Math.min(1, Math.max(0.5, (camera.aspect - 1) / 0.78));
+    // narrower than 16:9 the art column shrinks: an officer with `narrow` [x, z] moves toward it (0 at 16:9, all of it at
+    // ≤ 4:3), so the pair stays large without the silhouettes merging
+    const nk = Math.min(1, Math.max(0, (1.78 - camera.aspect) / 0.45));
     // officers: a held frame of their own clip + breath (hips bob, chest swell) and the cloth/hair chains in the wind
     for (let i = 0; i < cast.length; i++) {
       const { c, K, rig, sec } = cast[i], br = Math.sin(t * 1.5 + i * 2.1);
@@ -223,17 +250,24 @@ export function createTitle(el, flow) {
       if (c.arm) for (let k = 0; k < 4; k++) pose[CH.armL + k] = c.arm[k] * Math.PI / 180;   // key-art arm (free left arm FK)
       if (c.head) for (let k = 0; k < 3; k++) pose[CH.head + k] = c.head[k] * Math.PI / 180; // key-art look (root-space aim)
       pose[1] += br * 0.008; pose[9] += br * 0.02; pose[12] -= br * 0.015;
-      P.set(O.x + c.x * (i ? sq : 1), 0, O.z + c.z); P.y = ground(P.x, P.z);
+      const nx = c.narrow ? c.x + (c.narrow[0] - c.x) * nk : c.x, nz = c.narrow ? c.z + (c.narrow[1] - c.z) * nk : c.z;
+      P.set(O.x + nx, 0, O.z + nz); P.y = ground(P.x, P.z);
       rig.root.scale.set(1, 1, 1);
       rig.apply(pose, P, c.face + Math.sin(t * 0.4 + i) * 0.03);
       rig.root.scale.setScalar(HERO_SCALE); rig.root.updateMatrixWorld(true);
       if (cast[i].fresh) { sec.reset(); cast[i].fresh = false; }
       sec.update(dt);
     }
+    for (let i = 0; i < smoke.length; i++) {
+      const [x, y, z] = smoke[i].userData.at;
+      smoke[i].position.set(O.x + x + Math.sin(t * 0.06 + i * 2) * 1.5, O.y + y + Math.sin(t * 0.09 + i) * 0.8, O.z + z);
+      smoke[i].material.rotation = Math.sin(t * 0.04 + i) * 0.15;
+    }
     for (let i = 0; i < glows.length; i++) {
       const [x, y, z] = glows[i].userData.at;
       glows[i].position.set(O.x + x, O.y + y, O.z + z);
-      glows[i].material.opacity = 0.85 + 0.15 * Math.sin(t * (3 + i * 2.3)) * Math.sin(t * 7.1 + i);
+      const f = GLOWS[i][8] ?? 0.15, slow = f < 0.1;                    // haze breathes slowly, fires flicker
+      glows[i].material.opacity = 1 - f + f * (slow ? Math.sin(t * 0.7 + i) : Math.sin(t * (3 + i * 2.3)) * Math.sin(t * 7.1 + i));
     }
     for (const b of banners) {
       const [bx, bz] = b.c.banner, x = O.x + bx, z = O.z + bz, gy = ground(x, z);
@@ -249,12 +283,13 @@ export function createTitle(el, flow) {
       }
       a.needsUpdate = true;                                                  // flatShading: normals from derivatives
     }
-    // embers: a 9 × 5 × 12 m box around the pair, rising with a lazy curl, flickering, wrapping at the top
+    // embers: a 14 × 5 × 12 m box around the pair and over the ground to screen-left, rising with a lazy curl, flickering,
+    // wrapping at the top
     const ep = embers.geometry.attributes.position, ec = embers.geometry.attributes.color, sd = embers.userData.seed;
     for (let i = 0; i < S.embers; i++) {
       const a = sd[i * 4], b = sd[i * 4 + 1], c = sd[i * 4 + 2], d = sd[i * 4 + 3];
       const y = (b * 5 + t * (0.35 + c * 0.6)) % 5, life = y / 5;
-      ep.setXYZ(i, O.x + (a - 0.5) * 9 + Math.sin(t * (0.6 + d) + i) * 0.4 + y * 0.25, O.y + y, O.z - 2.5 + c * 12 + Math.cos(t * 0.5 + i * 1.7) * 0.3);
+      ep.setXYZ(i, O.x + 2 + (a - 0.5) * 14 + Math.sin(t * (0.6 + d) + i) * 0.4 + y * 0.25, O.y + y, O.z - 2.5 + c * 12 + Math.cos(t * 0.5 + i * 1.7) * 0.3);
       const f = (0.55 + 0.45 * Math.sin(t * (9 + d * 14) + i * 3.3)) * Math.sin(Math.PI * Math.min(1, life * 1.15)) * (0.6 + d);
       ec.setXYZ(i, 4.5 * f, 1.6 * f, 0.35 * f);
     }
@@ -266,38 +301,53 @@ export function createTitle(el, flow) {
     // eye; then the enter push-in (easeOutCubic, toward Zhao Yun), a slow breathing drift and eased mouse parallax.
     ptr.ex += (ptr.x - ptr.ex) * Math.min(1, dt * 2); ptr.ey += (ptr.y - ptr.ey) * Math.min(1, dt * 2);
     const aspect = camera.aspect, tH = Math.tan(S.fov * Math.PI / 360), tW = tH * aspect;
-    for (let i = 0; i < 2; i++) { BOX[i].makeEmpty(); for (const m of cast[i].parts) if (m.visible) BOX[i].expandByObject(m); }
-    const A = BOX[0], B = BOX[1], zA = (A.min.z + A.max.z) / 2, zB = (B.min.z + B.max.z) / 2;
-    const lA = A.max.x >= B.max.x, rB = B.min.x <= A.min.x, tA = A.max.y >= B.max.y;
-    const pLx = lA ? A.max.x : B.max.x, pLz = lA ? zA : zB, pRx = rB ? B.min.x : A.min.x, pRz = rB ? zB : zA;
+    // each extreme (highest point, leftmost, rightmost) is the part corner that projects farthest out from last frame's
+    // lens (Q), fitted at that part's own nearer depth (spear tip, bow limb, the arrow reaching toward the lens): the
+    // pair's mid-depth is up to a metre off for those, ~8 % of the frame this close
+    if (!Q.z) Q.set(O.x, O.y + S.eye, O.z - 5.5);
+    let top = 0, topZ = 0, pLx = 0, pLz = 0, pRx = 0, pRz = 0, sT = -Infinity, sL = -Infinity, sR = Infinity;
+    const A = BOX[0], E = BOX[1];
+    A.makeEmpty();
+    for (let i = 0; i < 2; i++) for (const m of cast[i].parts) if (m.visible) {
+      E.makeEmpty().expandByObject(m); if (!i) A.union(E);
+      const d = 1 / Math.max(0.5, E.min.z - Q.z);
+      if ((E.max.y - Q.y) * d > sT) { sT = (E.max.y - Q.y) * d; top = E.max.y; topZ = E.min.z; }
+      if ((E.max.x - Q.x) * d > sL) { sL = (E.max.x - Q.x) * d; pLx = E.max.x; pLz = E.min.z; }
+      if ((E.min.x - Q.x) * d < sR) { sR = (E.min.x - Q.x) * d; pRx = E.min.x; pRz = E.min.z; }
+    }
+    const zA = (A.min.z + A.max.z) / 2;
     fitLe += (fitL - fitLe) * Math.min(1, dt * 3);
     const L = fitLe, R = S.fitR, kL = (0.5 - L) * 2 * tW, kR = (0.5 - R) * 2 * tW;
-    const top = tA ? A.max.y : B.max.y, topZ = tA ? zA : zB, knee = O.y + 0.5;
+    const knee = O.y + 0.5;
     const czW = (kL * pLz - kR * pRz - pLx + pRx) / (kL - kR);                           // width fit
     const czH = zA - (top - knee) / ((S.fitK - S.fitT) * 2 * tH);                        // height fit (at Zhao Yun's depth)
     let cz = Math.min(czW, czH);
     const gL = 1 / (2 * (pLz - cz) * tW), gR = 1 / (2 * (pRz - cz) * tW);
     let cx = (pLx * gL + pRx * gR - (1 - L - R)) / (gL + gR);                           // span centred in [L, R]
     const k = Math.min(1, (t - enterT) / S.pushT), push = S.push * (1 - k) ** 3;
-    cz -= push * (zA - cz); cx += (O.x + S.cast[0].x - cx) * -push * 0.5;
+    cz -= push * (zA - cz);
     cx += Math.sin(t * 0.13) * 0.08 - ptr.ex * 0.06;
     const cy = O.y + S.eye + Math.sin(t * 0.11) * 0.04 + ptr.ey * 0.04;
-    // height-bound: the top at fitT; width-bound (narrow windows): the knees stay at fitK (they stand on the ink strip)
-    const tilt = czH <= czW ? Math.atan((top - cy) / (topZ - cz)) - Math.atan((0.5 - S.fitT) * 2 * tH)
-      : Math.atan((knee - cy) / (zA - cz)) - Math.atan((0.5 - S.fitK) * 2 * tH);
+    // tilt: the knees on fitK (they stand on the ink strip) unless that would lift the highest point above fitT (height-
+    // bound windows): then the top sits on fitT. Either way nothing leaves the top edge, on any frame of the push.
+    const tilt = Math.max(Math.atan((top - cy) / (topZ - cz)) - Math.atan((0.5 - S.fitT) * 2 * tH),
+      Math.atan((knee - cy) / (zA - cz)) - Math.atan((0.5 - S.fitK) * 2 * tH));
     camera.fov = S.fov; camera.updateProjectionMatrix();
-    camera.position.set(cx, cy, cz);
+    camera.position.set(cx, cy, cz); Q.set(cx, cy, cz);
     camera.lookAt(V.set(cx, cy + Math.tan(tilt) * 10, cz + 10));
     camera.updateMatrixWorld();
     focus.set(O.x + S.cast[0].x, O.y + 1.2, O.z + S.cast[0].z);
-    // name tags: tag = [x, y] rem from the projected head to the tag's top centre, clear of the band (transform only)
+    // name tags in the air beside each silhouette: tag = [x, y] rem from the projected head (tag[2] 'L': from the pair's
+    // leftmost point, the spear, at head height) to the tag's bottom centre; clear of the menu text and the frame edges
     const w = innerWidth, h = innerHeight, rem = h / 72;
     for (let i = 0; i < tags.length; i++) {
       const c = S.cast[i];
-      cast[i].rig.joints.head.getWorldPosition(V).project(camera);
-      const px = Math.max(fitL * w + 3 * rem, Math.min(w - 4 * rem, (V.x * 0.5 + 0.5) * w + c.tag[0] * rem));
-      const py = Math.max(2 * rem, (0.5 - V.y * 0.5) * h + c.tag[1] * rem);
-      tags[i].style.transform = `translate(${px.toFixed(1)}px, ${py.toFixed(1)}px) translateX(-50%)`;
+      cast[i].rig.joints.head.getWorldPosition(V);
+      if (c.tag[2] === 'L') V.set(pLx, V.y, pLz);
+      V.project(camera);
+      const px = Math.max(menuR + tagW[i] / 2, Math.min(w - tagW[i] / 2 - 2 * rem, (V.x * 0.5 + 0.5) * w + c.tag[0] * rem));
+      const py = Math.max(20 * rem, (0.5 - V.y * 0.5) * h + c.tag[1] * rem);
+      tags[i].style.transform = `translate(${px.toFixed(1)}px, ${py.toFixed(1)}px) translate(-50%, -100%)`;
     }
   }
 
