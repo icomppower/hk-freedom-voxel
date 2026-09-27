@@ -109,7 +109,7 @@ function startBattle({ char = 'zhaoyun', mode = 'free', chapter = 'ch1' } = {}) 
   vrng.seed(7936); rng.seed(1);
   game.hero.reset({ ...p, char: ch });
   if (newKit) game.musou = ch.kit.createMusou(game);
-  game.crowd.reset(); game.combat.reset(); game.musou.reset(); game.cam.reset(p.yaw);
+  game.crowd.reset(); game.combat.reset(); game.musou.reset(); game.cam.reset(p.yaw); game.cam.tilt = p.tilt || 0;
   if (newKit) buildViews();
   heroView.reset();
   game.story.reset({ mode, chapter, char: ch.id });

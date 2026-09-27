@@ -301,8 +301,8 @@ export function heroLook(mat, fill = 0.4, rim = 0.9) {
     sh.fragmentShader = 'uniform float uHeroFill, uHeroRim;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       float heroNdv = abs(dot(normal, normalize(vViewPosition)));
       float heroFl = max(dot(normal, normalize(vec3(-0.4, 0.55, 0.75))), 0.0) * 0.8 + 0.2;
-      vec3 heroExtra = diffuseColor.rgb * (uHeroFill * heroFl * vec3(0.78, 0.84, 1.0)
-        + uHeroRim * pow(1.0 - heroNdv, 2.5) * vec3(1.0, 0.7, 0.45));`).replace('#include <opaque_fragment>', `
+      vec3 heroExtra = diffuseColor.rgb * uHeroFill * heroFl * vec3(0.78, 0.84, 1.0)
+        + max(diffuseColor.rgb, vec3(0.4)) * uHeroRim * pow(1.0 - heroNdv, 2.2) * vec3(1.0, 0.7, 0.45);   // rim floor: black lamellar still gets an edge`).replace('#include <opaque_fragment>', `
       outgoingLight += heroExtra * (1.0 - smoothstep(0.2, 0.85, dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722))));
       #include <opaque_fragment>`);
   };
