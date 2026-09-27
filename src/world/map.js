@@ -80,8 +80,9 @@ const PIECES = [
 export const PIECE_IDS = PIECES.map((p) => p.id);
 // non-walkable cut-outs [x0, z0, x1, z1]: the 本陣 front palisade either side of its gate; 夏侯淵's pavilion platform
 // on the summit (stair, balustrade and step braziers included: 1.2 m of stone nobody may walk through); the Wei camp
-// courtyard's command table with its stools and brazier (dressing.js: solid set pieces, not walk-through decals)
-const PROP_CARVE = [[-4.8, 201.8, 12.8, 214.8], [-6.5, 127.6, -1.5, 132.4]];
+// courtyard's command table with its stools and brazier (dressing.js: solid set pieces, not walk-through decals);
+// the story's Shu van ranks either side of the road inside the 本陣 gate (dressing.js 'van': |x| 3.5–7.6)
+const PROP_CARVE = [[-4.8, 201.8, 12.8, 214.8], [-6.5, 127.6, -1.5, 132.4], [-8, -125, -3.2, -121.1], [3.2, -125, 8, -121.1]];
 const CARVE = [[-25, -121.5, -9, -117.5], [9, -121.5, 25, -117.5], ...PROP_CARVE];
 /** Render side: (x, z) lies under a solid set piece's cut-out (± pad m): no rock columns / boulders grow there. */
 export const onProp = (x, z, pad = 1) => PROP_CARVE.some((r) => x > r[0] - pad && x < r[2] + pad && z > r[1] - pad && z < r[3] + pad);
