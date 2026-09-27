@@ -13,6 +13,7 @@ import { on } from '../core/events.js';
 import { vrng, hash01 } from '../core/rng.js';
 import { MUSOU, dragonAt, dragonArc } from './musou.js';
 import { ground } from '../world/map.js';
+import { dragonSight } from '../crowd/view.js';
 
 const _m = new THREE.Matrix4(), _l = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _v = new THREE.Vector3(), _c = new THREE.Color();
@@ -49,7 +50,7 @@ const COL = {
   // (r2: fins/belly/white a notch lower — the post's cool-biased bloom turned the finisher coil into a white column)
   body: [0.02, 0.12, 0.52], scale: [0.04, 0.27, 0.82],   // (r3 acc: deeper azure — bright fins / belly / eyes + ink outline carry the form)
   belly: [0.4, 0.72, 0.92], fin: [0.42, 0.95, 1.3], eye: [3.0, 2.2, 0.5],
-  horn: [1.4, 1.15, 0.6], white: [1.0, 1.12, 1.2], whisker: [0.6, 1.15, 1.55],
+  horn: [1.4, 1.15, 0.6], white: [1.0, 1.12, 1.2], whisker: [0.6, 1.15, 1.55], mouth: [0.32, 0.01, 0.03],
 };
 function dragonParts() {
   const parts = [];            // { seg (-1 head), off, size, dir?, col, dyn? }
@@ -67,17 +68,19 @@ function dragonParts() {
   for (const [x, dy] of [[0, 0.3], [0.12, 0.12], [-0.12, 0.12]]) add(NS - 1, [x, dy, -0.25], [0.05, 0.42, 0.34], COL.fin, [x * 3, 1, -1.2]);
   const H = -1;
   add(H, [0, 0.05, 0], [0.64, 0.52, 0.64], COL.scale);
-  add(H, [0, 0.31, 0.12], [0.68, 0.12, 0.32], COL.fin);
+  add(H, [0, 0.31, 0.12], [0.68, 0.12, 0.32], COL.body);        // brow (fx r5: dark, was fin — a bright cyan slab that bloomed over the face)
   add(H, [0, -0.02, 0.56], [0.46, 0.3, 0.62], COL.body);
   add(H, [0, 0.09, 0.88], [0.3, 0.14, 0.12], COL.white);
   add(H, [0, -0.2, 0.62], [0.4, 0.06, 0.46], COL.white);
-  add(H, [0, -0.36, 0.44], [0.4, 0.12, 0.64], COL.body, null, 'jaw');
+  add(H, [0, -0.36, 0.44], [0.4, 0.12, 0.64], COL.belly, null, 'jaw');   // (fx r5: pale jaw, was body blue — the open jaws read as one blue block)
   add(H, [0, -0.28, 0.48], [0.34, 0.05, 0.42], COL.white, null, 'jaw');
+  add(H, [0, -0.26, 0.42], [0.36, 0.14, 0.5], COL.mouth);        // fx r5: dark-red maw between the jaws (the open mouth read as a gap)
   for (const sx of [1, -1]) {
-    add(H, [sx * 0.27, 0.19, 0.22], [0.09, 0.11, 0.15], COL.eye);
+    add(H, [sx * 0.31, 0.19, 0.22], [0.12, 0.15, 0.2], COL.eye);   // (fx r5: x 0.27 → 0.31, bigger — the eyes sat buried inside the skull box)
+    add(H, [sx * 0.375, 0.19, 0.25], [0.02, 0.13, 0.06], COL.mouth.map((v) => v * 0.1));   // fx r5: slit pupil
     add(H, [sx * 0.2, 0.52, -0.46], [0.09, 0.09, 0.8], COL.horn, [sx * 0.25, 0.6, -1]);
     add(H, [sx * 0.27, 0.72, -0.62], [0.07, 0.07, 0.3], COL.horn, [sx * 0.2, 1, -0.1]);
-    add(H, [sx * 0.62, -0.08, 0.58], [0.035, 0.035, 1.1], COL.whisker, [sx * 0.9, -0.1, -0.5], 'whisker');
+    add(H, [sx * 0.4, -0.5, 0.82], [0.035, 0.035, 0.95], COL.whisker, [sx * 0.35, -1, 0.15], 'whisker');   // (fx r5: hang off the snout, framing the maw — swept back they cut across the ¾ face)
   }
   for (let j = 0; j < 5; j++) { const x = (j - 2) * 0.14; add(H, [x, 0.12 + (2 - Math.abs(j - 2)) * 0.06, -0.52], [0.07, 0.2, 0.6], COL.fin, [x * 2, 0.35, -1]); }   // mane
   add(H, [0, -0.52, 0.2], [0.2, 0.05, 0.42], COL.white, [0, -0.5, -1]);
@@ -168,6 +171,9 @@ export function createMusouView(parent, game, camera) {
   // translucent blobs inside their own glow
   const ink = instanced(scene, new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0x03081a, side: THREE.BackSide, fog: false }), parts.length);
   const INK = new THREE.Matrix4().makeScale(1.24, 1.24, 1.12);
+  // fx r5: drawn after the contact rays quad (transparent list, higher renderOrder), so the rays erupt behind the dragon
+  // instead of washing its face pale teal (the quad sits 3.5 m past the contact point, the head rears 5–8 m out)
+  for (const [m, o] of [[ink, 2], [dragon, 3], [shell, 4]]) { m.renderOrder = 1e6 + o; m.material.transparent = true; }
   // finisher lightning: jagged bolts striking down onto the ring wave (stretched light voxels, re-rolled every 3 frames)
   const NB = 5, BSEG = 9;
   const bolts = instanced(scene, new THREE.BoxGeometry(1, 1, 1), addMat(), NB * BSEG);
@@ -214,7 +220,7 @@ export function createMusouView(parent, game, camera) {
 
   function hideAll() {
     add.visible = fx.visible = dragon.visible = shell.visible = ink.visible = bolts.visible = false;
-    glow.intensity = 0;
+    glow.intensity = 0; dragonSight.w = 0;
     for (const el of [cut, dimEl, washEl]) show(el, 0);
   }
 
@@ -255,16 +261,31 @@ export function createMusouView(parent, game, camera) {
 
   function updateDragon(t, dt) {
     const s = (t - MUSOU.contact) / 60;
-    if (s < 0 || s > 1.2) { dragon.visible = shell.visible = ink.visible = false; return; }
+    if (s < 0 || s > 1.2) { dragon.visible = shell.visible = ink.visible = false; dragonSight.w = 0; return; }
     dragon.visible = shell.visible = ink.visible = true;
     const A = dragonArc(s);
     const dissolve = ramp(s, 1.0, (MUSOU.end - MUSOU.contact) / 60);           // tail → head, done at control return
     const alive = Math.round((NS + 1) * (1 - dissolve));                          // j = 0 head, 1..NS body
+    // fx r5: over the contact the head rears 1.2 m above the launched fan (neck tapering over 6 segments) and turns a ¾ face
+    // to the lens: it surged straight away from the flank camera at chest height, so the contact frames only showed the
+    // back of its skull, a blue cube behind the flying bodies. View only (the sim's hit gate reads the path height).
+    const rear = ramp(s, 0.02, 0.1) * (1 - ramp(s, 0.3, 0.45));
+    _cam.copy(camera.position).setY(camera.position.y - scene.position.y);
     for (let j = 0; j <= NS; j++) {
       const a = j ? A - NECK - (j - 1) * SP : A;
       born[j] = a >= 0; vis[j] = born[j] && j < alive;
       if (!born[j]) continue;
       frameAt(a, j ? Math.sin(j * 0.45 - time * 9) * 0.35 : 0, bases[j]);
+      if (j < 6) bases[j].elements[13] += 1.2 * rear * (1 - j / 6);
+      if (!j && rear > 0) {
+        const e = bases[0].elements;
+        _p.set(e[12], e[13], e[14]); _y.subVectors(_cam, _p).normalize();                  // to the lens, swung 35° off it (¾ face)
+        _y.applyAxisAngle(UP, 0.6 * (Math.sign(_y.z * e[8] - _y.x * e[10]) || 1));
+        _z.set(e[8], e[9], e[10]).lerp(_y, rear).normalize();
+        _x.crossVectors(UP, _z).normalize(); _y.crossVectors(_z, _x);
+        bases[0].makeBasis(_x, _y, _z).setPosition(_p);
+      }
+      if (!j) dragonSight.set(bases[0].elements[12], bases[0].elements[13] + scene.position.y, bases[0].elements[14], 2.1 * rear);   // crowd cuts the fan between lens and head
       // the head grows to full size as it surges off the spear tip (full size right at the chase lens was a white blob)
       // (fx r4: 0.7 → full by s 0.15 — at 0.5 the head was a blue speck through the contact frames)
       if (!j) { const k = HEAD_SCALE * (0.7 + 0.3 * ramp(s, 0.02, 0.15)); bases[j].multiply(_l.makeScale(k, k, k)); }
@@ -302,7 +323,7 @@ export function createMusouView(parent, game, camera) {
       shard(_v.x, _v.y, _v.z, vrng.range(-0.3, 0.3), vrng.range(0, 0.6), vrng.range(-0.3, 0.3), vrng.range(0.25, 0.45), vrng.range(0.05, 0.09), 0.5, 1.4, 2.0);
     }
     shell.material.uniforms.uK.value = (0.14 + 0.26 * ramp(s, 0.35, 0.6)) * (1 - 0.7 * dissolve) * (0.85 + 0.15 * Math.sin(time * 17));   // (fx r1: 0.7× — a halo, not a fog; r3 acc: half while it surges through the fan)
-    const jaw = 0.18 + 0.22 * Math.max(0, Math.sin(time * 7)), wave = Math.sin(time * 11);
+    const jaw = 0.18 + 0.22 * Math.max(0, Math.sin(time * 7)) + 0.3 * rear, wave = Math.sin(time * 11);
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i], j = p.seg + 1;
       if (!vis[j]) { dragon.setMatrixAt(i, ZERO); shell.setMatrixAt(i, ZERO); ink.setMatrixAt(i, ZERO); continue; }
