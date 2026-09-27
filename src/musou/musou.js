@@ -5,7 +5,7 @@
 //   132 CONTACT (2.2 s): radial blast + a shock front rolling 15 m through the crowd ahead (launch fan, CHAIN ≈ 100 in
 //       0.25 s), the dragon bursts from the spear tip and surges through the crowd; the camera whips round to the flank
 //       that faces away from the sun (front-lit fan), holds low while the bodies fly, then eases back for the finisher
-//   166 hard cut to a low wide shot from behind him as the dragon rears for its dive (r3)
+//   174 hard cut to a low wide shot from behind him as the dragon dives (fx r3: the flank shot holds its rearing head)
 //   176 FINISHER: the dragon dives onto Zhao Yun and coils skyward; a ring wave launches everything in tiers
 //   200 control returns (≈3.35 s)
 // Emits musou:ready/start/hit/burst/end. The camera asks mu.shot() for the shot list; src/musou/view.js renders the
@@ -41,9 +41,13 @@ export const MUSOU = {
 // Surge ahead, sweep broadside through the crowd on the left — the far side from the payoff camera (mu.side mirrors it),
 // so it reads as a serpent crossing the frame — rear up high on that side and dive onto Zhao Yun for the finisher coil
 // (it never loops over the camera's side: the old arc passed 3 m from the lens and blotted out the finisher).
+// fx r3: after the sweep the head slows and rears to 3-4 m on the far side (it used to climb to 6 m, off the top of the
+// payoff frame, and was on screen for ≈ 0.2 s at a time): from s ≈ 0.2 to the dive at 0.69 it crosses the flank camera in
+// profile at head / banner height, its body draped along the sweep behind it (a serpent silhouette > 0.5 s), then strikes
+// down onto him for the coil.
 const DK = [
-  [-0.08, 0, 1.25, 0.4], [0, 0, 1.4, 1.9], [0.08, 0.5, 2.1, 5.6], [0.16, 2.4, 2.5, 8.4], [0.25, 5.6, 2.4, 8.4],
-  [0.34, 7.2, 2.6, 3.4], [0.43, 5.6, 3.6, 0.6], [0.52, 3.2, 5.4, 0.4], [0.6, 1.4, 6.0, 2.2], [0.67, 0.6, 4.2, 3.6],
+  [-0.08, 0, 1.25, 0.4], [0, 0, 1.4, 1.9], [0.08, 0.8, 2.1, 5.4], [0.16, 3.4, 2.6, 7.4], [0.25, 6.2, 3.0, 6.4],
+  [0.35, 7.2, 3.4, 4.4], [0.45, 6.8, 3.7, 2.8], [0.55, 5.8, 4.0, 2.0], [0.63, 4.6, 4.0, 2.0], [0.69, 2.6, 3.4, 2.8],
 ];
 { // coil: dive onto the hero (at forward = rushDist) and spiral up around him
   const s0 = MUSOU.finisher - MUSOU.contact, c = MUSOU.rushDist;
@@ -238,7 +242,7 @@ export function createMusou(game) {
     if (t < M.finisher) {
       h.musouClip = 'mu_rush'; h.musouT = (t - M.contact) / (M.finisher - M.contact);
       mu.toWorld(dragonAt(dragonArc(s), P3), W3);
-      if (k0 > 0 && k0 % 2 === 0 && W3[1] < 4.2) {                        // the dragon tears through the crowd
+      if (k0 > 0 && k0 % 2 === 0 && W3[1] < 3.2) {                        // the dragon tears through the crowd (not while it rears)
         hitAt(M.dragonHit, W3[0], W3[2], mu.ayaw, -2100 - t, true);
         emit('musou:hit', { x: W3[0], y: W3[1], z: W3[2], stage: 'dragon', yaw: mu.ayaw, n: k0 });
       }
@@ -292,12 +296,12 @@ export function createMusou(game) {
         height: 1.52 - 0.3 * v, side: -0.16 * (1 - v) });
     } else if (t < M.contact) {                            // low chase camera behind him (never into the sun)
       Object.assign(o, { id: 3, yaw: h.yaw, dist: 2.7, pitch: 0.08, fov: 54, height: 0.95 });
-    } else if (t >= M.finisher - 10) {
-      // r3 finisher: cut (as the dragon rears for its dive) to a low wide shot from behind him (DW9 ring-wave framing:
+    } else if (t >= M.finisher - 2) {
+      // r3 finisher: cut (fx r3: on the dive, so the flank shot holds the rearing head) to a low wide shot from behind him (DW9 ring-wave framing:
       // hero ≈ 20 % of frame height, the launched tiers stacked against the sky, the dive onto him and the coil in full
       // view). The old flank camera had the dive + coil 4–6 m from the lens and the wave dust between, a teal fog with
       // no hero in it. It is also the gameplay side of him, so the blend back to control is short.
-      const u = smooth((t - M.finisher + 10) / (M.end - M.finisher + 10));
+      const u = smooth((t - M.finisher + 2) / (M.end - M.finisher + 2));
       Object.assign(o, { id: 4, yaw: offSun(mu.ayaw + mu.side * 0.32), dist: 8.2 + 1.3 * u, pitch: -0.03 + 0.07 * u, fov: 58 - 4 * u,
         height: 1.5 + 0.3 * u, side: 0, shake: 0.6 });
     } else {
@@ -311,7 +315,7 @@ export function createMusou(game) {
       // the bottom half of the frame and hid him)
       Object.assign(o, { id: 3, yaw: offSun(mu.ayaw + sw * (1 - 0.2 * k)),
         dist: 2.7 + 2.5 * w + 0.5 * Math.min(1, c / 40) + 3.0 * k, pitch: 0.08 + 0.06 * w + 0.06 * k,
-        fov: 54 + 6 * w, height: 0.95 + 0.6 * w + 0.3 * k, side: mu.side * 1.5 * w * (1 - 0.8 * k), shake: 0.5 });
+        fov: 54 + 6 * w, height: 0.95 + 0.6 * w + 0.8 * k, side: mu.side * 1.5 * w * (1 - 0.5 * k), shake: 0.5 });   // (fx r3: + rises with the rearing head)
     }
     return o;
   };

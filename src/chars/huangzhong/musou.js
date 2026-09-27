@@ -51,7 +51,15 @@ export function createMusou(game) {
 
   mu.reset = () => { mu.active = false; mu.t = 0; mu.wasReady = false; mu.giantI = -1; push.length = 0; mu.proj.reset(); mu.aim.reset(); };
   mu.stepSpecial = (inp) => mu.aim.step(inp);
-  mu.aimShot = () => mu.aim.shot();
+  // fx r3: C2's follow shots (f 34–50) lock on the bodies it launched 4–6 m up; the gameplay rig framed his feet and
+  // they flew out of the top of the frame — the kit aim hook (camera.js, eased in / out) raises and levels the lens
+  // and C6's fire burst lands 5–12 m out wherever the soft lock took it (often at a frame edge, or between him and the
+  // lens, with its launched bodies smeared across the near DoF): the lens backs off and climbs to take in the ring
+  const juggle = { dist: 7.6, pitch: 0.2, fov: 52, height: 2.7, side: 0 }, blast = { dist: 9, pitch: 0.42, fov: 54, height: 1.4, side: 0 };
+  mu.aimShot = () => {
+    const h = game.hero, t = h.moveT, atk = h.state === 'attack';
+    return mu.aim.shot() || (atk && h.move === 'c2' && t >= 22 && t <= 70 ? juggle : atk && h.move === 'c6' && t >= 20 && t <= 78 ? blast : null);
+  };
 
   mu.start = (inp) => {
     const h = game.hero, c = game.crowd;
@@ -125,15 +133,23 @@ export function createMusou(game) {
       // explode where the army is: 2 m past the farthest soldier within 3 m of the line (it used to fly a fixed 26 m and
       // burst over empty ground whenever the fight was closer than ≈ 18 m — nearly always); the speed keeps the flight
       // time (GIANT_FRAMES: the audio build-up and the cameras are timed on it)
-      const fx = Math.sin(h.yaw), fz = Math.cos(h.yaw);
-      let far = 0;
-      for (let i = 0; i < c.N; i++) {
-        const st = c.st[i];
-        if (st === ST.OFF || st === ST.DEAD) continue;
-        const dx = c.x[i] - b.x, dz = c.z[i] - b.z, along = dx * fx + dz * fz;
-        if (along > far && along < M.giant.range && Math.abs(dx * fz - dz * fx) < 3) far = along;
+      // fx r3: burst where it takes the most soldiers — the point on the line (9–26 m) with the most standing within the
+      // blast radius. "2 m past the farthest soldier on the line" put it past the army once the volley had cleared the
+      // line itself: the finale exploded over empty grass and launched nobody.
+      const fx = Math.sin(h.yaw), fz = Math.cos(h.yaw), R2 = M.giant.burst.range * M.giant.burst.range;
+      let best = -1, bestD = 9;
+      for (let d = 9; d <= M.giant.range; d += 1.5) {
+        const px = b.x + fx * d, pz = b.z + fz * d;
+        let n = 0;
+        for (let i = 0; i < c.N; i++) {
+          const st = c.st[i];
+          if (st === ST.OFF || st === ST.DEAD || st === ST.DOWN) continue;
+          const dx = c.x[i] - px, dz = c.z[i] - pz;
+          if (dx * dx + dz * dz < R2) n++;
+        }
+        if (n > best * 1.15) { best = n; bestD = d; }                  // (nearer wins a near-tie: the camera frames it better)
       }
-      giant.range = Math.min(M.giant.range, Math.max(9, far + 2));
+      giant.range = bestD;
       giant.speed = giant.range * 60 / (GIANT_FRAMES - 1);
       mu.giantI = mu.proj.spawn(b.x, b.y, b.z, h.yaw, 0, giant, 'musou', -1);
       emit('arrow:fire', { x: b.x, y: b.y, z: b.z, yaw: h.yaw, n: 1, heavy: true, fire: true, big: 2, sky: false, move: 'musou' });

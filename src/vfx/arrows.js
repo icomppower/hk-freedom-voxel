@@ -17,9 +17,11 @@
 //  · heavy shots (fx r2): a core beam bow → arrow that holds ≈ 0.35 s on the whole line, air rings every 4 m, ground
 //    scuffs; under the aim lens every release layer is capped in screen pixels
 //  · rain (arrow:rain): a thin reticle (rim + ticks) with a ring closing onto it, a sky flare, and a render-only sheet of
-//    short dark streaks falling inside it, each landing with a puff
+//    ≈ 150 voxel arrows a second (own instanced mesh) falling inside it on one slant, each landing with a puff and
+//    standing in the ground for 0.7 s, so the circle visibly gets riddled (fx r3)
 //  · bursts (arrow:burst): small = flash, ring, dust (+ mini fireball and scorch when fire); big (C6) = explode(): 2-3
-//    frame white core, a soft fireball of cooling fire lumps (hot heart, dark rim → smoke), a column into a cap, dark
+//    frame white core, a soft fireball (fx r3: big hot body lumps + fast outer lumps, heat broken by 3-octave billows,
+//    drawn nearer the lens so it engulfs the rank inside it, kept off the lens side), a column into a cap, dark
 //    smoke behind, thin shock ring + front, dust skirt, sparks, embers, thrown earth, scorch decal, light, thump; the
 //    Musou giant's is the same ×1.9 with a thin hot light pillar
 //  · headshot: gold star burst, rings and flash over the officer's head
@@ -64,12 +66,12 @@ export function createArrowView(scene, game, proj, fx) {
   function endBeam(i, x, y, z) {
     beamOn[i] = 0;
     const ex = x - ox[i], ey = y - oy[i], ez = z - oz[i], L = Math.hypot(ex, ey, ez);
-    if (L < 0.3) return;
+    if (L < 0.3 || ex * proj.vx[i] + ey * proj.vy[i] + ez * proj.vz[i] < 0) return;     // (spent before it passed the beam root)
     // in a packed crowd the arrow is spent within 2-3 m: the force line still reads ≥ 7 m through the ranks
     const w = (proj.big[i] ? 1 : 0.7) * bw[i], dx = ex / L, dy = ey / L, dz = ez / L, Lb = Math.max(L, 7);
     const hx = ox[i] + dx * Lb, hy = oy[i] + dy * Lb, hz = oz[i] + dz * Lb;
-    fx.streak(hx, hy, hz, dx, dy, dz, Lb, 0.13 * w, 0.36, 2.8, 2.1, 1.0, 0.35);
-    fx.streak(hx, hy, hz, dx, dy, dz, Lb, 0.5 * w, 0.3, 0.55, 0.34, 0.12, 0.3);
+    fx.streak(hx, hy, hz, dx, dy, dz, Lb, 0.18 * w, 0.4, 2.8, 2.1, 1.0, 0.35);        // (fx r3: a notch bolder — at 9 m it read as a hairline)
+    fx.streak(hx, hy, hz, dx, dy, dz, Lb, 0.7 * w, 0.32, 0.55, 0.34, 0.12, 0.3);
   }
   // comet tail per arrow: a point that chases the head (≈ 70 ms lag), so the streak is as long as the flight is fast and
   // collapses onto the arrow when it stops; when an arrow vanishes into a body the tail finishes as a fading streak
@@ -108,26 +110,38 @@ export function createArrowView(scene, game, proj, fx) {
   /** Fireball (fx r2): n soft fire lumps (fx.fire: white-hot heart → orange → deep-red rim, cooling into the smoke that
    *  rises out of it) thrown out of a ball of radius R and slowed by drag, so the ball swells to ≈ R in ≈ 0.2 s and keeps
    *  its lumpy structure; a 2-3 frame white heart and a brief orange bloom under it. */
+  // fx r3: two layers — a few big slow body lumps hold the ball's mass (hot heart), smaller fast lumps swell its
+  // silhouette out to ≈ R and cool first into the dark rim; the body lumps spawn last so the hot heart draws on top
+  // (lumps heading at the lens are mirrored away, and a burst near the camera sits back behind its blast point, so the
+  // ball rises beyond the camera instead of filling it — C6 loosed back toward the gameplay lens burst 3 m from it)
+  let ballX = 0, ballZ = 0;
   function fireball(x, y, z, r, n, life) {
-    const R = Math.min(r, 7);
+    const R = Math.min(r, 7), nb = Math.max(3, Math.round(n * 0.3));
+    let cx = fx.cam.x - x, cz = fx.cam.z - z;
+    const cl = Math.hypot(cx, cz) || 1, back = Math.max(0, R * 3 - cl);
+    cx /= cl; cz /= cl; x -= cx * back; z -= cz * back; ballX = x; ballZ = z;
     for (let k = 0; k < n; k++) {
-      const a = vrng.range(0, 6.283), el = vrng.range(-0.15, 1), ce = Math.sqrt(1 - el * el), rr = R * 0.22 * Math.sqrt(vrng.next());
-      const sp = R * vrng.range(0.9, 2), s = R * vrng.range(0.7, 1.1), heat = k < n * 0.35 ? 1 : vrng.range(0.62, 0.9);
-      fx.fire(x + Math.cos(a) * rr, y + el * rr, z + Math.sin(a) * rr, s * 0.35, s, life * vrng.range(1.0, 1.5), heat,
+      let a = vrng.range(0, 6.283);
+      if (Math.cos(a) * cx + Math.sin(a) * cz > 0.35) a += Math.PI;
+      const body = k >= n - nb, el = vrng.range(-0.2, 1), ce = Math.sqrt(1 - el * el), rr = R * 0.15 * Math.sqrt(vrng.next());
+      const sp = R * (body ? vrng.range(0.4, 1.1) : vrng.range(1.5, 2.9)), s = R * (body ? vrng.range(0.95, 1.25) : vrng.range(0.5, 0.8));
+      const heat = body ? vrng.range(0.9, 1.05) : vrng.range(0.6, 0.92);
+      fx.fire(x + Math.cos(a) * rr, y + el * rr, z + Math.sin(a) * rr, s * 0.4, s, life * (body ? vrng.range(1.1, 1.4) : vrng.range(0.9, 1.3)), heat,
         Math.cos(a) * ce * sp, el * sp * 0.55 + 0.8, Math.sin(a) * ce * sp, 4.5, 1.3);
     }
-    fx.glow(x, y + R * 0.2, z, R * 0.3, R * 0.9, 0.05, 3.4, 3.1, 2.6);                   // white-hot heart: 2-3 frames
-    fx.glow(x, y + R * 0.2, z, R * 0.5, R * 1.1, 0.16, 0.5, 0.15, 0.02);                // orange bloom round the ball
+    fx.glow(x, y + R * 0.1, z, R * 0.35, R * 1.0, 0.05, 3.4, 3.1, 2.6);                  // white-hot heart: 2-3 frames
+    fx.glow(x, y + R * 0.1, z, R * 0.6, R * 1.3, 0.22, 0.55, 0.2, 0.03);                // orange bloom round the ball
   }
   /** Explosion (C6 fire arrow S = 1, the Musou giant S = 1.9), fx r2: 2-3 frame white core → a soft layered fireball
    *  (hot heart, orange body, dark churning rim) whose lumps cool into smoke → a column of lumps punching up into a
    *  mushroom cap, dark smoke rolling in behind (delayed); a fast bright ground shock ring + a thin shock front, a low
    *  dark dust skirt, sparks, embers, thrown earth, a scorch with cooling ember cracks, light, thump. The ball is sized
-   *  off the blast (C6: ≈ 0.6 r ≈ 2.9 m, so the burst ≥ 5 m out never swallows him; the giant ≈ 0.75 r, ≤ 7 m). */
-  function explode(x, z, r, S) {
-    const R = S > 1 ? Math.min(7, r * 0.75) : Math.min(5, r * 0.6), sq = Math.sqrt(S);
-    fx.glow(x, R * 0.45, z, R * 0.5, R * 1.5, 0.06, 3.4, 3.1, 2.6);                     // core flash
-    fireball(x, R * 0.35, z, R, Math.round(28 * S), 0.95 * sq);
+   *  off the blast (C6: ≈ 0.78 r ≈ 3.7 m, centred 2.6 m up so it stands over the helmets — fx r3; the giant ≈ 0.75 r, ≤ 7 m). */
+  function explode(x0, z0, r, S) {
+    const R = S > 1 ? Math.min(7, r * 0.75) : Math.min(5, r * 0.78), sq = Math.sqrt(S);
+    fireball(x0, R * 0.7, z0, R, Math.round(30 * S), 1.1 * sq);                       // (fx r3: centred over the helmets, not in the ranks)
+    const x = ballX, z = ballZ;                                                         // the volumes rise where the ball sits
+    fx.glow(x, R * 0.7, z, R * 0.5, R * 1.5, 0.06, 3.4, 3.1, 2.6);                     // core flash
     for (let k = 0; k < 7 * S; k++) {                                                   // column → mushroom cap
       const a = vrng.range(0, 6.283), rr = vrng.range(0, 0.3) * R;
       fx.fire(x + Math.cos(a) * rr, R * 0.5, z + Math.sin(a) * rr, R * 0.35, R * vrng.range(0.75, 1.0), vrng.range(1.6, 2.2) * sq, vrng.range(0.7, 0.85),
@@ -143,14 +157,14 @@ export function createArrowView(scene, game, proj, fx) {
       fx.smoke(x + Math.cos(a) * rr, vrng.range(0.3, 0.9) * R, z + Math.sin(a) * rr, R * 0.5, R * vrng.range(1.0, 1.4), vrng.range(2.5, 3.5),
         g * 1.15, g, g * 0.85, 0.85, Math.cos(a) * 1.5, vrng.range(0.4, 1.0) * sq, Math.sin(a) * 1.5, 1.2, 0.3, vrng.range(0.2, 0.45));
     }
-    fx.groundRing(x, z, 0.5, r * 1.6, 0.015, 0.28, 1.1, 0.65, 0.25);                          // shock ring: fast, thin, bright
-    fx.groundRing(x, z, 0.4, r * 1.2, 0.03, 0.45, 0.55, 0.18, 0.03, 0.03);                    // hot inner wave
+    fx.groundRing(x0, z0, 0.5, r * 1.6, 0.015, 0.28, 1.1, 0.65, 0.25);                          // shock ring: fast, thin, bright
+    fx.groundRing(x0, z0, 0.4, r * 1.2, 0.03, 0.45, 0.55, 0.18, 0.03, 0.03);                    // hot inner wave
     fx.ring(x, R * 0.5, z, 0, 0, 0, R * 0.4, R * 1.4, 0.02, 0.12, 1.1, 0.95, 0.8, 0, 1);      // thin shock front (camera-facing)
     dust(x, 0.3, z, Math.round(14 * S), 8 * S, 0.6 * S, 1.8 * S, 1.0, 0.5, EARTH_DUST);      // dust skirt (dark earth, low)
     sparks(x, 0.8, z, Math.round(26 * S), 0, 0.6, 0, 1.1, 20 * sq, 0.9, CORE_FIRE, 0.4);
     embers(x, 0.6, z, Math.round(40 * S), 6 * S, 11 * sq, 1.6);
     thrown(x, z, Math.round(16 * S), 6 * S, 10 * sq, 0.12, 0.28 * sq);
-    fx.scorch(x, z, r * 0.8, 9 * S, 1.4);
+    fx.scorch(x0, z0, r * 0.8, 9 * S, 1.4);
     fx.light(x, 1.8 * S, z, 6 * S, 0xff7020, 3.5);
     fx.kick(3.2 * sq, 0.32 * sq, 0.25, 1);
   }
@@ -224,7 +238,9 @@ export function createArrowView(scene, game, proj, fx) {
   let hitFrame = -1, hitN = 0;
   on('arrow:hit', (e) => {
     if (game.frame !== hitFrame) { hitFrame = game.frame; hitN = 0; }
-    const full = ++hitN <= 6, k = e.big > 1 ? 1.8 : e.big ? 1.4 : 1;
+    // (fx r3: a big pierce shot — C6 through 20, N6 through 14 — keeps its full contacts to the first 1-3 bodies of a frame;
+    // the rest are small, so the line and the burst stay the event instead of a sheet of yellow spikes)
+    const full = ++hitN <= (e.fire && e.big ? 1 : e.big ? 3 : 6), k = e.big > 1 ? 1.8 : e.big ? 1.4 : 1;
     const hp = fx.px(e.x, e.y, e.z) * 70;                                          // fx r2: a contact near the lens stays ≤ ≈ 70 px
     fx.glow(e.x, e.y, e.z, Math.min(0.25, hp * 0.2), Math.min((full ? 1.2 : 0.6) * k, hp), 0.09, 3.2, 2.4, 1.3);
     if (full) fx.glow(e.x, e.y, e.z, Math.min(0.6 * k, hp * 0.5), Math.min(1.8 * k, hp * 1.4), 0.16, 0.9, 0.45, 0.12);   // warm halo round the contact
@@ -257,20 +273,55 @@ export function createArrowView(scene, game, proj, fx) {
       fx.streak(e.x + ca * (e.r + 0.1), 0.12, e.z + sa * (e.r + 0.1), ca, 0, sa, l, 0.07, life, 2.2, 0.75, 0.18, 0.2);
     }
     fx.glow(e.x, 6.5, e.z, 0.8, 2.5, 0.4, 2.6, 1.5, 0.45);                                     // sky flare at the apex
-    Object.assign(rainFx, { x: e.x, z: e.z, r: e.r, t: 0, t0: e.delay * 0.6, t1: e.delay + e.over, acc: 0 });
+    const sa = vrng.range(0, 6.283);
+    Object.assign(rainFx, { x: e.x, z: e.z, r: e.r, t: 0, t0: e.delay * 0.7, t1: e.delay + e.over, acc: 0, sx: Math.cos(sa) * 0.2, sz: Math.sin(sa) * 0.2 });
   });
+  // fx r3: the sheet is real voxel arrows (render-only, own instanced mesh, compacted: idle = no draw), ≈ 150 a second
+  // from 4-8 m falling on one slant, each with a faint motion streak, that stand in the ground at the slant for 0.7 s
+  // with a puff — the additive streak sheet read as ≈ 10 pale lines and the ground never looked riddled
+  const NRAIN = 128, RAIN_STUCK = 0.7;
+  const rainMesh = new THREE.InstancedMesh(geo, arrows.material, NRAIN);
+  rainMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); rainMesh.frustumCulled = false; rainMesh.count = 0;
+  root.add(rainMesh);
+  const rn = { x: new Float32Array(NRAIN), y: new Float32Array(NRAIN), z: new Float32Array(NRAIN), dx: new Float32Array(NRAIN), dy: new Float32Array(NRAIN),
+    dz: new Float32Array(NRAIN), t: new Float32Array(NRAIN).fill(9), fall: new Uint8Array(NRAIN), next: 0 };
   function updateRain(dt) {
-    if (rainFx.t > rainFx.t1) return;
-    rainFx.t += dt;
-    if (rainFx.t < rainFx.t0) return;
-    rainFx.acc += dt * 220;
-    while (rainFx.acc >= 1) {                                  // (from 2.5-5.5 m: the gameplay camera looks down, higher was off the top)
-      rainFx.acc--;
-      const a = vrng.range(0, 6.283), rr = rainFx.r * Math.sqrt(vrng.next()), h = vrng.range(2.5, 5.5), v = 40, T = (h - 0.1) / v;
-      const gx = rainFx.x + Math.cos(a) * rr, gz = rainFx.z + Math.sin(a) * rr;
-      fx.spark(gx + 3.5 * T, h, gz + 1.8 * T, -3.5, -v, -1.8, 1.4, 0.05, T, 1.6, 1.0, 0.45, 0, 0, 0.6);
-      if (vrng.chance(0.4)) fx.smoke(gx, 0.1, gz, 0.15, 0.6, 0.45, DUSTC[0], DUSTC[1], DUSTC[2], 0.45, 0, 0.6, 0, 3, 0.3, T);   // lands with a puff
+    if (rainFx.t <= rainFx.t1) {
+      rainFx.t += dt;
+      if (rainFx.t >= rainFx.t0) rainFx.acc += dt * 150;
+      while (rainFx.acc >= 1) {
+        rainFx.acc--;
+        const j = rn.next; rn.next = (rn.next + 1) % NRAIN;
+        const a = vrng.range(0, 6.283), rr = rainFx.r * Math.sqrt(vrng.next()), h = vrng.range(4, 8), l = Math.hypot(rainFx.sx, 1, rainFx.sz);
+        rn.x[j] = rainFx.x + Math.cos(a) * rr - rainFx.sx * h; rn.y[j] = h; rn.z[j] = rainFx.z + Math.sin(a) * rr - rainFx.sz * h;
+        rn.dx[j] = rainFx.sx / l; rn.dy[j] = -1 / l; rn.dz[j] = rainFx.sz / l; rn.fall[j] = 1; rn.t[j] = 0;
+      }
     }
+    let n = 0;
+    for (let j = 0; j < NRAIN; j++) {
+      if (rn.t[j] >= RAIN_STUCK) continue;
+      const dx = rn.dx[j], dy = rn.dy[j], dz = rn.dz[j];
+      let y = rn.y[j], s = 1.4;
+      if (rn.fall[j]) {
+        const v = 32 * dt;
+        rn.x[j] += dx * v; rn.y[j] += dy * v; rn.z[j] += dz * v; y = rn.y[j];
+        if (y <= 0) {                                          // lands: stands in the ground, a puff and a tick of dust
+          const k = -y / dy; rn.x[j] -= dx * k; rn.z[j] -= dz * k; rn.y[j] = y = 0; rn.fall[j] = 0; rn.t[j] = 0;
+          if (vrng.chance(0.5)) fx.smoke(rn.x[j], 0.1, rn.z[j], 0.15, 0.7, 0.5, DUSTC[0], DUSTC[1], DUSTC[2], 0.5, 0, 0.7, 0, 3, 0.3);
+          if (vrng.chance(0.3)) sparks(rn.x[j], 0.1, rn.z[j], 2, 0, 1, 0, 0.8, 3, 0.18, [1.1, 0.8, 0.5], 0.2);
+        } else fx.line(rn.x[j], y, rn.z[j], dx, dy, dz, 1.6, 0.05, 0.8, 0.5, 0.22, 1.2);   // faint motion streak behind the shaft
+      } else {
+        rn.t[j] += dt;
+        y = -0.3 - Math.max(0, rn.t[j] - (RAIN_STUCK - 0.2)) / 0.2 * 0.9;                 // tip buried, sinks away at the end
+      }
+      const gy = y + ground(rn.x[j], rn.z[j]);
+      if (Math.hypot(rn.x[j] - fx.cam.x, gy - fx.cam.y, rn.z[j] - fx.cam.z) < 3.5) continue;   // one falling past the lens was a black bar
+      _q.setFromUnitVectors(FWD, _d.set(dx, dy, dz));
+      _m.compose(_p.set(rn.x[j], gy, rn.z[j]), _q, _s.setScalar(s));
+      rainMesh.setMatrixAt(n++, _m);
+    }
+    rainMesh.count = n;
+    if (n) rainMesh.instanceMatrix.needsUpdate = true;
   }
 
   // ---------------------------------------------------------------- bursts
@@ -304,7 +355,7 @@ export function createArrowView(scene, game, proj, fx) {
   });
 
   on('scenario', () => {
-    fx.clear(); prev.fill(0); pin.t.fill(9); giant.on = false; giant.fade = 0;
+    fx.clear(); prev.fill(0); pin.t.fill(9); giant.on = false; giant.fade = 0; rn.t.fill(9); rainFx.t = rainFx.t1 + 1; rainMesh.count = 0;
     for (let i = 0; i < N + NPIN; i++) arrows.setMatrixAt(i, ZERO);
     arrows.instanceMatrix.needsUpdate = true;
   });
@@ -423,15 +474,18 @@ export function createArrowView(scene, game, proj, fx) {
             tx[i] = x - dx * 0.5; ty[i] = y - dy * 0.5; tz[i] = z - dz * 0.5;
             beamOn[i] = isBeam(i) ? 1 : 0; ringAcc[i] = 0;
             if (beamOn[i]) {
-              ox[i] = x - dx * v / 60; oy[i] = y - dy * v / 60; oz[i] = z - dz * v / 60;
+              // (fx r3: under the aim lens the beam starts 2.5 m down range — its root at the bow, 3 m from the lens, was a
+              // screen-wide yellow bar over the target just lined up)
+              const o = hero.move === 'aim' ? -2.5 : v / 60;
+              ox[i] = x - dx * o; oy[i] = y - dy * o; oz[i] = z - dz * o;
               bw[i] = Math.max(0.25, Math.min(1, fx.px(ox[i], oy[i], oz[i]) * 90));   // thin from the aim lens: no haze over the target
             }
           }
           if (beamOn[i]) {                                      // the live beam: bow → arrow
             const ex = x - ox[i], ey = y - oy[i], ez = z - oz[i], L = Math.hypot(ex, ey, ez), w = (heavy ? 1 : 0.7) * bw[i];
-            if (L > 0.5) {
-              fx.line(x, y, z, ex / L, ey / L, ez / L, L, 0.13 * w, 3.0, 2.3, 1.1, 0.35);
-              fx.line(x, y, z, ex / L, ey / L, ez / L, L, 0.5 * w, 0.6, 0.36, 0.12, 0.3);
+            if (L > 0.5 && ex * dx + ey * dy + ez * dz > 0) {
+              fx.line(x, y, z, ex / L, ey / L, ez / L, L, 0.18 * w, 3.0, 2.3, 1.1, 0.35);
+              fx.line(x, y, z, ex / L, ey / L, ez / L, L, 0.7 * w, 0.6, 0.36, 0.12, 0.3);
             }
           }
           const kf = 1 - Math.exp(-dt * 14);
