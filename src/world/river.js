@@ -134,10 +134,10 @@ function waveTile() {
     const sx = (h(1, 0) - h(-1, 0)) * 7, sy = (h(0, 1) - h(0, -1)) * 7;
     let f1 = 1e9, f2 = 1e9;
     for (const [px, py] of pts) for (let oy = -N; oy <= N; oy += N) for (let ox = -N; ox <= N; ox += N) {
-      const d = Math.hypot(x - px - ox, y - py - oy);
+      const ex = x - px - ox, ey = y - py - oy, d = ex * ex + ey * ey;       // squared: sqrt only the two winners
       if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
     }
-    const c = Math.pow(1 - smooth(0, 9, f2 - f1), 2);
+    const c = Math.pow(1 - smooth(0, 9, Math.sqrt(f2) - Math.sqrt(f1)), 2);
     data[k * 4] = Math.max(0, Math.min(255, 128 - sx * 128)); data[k * 4 + 1] = Math.max(0, Math.min(255, 128 - sy * 128));
     data[k * 4 + 2] = c * 255; data[k * 4 + 3] = Math.min(1, hgt[k]) * 255;
   }
