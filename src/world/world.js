@@ -2,12 +2,13 @@
 // straight up the valley between the castle's corner tower and the camp-shelf watchtowers, sun-aware aerial haze
 // (warm toward the sun, mauve away), voxel terrain with canyon cliffs, the Han River, the castle wall as the Wei
 // camp's front, 魏/蜀 banners with cloth motion, fires with smoke columns and embers, reserve armies, and layered
-// mountains with Dingjun's peak behind the summit. Render-only: never touches sim state (it reads the gate states);
-// all animation is a pure function of render time.
+// mountains with Dingjun's peak behind the summit. Render-only: never touches sim state (it reads the gate states;
+// river.js reads who wades the ford); all animation is a pure function of render time.
 import * as THREE from 'three';
 import { SUN_DIR, HAZE, installHaze, createSky } from './sky.js';
 import { buildTerrain, GRASS_TIME } from './terrain.js';
 import { buildCastle } from './castle.js';
+import { createRiver } from './river.js';
 import { buildDressing } from './dressing.js';
 import { WALL_Z, GATE_X, CAMP_H, GATES, ground } from './map.js';
 
@@ -53,6 +54,7 @@ export function createWorld(scene) {
   scene.add(rim);
 
   buildTerrain(scene, FIELD_FIRES);
+  const river = createRiver(scene);
   const camp = new THREE.Group();                                   // the castle set stands on the camp plateau
   camp.position.y = CAMP_H;
   scene.add(camp);
@@ -84,8 +86,9 @@ export function createWorld(scene) {
   let t = 0;
   return {
     fires: dressing.fires,
-    update(dt, focus) {
+    update(dt, focus, game) {
       t += dt;
+      river.update(dt, game);
       // shadow frustum follows the focus (snapped to texels to avoid shimmer), at the ground under it
       const step = 2 * SHADOW_BOX / 2048;
       tmp.set(Math.round(focus.x / step) * step, ground(focus.x, focus.z), Math.round(focus.z / step) * step);

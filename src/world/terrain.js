@@ -6,13 +6,12 @@
 //    along the pass (DW8's canyon stages), low ridges round the camp plateau, gentle hills round the ford, a drop on
 //    the summit's rim (the vista). Only exposed faces are built, so a camera that slips inside a cliff sees through it;
 //    they receive shadows but cast none (a 30 m wall would black out the whole pass floor under the low sun);
-//  · the Han River (water shader strip, stepping stones + foam at the fords), rubble,
-//    pines on the heights, and layered hazy mountains with Dingjun's peak behind the summit.
+//  · rubble, pines on the heights, and layered hazy mountains with Dingjun's peak behind the summit.
 import * as THREE from 'three';
 import { makeRng, hash01 } from '../core/rng.js';
 import { boxesGeometry } from '../core/voxel.js';
-import { hazeColor, SUN_DIR, SUN_AZ, SKY_UP } from './sky.js';
-import { TERRAIN as G, PIECE_IDS, ground, noise2, smooth, riverZ, routeDist, onProp, FORDS, WATER_Y, SUMMIT_H, CAMP_H, WALL_Z, GATE_X } from './map.js';
+import { hazeColor, SUN_DIR, SUN_AZ } from './sky.js';
+import { TERRAIN as G, PIECE_IDS, ground, noise2, smooth, riverZ, routeDist, onProp, SUMMIT_H, CAMP_H, WALL_Z, GATE_X } from './map.js';
 
 const { x0: X0, z0: Z0, step: S, nx: NX, nz: NZ } = G;
 
@@ -487,140 +486,6 @@ function pines() {
   return grp;
 }
 
-// ---------------------------------------------------------------- Han River
-/** Water: smooth ripples scrolling downstream (two noise layers + chop), Fresnel reflection of the golden-hour sky
- *  (dwHaze toward the horizon, dusk blue overhead), HDR-capped sun sparkles toward SUN_DIR, darker depth in the pools, foam
- *  round the stepping stones and along the banks (tFoam, a mask in strip uv), a soft shoreline; the haze chunk fogs it. */
-const WATER_VS = /* glsl */`
-  varying vec3 vWp; varying vec2 vUv;
-  #include <fog_pars_vertex>
-  void main() {
-    vec4 wp = modelMatrix * vec4(position, 1.0);
-    vWp = wp.xyz; vUv = uv;
-    vec4 mvPosition = viewMatrix * wp;
-    gl_Position = projectionMatrix * mvPosition;
-    #include <fog_vertex>
-  }`;
-const WATER_FS = /* glsl */`
-  uniform float uTime; uniform sampler2D tFoam; uniform vec3 uSun, uSkyUp, uSunCol, uDeep, uShallow;
-  varying vec3 vWp; varying vec2 vUv;
-  #include <fog_pars_fragment>
-  float wHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float wNoise(vec2 p) {
-    vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(wHash(i), wHash(i + vec2(1.0, 0.0)), f.x), mix(wHash(i + vec2(0.0, 1.0)), wHash(i + vec2(1.0, 1.0)), f.x), f.y);
-  }
-  float wH(vec2 p) { return wNoise(p * vec2(0.35, 0.8) - vec2(uTime * 0.45, 0.0)) * 0.6 + wNoise(p * vec2(1.1, 1.6) - vec2(uTime * 0.8, uTime * 0.2)) * 0.4; }   // flows +x
-  void main() {
-    // smooth ripples (the old 33 cm voxel grid read as grey paving tiles): two scrolling layers + a fine chop
-    vec2 q = vWp.xz;
-    float h0 = wH(q), hx = wH(q + vec2(0.12, 0.0)), hz = wH(q + vec2(0.0, 0.12));
-    float c0 = wNoise(q * 3.1 + vec2(uTime * 1.3, uTime * 0.4));
-    vec3 N = normalize(vec3((h0 - hx) * 2.2 + (c0 - 0.5) * 0.12, 1.0, (h0 - hz) * 2.2 + (wNoise(q * 3.1 + 7.0 - uTime * 0.9) - 0.5) * 0.12));
-    vec3 V = normalize(vWp - cameraPosition);
-    vec3 R = reflect(V, N); R.y = abs(R.y);
-    float fr = 0.04 + 0.52 * pow(1.0 - max(dot(-V, N), 0.0), 4.0);
-    vec3 sky = uSkyUp * 0.55;
-    #ifdef USE_FOG
-      sky = dwHaze(normalize(vec3(R.x, 0.0, R.z)), fogColor) * 0.75;
-    #endif
-    sky = mix(sky, uSkyUp * 0.6, smoothstep(0.03, 0.55, R.y));              // Fresnel sky: warm horizon → dusk blue up
-    float across = abs(vUv.y * 2.0 - 1.0);
-    // darker, saturated teal in the channel, olive-brown shallows toward the banks, a little depth from the ripples
-    vec3 body = mix(uDeep, uShallow, smoothstep(0.3, 0.97, across) + 0.3 * (h0 - 0.5));
-    vec3 c = mix(body, sky * vec3(0.96, 0.92, 0.8), fr);                    // the reflection takes the water's brown
-    // sun glint: tight sparkles on the ripple normals + a faint sheen, capped in HDR so bloom keeps it a sparkle strip
-    float sg = max(dot(R, uSun), 0.0);
-    c += uSunCol * min(pow(sg, 900.0) * 2.4 * step(0.55, c0) + pow(sg, 90.0) * 0.18 + pow(sg, 12.0) * 0.03, 1.7);
-    float fm = texture2D(tFoam, vUv).r;
-    // streak noise stretched along the flow (+x) and scrolling with it: foam breaks into thin downstream threads
-    float fn = wNoise(q * vec2(0.9, 7.0) - vec2(uTime * 1.3, 0.0)) * 0.6 + wNoise(q * vec2(2.2, 14.0) - vec2(uTime * 1.9, 0.0)) * 0.4;
-    // foam lives only where the mask puts it (collars + wakes behind the stones) and on a narrow soft lace at the
-    // waterline; translucent, so it reads as aerated water, never an opaque white fleck
-    float lace = smoothstep(0.9, 0.955, across) * (1.0 - smoothstep(0.965, 0.99, across));
-    float foam = smoothstep(0.1, 0.45, fm * (0.4 + fn * 0.9)) * 0.55 + smoothstep(0.5, 0.85, fn) * lace * 0.3;
-    c = mix(c, vec3(0.7, 0.69, 0.64), foam);
-    float a = mix(0.84, 0.97, fr) * (1.0 - smoothstep(0.9, 1.0, across));  // soft shoreline
-    gl_FragColor = vec4(c, a);
-    #include <fog_fragment>
-  }`;
-
-function river() {
-  const grp = new THREE.Group();
-  // a strip following the centreline across the whole grid, 15.6 m wide, a little wider than the cut (uv: along, across)
-  const n = 112, HW = 7.8, W = (NX - 1) * S, pos = [], uv = [], idx = [];
-  for (let s = 0; s <= n; s++) {
-    const x = X0 + (s / n) * W, z = riverZ(x);
-    pos.push(x, WATER_Y, z - HW, x, WATER_Y, z + HW);
-    uv.push(s / n, 0, s / n, 1);
-    if (s < n) { const o = s * 2; idx.push(o, o + 1, o + 2, o + 1, o + 3, o + 2); }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  geo.setIndex(idx); geo.computeVertexNormals();
-  // stepping stones marking each crossing + scattered boulders in the pools
-  const r = makeRng(33), stones = [];
-  for (const [a, b] of FORDS) for (let x = a + 1.5; x < b - 1; x += r.range(1.6, 2.6)) for (let o = -4; o <= 4; o += r.range(2.2, 3.2)) {
-    if (r.chance(0.35)) continue;
-    stones.push([x + r.range(-0.4, 0.4), riverZ(x) + o, r.range(0.55, 0.9), r.range(0.3, 0.42)]);   // tops just clear of the water
-  }
-  for (let i = 0; i < 40; i++) { const x = r.range(-100, 100); stones.push([x, riverZ(x) + r.range(-6, 6), r.range(0.8, 2.2), r.range(0.5, 1.4)]); }
-  // foam mask in strip uv (8 px/m along, 8 px/m across): a thin collar hugging every stone and its wake — a tapering
-  // streak trailing downstream (+x), the shader breaks it into threads
-  const FW = 1792, FH = 128, fc = document.createElement('canvas'); fc.width = FW; fc.height = FH;
-  const fg = fc.getContext('2d');
-  fg.fillStyle = '#000'; fg.fillRect(0, 0, FW, FH);
-  fg.filter = 'blur(1px)';
-  for (const [x, z, w] of stones) {
-    if (z - riverZ(x) > HW - 0.8 || z - riverZ(x) < -HW + 0.8) continue;
-    const u = (x - X0) / W * FW, v = (z - riverZ(x) + HW) / (2 * HW) * FH, pu = FW / W, pv = FH / (2 * HW), rw = w * 0.5 + 0.12;
-    fg.save(); fg.translate(u, v);
-    const gr = fg.createRadialGradient(0, 0, 0, 0, 0, (rw + 0.18) * pu);                // collar: a ring just outside the stone
-    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.62, 'rgba(255,255,255,0)'); gr.addColorStop(0.8, 'rgba(255,255,255,0.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    fg.fillStyle = gr; fg.scale(1, pv / pu); fg.beginPath(); fg.arc(0, 0, (rw + 0.18) * pu, 0, 6.2832); fg.fill();
-    const L = (1.8 + w * 2.2) * pu, wk = fg.createLinearGradient(0, 0, L, 0);            // wake: two threads off the stone's flanks
-    wk.addColorStop(0, 'rgba(255,255,255,0.5)'); wk.addColorStop(1, 'rgba(255,255,255,0)');
-    fg.fillStyle = wk;
-    for (const sd of [-1, 1]) { fg.beginPath(); fg.moveTo(0, sd * rw * 0.9 * pu); fg.lineTo(L, sd * rw * 0.35 * pu); fg.lineTo(L, sd * rw * 0.15 * pu); fg.lineTo(0, sd * rw * 0.45 * pu); fg.fill(); }
-    fg.restore();
-  }
-  const foam = new THREE.CanvasTexture(fc);
-  foam.wrapS = THREE.RepeatWrapping;
-  foam.flipY = false;                            // canvas row 0 = uv.y 0: with the default flip every collar sat mirrored across the channel
-  const water = new THREE.Mesh(geo, new THREE.ShaderMaterial({
-    vertexShader: WATER_VS, fragmentShader: WATER_FS, transparent: true, depthWrite: false, fog: true,
-    uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), uTime: GRASS_TIME, tFoam: { value: foam }, uSun: { value: SUN_DIR },
-      uSkyUp: { value: SKY_UP }, uSunCol: { value: new THREE.Color(1.0, 0.72, 0.4) }, uDeep: { value: new THREE.Color(0x0b2524) }, uShallow: { value: new THREE.Color(0x434630) } },
-  }));
-  water.renderOrder = 0.5;
-  water.name = 'river';
-  grp.add(water);
-  // stones: dry tops, a dark wet band down to the waterline (+ a wet sheen), sunk into the water
-  const smMat = new THREE.MeshStandardMaterial({ roughness: 0.75, flatShading: true });
-  smMat.onBeforeCompile = (sh) => {
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vStoneY;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvStoneY = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).y;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vStoneY;')
-      .replace('#include <color_fragment>', `#include <color_fragment>
-        float wet = 1.0 - smoothstep(${(WATER_Y + 0.04).toFixed(2)}, ${(WATER_Y + 0.13).toFixed(2)}, vStoneY);
-        diffuseColor.rgb *= mix(1.0, 0.38, wet);`)
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.3, wet);');
-  };
-  // a faceted, flattened dodecahedron (36 tris): a water-worn rock, not a floating tile
-  const sm = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.62, 0), smMat, stones.length);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color();
-  const SCOL = [0x7c7466, 0x6c685e, 0x847868, 0x686452];                        // grey-brown river stone, a little moss
-  stones.forEach(([x, z, w, h], i) => {
-    const top = r.range(0.14, 0.3);
-    sm.setMatrixAt(i, m.compose(p.set(x, WATER_Y + top - h / 2, z), q.setFromEuler(e.set(r.range(-0.15, 0.15), r.range(0, 3), r.range(-0.15, 0.15))), s.set(w, h, w * r.range(0.7, 1.1))));
-    sm.setColorAt(i, c.set(SCOL[r.int(0, 3)]).multiplyScalar(r.range(0.8, 1.1)));
-  });
-  sm.receiveShadow = true;
-  grp.add(sm);
-  return grp;
-}
-
 // ---------------------------------------------------------------- rubble
 /** Clusters of loose voxel rubble over the walkable field: broken paving, masonry chunks and charred planks, < 0.4 m. */
 function rubble() {
@@ -730,5 +595,5 @@ export function buildTerrain(scene, fieldFires) {
   for (let i = 0; i < 26; i++) scorch.push([r.range(-40, 40), r.range(-110, 200), r.range(0.5, 0.9)]);
   // burnt ground where the camp and the summit were fought over (courtyard, parade ground, round the beacon)
   scorch.push([-20, 132, 0.8], [-3, 116, 0.7], [-30, 121, 0.6], [-9, 186, 0.8], [13, 188, 0.7], [15, 215, 1.1], [-4, 176, 0.6]);
-  scene.add(groundMesh(scorch), cliffs(), pines(), river(), rubble(), tufts(), boulders(), mountains());
+  scene.add(groundMesh(scorch), cliffs(), pines(), rubble(), tufts(), boulders(), mountains());
 }

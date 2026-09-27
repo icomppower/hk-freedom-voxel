@@ -1,5 +1,5 @@
 // Battlefield dressing, zone by zone along the 定軍山 route: 蜀軍本陣 (palisade, gate towers, tents, 蜀 standards,
-// braziers), 漢水 ford (reeds, stepping stones in terrain.js, supply carts, wrecks), 山道 (Wei standards, watchtowers
+// braziers), 漢水 ford (reeds, stepping stones in river.js, supply carts, wrecks), 山道 (Wei standards, watchtowers
 // and archers on the cliff tops over the chokepoint, its barricade), the plaza before the wall (siege debris),
 // 魏軍營寨 courtyard (palisade, tents beyond it, racks, braziers), the ramp (torches, flags, its barricade) and the
 // summit (夏侯淵's command pavilion, war drums, the great 夏侯 banner, the beacon whose smoke marks the goal from the

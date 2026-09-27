@@ -94,7 +94,7 @@ function render(real) {
   vfx.update(dt);
   camRig.update(dt);
   screens[state]?.view?.(scene, camRig.camera, camRig.focus, dt);   // ui lane: a screen may frame the idle field itself
-  world.update(dt, camRig.focus);
+  world.update(dt, camRig.focus, game);
   musouView.update(dt);
   post.render(scene, camRig.camera, game.frame / 60, camRig.focus, vfx.flash);   // post-fx: DoF focus + screen flash
   hud.update();
