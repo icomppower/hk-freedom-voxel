@@ -115,7 +115,9 @@ const SMOKE_FS = /* glsl */`
       // fx r3: heat broken up by the billows (not a radial gradient per lump: every lump read as an orange disc with a
       // brown outline — a cluster of polka dots); while hot the rim goes translucent instead of dark, so overlapping lumps
       // merge into one ball, and only cooled lumps (outer / older) turn into the dark smoke that frames it
-      float t = vHeat.x * (1.2 - 1.1 * r) + (n - 0.5) * 0.9 * vHeat.x;
+      // fx r5: + a heart over the inner ≈ 30 % for lumps still at heat ≥ 0.8 (a fireball's first ≈ 7 frames) — the ramp's
+      // yellow-white band used to reach only the centre ≈ 10 % of a lump, a speck under its neighbours' orange: no core
+      float t = vHeat.x * (1.2 - 1.1 * r) + (n - 0.5) * 0.9 * vHeat.x + 0.45 * smoothstep(0.8, 1.0, vHeat.x) * (1.0 - smoothstep(0.1, 0.5, r));
       float fire = smoothstep(0.02, 0.26, t);
       col = mix(col, fireRamp(t) * (0.75 + 0.5 * n) * dens * vCol.a, fire);
       a *= mix(1.0, 0.45 + 0.5 * fire, smoothstep(0.12, 0.45, vHeat.x));

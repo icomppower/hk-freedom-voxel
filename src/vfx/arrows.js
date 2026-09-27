@@ -19,8 +19,8 @@
 //  · rain (arrow:rain): a thin reticle (rim + ticks) with a ring closing onto it, a sky flare, and a render-only sheet of
 //    ≈ 150 voxel arrows a second (own instanced mesh) falling inside it on one slant, each landing with a puff and
 //    standing in the ground for 0.7 s, so the circle visibly gets riddled (fx r3)
-//  · bursts (arrow:burst): small = flash, ring, dust (+ mini fireball and scorch when fire); big (C6) = explode(): 2-3
-//    frame white core, a soft fireball (fx r3: big hot body lumps + fast outer lumps, heat broken by 3-octave billows,
+//  · bursts (arrow:burst): small = flash, ring, dust (+ mini fireball and scorch when fire); big (C6) = explode(): ≈ 7
+//    frame yellow-white core (fx r5), a soft fireball (fx r3: big hot body lumps + fast outer lumps, heat broken by 3-octave billows,
 //    drawn nearer the lens so it engulfs the rank inside it, kept off the lens side), a column into a cap, dark
 //    smoke behind, thin shock ring + front, dust skirt, sparks, embers, thrown earth, scorch decal, light, thump; the
 //    Musou giant's is the same ×1.9 with a thin hot light pillar
@@ -110,17 +110,20 @@ export function createArrowView(scene, game, proj, fx) {
   }
   /** Fireball (fx r2): n soft fire lumps (fx.fire: white-hot heart → orange → deep-red rim, cooling into the smoke that
    *  rises out of it) thrown out of a ball of radius R and slowed by drag, so the ball swells to ≈ R in ≈ 0.2 s and keeps
-   *  its lumpy structure; a 2-3 frame white heart and a brief orange bloom under it. */
+   *  its lumpy structure; a ≈ 7 frame yellow-white heart and a brief orange bloom under it. */
   // fx r3: two layers — a few big slow body lumps hold the ball's mass (hot heart), smaller fast lumps swell its
   // silhouette out to ≈ R and cool first into the dark rim; the body lumps spawn last so the hot heart draws on top
   // (lumps heading at the lens are mirrored away, and a burst near the camera sits back behind its blast point, so the
   // ball rises beyond the camera instead of filling it — C6 loosed back toward the gameplay lens burst 3 m from it)
+  // fx r5: `under(x, z)` spawns lumps at the placed ball before its own — the smoke pool draws in spawn (slot) order
+  // with "over" blending, so anything spawned after the body lumps paints over the hot heart
   let ballX = 0, ballZ = 0;
-  function fireball(x, y, z, r, n, life, s0 = 0.4, sk = 1) {
+  function fireball(x, y, z, r, n, life, s0 = 0.4, sk = 1, under = null) {
     const R = Math.min(r, 7), nb = Math.max(3, Math.round(n * 0.3));
     let cx = fx.cam.x - x, cz = fx.cam.z - z;
     const cl = Math.hypot(cx, cz) || 1, back = Math.max(0, R * 1.8 - cl);          // (fx r3 acc: 1.8 R, was 3 R — it shoved
     cx /= cl; cz /= cl; x -= cx * back; z -= cz * back; ballX = x; ballZ = z;        // the finale's ball 6 m off its blast point)
+    if (under) under(x, z);
     for (let k = 0; k < n; k++) {
       let a = vrng.range(0, 6.283);
       if (Math.cos(a) * cx + Math.sin(a) * cz > 0.35) a += Math.PI;
@@ -130,26 +133,29 @@ export function createArrowView(scene, game, proj, fx) {
       fx.fire(x + Math.cos(a) * rr, y + el * rr, z + Math.sin(a) * rr, s * s0, s, life * (body ? vrng.range(1.1, 1.4) : vrng.range(0.9, 1.3)), heat,
         Math.cos(a) * ce * sp, el * sp * 0.55 + 0.8, Math.sin(a) * ce * sp, 4.5, 1.3);
     }
-    fx.glow(x, y + R * 0.1, z, R * 0.35, R * 1.0, 0.05, 3.4, 3.1, 2.6);                  // white-hot heart: 2-3 frames
+    // fx r5: yellow-white heart ≈ 0.2-0.7 R across for ≈ 7 frames (was R 0.35 → 1.0 white for 2-3 frames: a pale disc the
+    // size of the ball, gone before the lumps faded in)
+    fx.glow(x, y + R * 0.1, z, R * 0.2, R * 0.7, 0.12, 3.2, 2.6, 1.5);
     fx.glow(x, y + R * 0.1, z, R * 0.6, R * 1.3, 0.22, 0.55, 0.2, 0.03);                // orange bloom round the ball
   }
   /** Explosion (C6 fire arrow S = 1, the Musou giant S = 1.9). fx r3 acceptance: a GROUND-level blast — the ball (C6 R ≈
    *  4.4 m, the giant ≤ 7 m) is centred 0.42 R up, so it sits in the ranks and the launched bodies are thrown through and
    *  cut out against it (it used to hang 2.6 m / 4.5 m up, a puff over the helmets); its lumps bloom to ≈ 70 % size at
-   *  once. Layers: 4-5 frame white core → hot heart / orange body / dark cooled rim (fireball) → a stem of lumps punching
+   *  once. Layers: yellow-white core → hot heart / orange body / dark cooled rim (fireball) → a stem of lumps punching
    *  up and spreading into a mushroom cap past the top of the frame → dark smoke rolling in behind; on the ground a broad
    *  bright shock ring, a hot inner wave, a ring wall of dark dust driven outward, sparks, embers, thrown earth, scorch,
    *  light, thump. */
   function explode(x0, z0, r, S) {
     const R = S > 1 ? Math.min(7, r * 0.75) : Math.min(5.5, r * 1.15), sq = Math.sqrt(S);
-    fireball(x0, R * 0.42, z0, R, Math.round(40 * S), 1.35 * sq, 0.7, 1.25);
-    const x = ballX, z = ballZ;
-    fx.glow(x, R * 0.45, z, R * 0.6, R * 1.6, 0.08, 3.4, 3.1, 2.6);                     // core flash (4-5 frames)
-    for (let k = 0; k < 10 * S; k++) {                                                  // stem → mushroom cap
-      const a = vrng.range(0, 6.283), rr = vrng.range(0, 0.25) * R, cap = k % 3 === 0, v = cap ? 2.6 : 0.6;
-      fx.fire(x + Math.cos(a) * rr, R * 0.55, z + Math.sin(a) * rr, R * 0.3, R * vrng.range(0.7, cap ? 1.05 : 0.8), vrng.range(1.8, 2.5) * sq, vrng.range(0.72, 0.88),
-        Math.cos(a) * v * S, vrng.range(6.5, 9) * sq, Math.sin(a) * v * S, 1.5, 0.7);
-    }
+    // fx r5: the orange stem lumps spawn under the fireball (they sat at the heart's height, drawn over it: no core)
+    fireball(x0, R * 0.42, z0, R, Math.round(40 * S), 1.35 * sq, 0.7, 1.25, (x, z) => {
+      for (let k = 0; k < 10 * S; k++) {                                                // stem → mushroom cap
+        const a = vrng.range(0, 6.283), rr = vrng.range(0, 0.25) * R, cap = k % 3 === 0, v = cap ? 2.6 : 0.6;
+        fx.fire(x + Math.cos(a) * rr, R * 0.55, z + Math.sin(a) * rr, R * 0.3, R * vrng.range(0.7, cap ? 1.05 : 0.8), vrng.range(1.8, 2.5) * sq, vrng.range(0.72, 0.88),
+          Math.cos(a) * v * S, vrng.range(6.5, 9) * sq, Math.sin(a) * v * S, 1.5, 0.7);
+      }
+    });
+    const x = ballX, z = ballZ;                                                         // (fx r5: core flash R 0.6 → 1.6 cut — the heart is fireball's)
     for (let k = 0; k < 8 * S; k++) {                                                   // flame tongues licking up
       const a = vrng.range(0, 6.283), d = vrng.range(0.2, 0.8) * R;
       fx.spark(x + Math.cos(a) * d, 0.4, z + Math.sin(a) * d, Math.cos(a) * 2, vrng.range(7, 13) * sq, Math.sin(a) * 2,
