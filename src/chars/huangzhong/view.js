@@ -243,10 +243,12 @@ export function createMusouView(parent, game, camera) {
     }
   }
 
+  let warm = 2;   // first renders draw every pool once (fx.warm): real draws, not just post.compile — no hitch on the first Musou
   return {
     update(dt) {
       arrows.update(dt);
       updateAim();
+      if (warm > 0 && tv < 0) { warm--; dots.visible = true; fx.warm(); fx.update(dt); fx.applyKick(); return; }
       if (mu.active) tv = mu.t;
       else if (tv >= 0) { tv += dt * 60; if (tv > M.end + GIANT_FRAMES) tv = -1; }
       if (!mu.active) { lastT = -1; ringAcc = 0; }
