@@ -208,7 +208,8 @@ export function createMusouView(parent, game, camera) {
   // fx r1: fewer, dimmer light shards at the payoffs (45 + 30 HDR shards bloomed into a cyan cloud over the launch fan)
   on('musou:hit', (e) => { if (e.stage === 'contact') { contactF = game.frame; burst(e.x, e.y, e.z, 26, 11, 7, 0.11, 0.35); } });
   on('musou:burst', (e) => { burstF = game.frame; burst(e.x, 0.6, e.z, 18, 18, 9, 0.11, 0.26); });
-  on('ko', (e) => { if (mu.active) for (let i = 0; i < 2; i++) shard(e.x, e.y, e.z, e.dx * 5 + vrng.range(-2, 2), vrng.range(2, 7), e.dz * 5 + vrng.range(-2, 2), vrng.range(0.3, 0.55), vrng.range(0.08, 0.14), 0.4, 1.0, 1.5); });
+  // fx r4: one sub-bloom shard per KO (two HDR ones per KO bloomed + DOF'd into the big cyan balls over the contact fan)
+  on('ko', (e) => { if (mu.active) shard(e.x, e.y, e.z, e.dx * 5 + vrng.range(-2, 2), vrng.range(2, 7), e.dz * 5 + vrng.range(-2, 2), vrng.range(0.3, 0.55), vrng.range(0.05, 0.09), 0.3, 0.75, 1.05); });
   on('scenario', () => { tv = -1; sh.life.fill(0); for (let i = 0; i < NSH; i++) sh.m.setMatrixAt(i, ZERO); sh.m.instanceMatrix.needsUpdate = true; });
 
   function hideAll() {
@@ -229,7 +230,7 @@ export function createMusouView(parent, game, camera) {
       sh.x[o] += sh.v[o] * dt; sh.x[o + 1] = Math.max(0.05, sh.x[o + 1] + sh.v[o + 1] * dt); sh.x[o + 2] += sh.v[o + 2] * dt;
       sh.rot[i] += dt * 9;
       const cd = Math.hypot(sh.x[o] - camera.position.x, sh.x[o + 1] - camera.position.y, sh.x[o + 2] - camera.position.z);
-      const w = sh.size[i] * Math.min(1, sh.life[i] / sh.max[i] * 2.5) * Math.min(1, Math.max(0, (cd - 2.5) / 3));   // (r3 acc: none at the lens — DoF made them cyan blobs)
+      const w = sh.size[i] * Math.min(1, sh.life[i] / sh.max[i] * 2.5) * Math.min(1, Math.max(0, (cd - 4) / 4));   // (r3 acc: none at the lens — DoF made them cyan blobs; fx r4: 4–8 m fade)
       _q.setFromAxisAngle(_v.set(0.5, 1, 0.3).normalize(), sh.rot[i]);
       sh.m.setMatrixAt(i, _m.compose(_p.set(sh.x[o], sh.x[o + 1], sh.x[o + 2]), _q, _s.set(w, w, w)));
     }
@@ -265,7 +266,8 @@ export function createMusouView(parent, game, camera) {
       if (!born[j]) continue;
       frameAt(a, j ? Math.sin(j * 0.45 - time * 9) * 0.35 : 0, bases[j]);
       // the head grows to full size as it surges off the spear tip (full size right at the chase lens was a white blob)
-      if (!j) { const k = HEAD_SCALE * (0.5 + 0.5 * ramp(s, 0.04, 0.22)); bases[j].multiply(_l.makeScale(k, k, k)); }
+      // (fx r4: 0.7 → full by s 0.15 — at 0.5 the head was a blue speck through the contact frames)
+      if (!j) { const k = HEAD_SCALE * (0.7 + 0.3 * ramp(s, 0.02, 0.15)); bases[j].multiply(_l.makeScale(k, k, k)); }
     }
     // shards: trail off the body, burst where segments dissolve
     const n = Math.round(dt * 60 * (s < 0.4 ? 1.5 : 4));                        // (r3 acc: fewer at contact — the head must read)
@@ -287,7 +289,7 @@ export function createMusouView(parent, game, camera) {
       // once the contact fill has faded the burst light rides the head: the crowd it surges through lights up teal
       // (one light for both, so the lit materials keep their light count)
       if (glow.intensity < 1) { glow.position.copy(_p); glow.intensity = 12 * (1 - dissolve) * ramp(s, 0.2, 0.3); }
-      const nh = Math.round(dt * 60 * (s < 0.4 ? 1 : 3));
+      const nh = Math.round(dt * 60 * (s < 0.4 ? 0 : 3));                        // (fx r4: no wake over the contact — the head reads first)
       for (let i = 0; i < nh; i++) shard(_p.x + vrng.range(-0.4, 0.4), _p.y + vrng.range(-0.4, 0.4), _p.z + vrng.range(-0.4, 0.4),
         vrng.range(-1.5, 1.5), vrng.range(-0.5, 2), vrng.range(-1.5, 1.5), vrng.range(0.2, 0.4), vrng.range(0.1, 0.2), 0.7, 1.6, 2.2);
     }
@@ -467,7 +469,7 @@ export function createMusouView(parent, game, camera) {
     }
     // burst light on the camera side of the action, so the launched bodies are front-lit teal, not silhouettes
     const gc = c >= 0 && f < 0 ? 1 - ramp(c, 2, 16) : 0;
-    glow.intensity = 5 * gc;
+    glow.intensity = 3 * gc;                                   // (fx r4: was 5 — washed Zhao Yun's ivory lamellar white at contact)
     if (glow.intensity > 0) {
       mu.toWorld([0, 1.2, 3.5], W3); _v.set(W3[0], W3[1], W3[2]);
       glow.position.lerpVectors(_v, camera.position, 0.3); glow.position.y = 3.2;
