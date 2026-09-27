@@ -105,11 +105,11 @@ export function createProjectiles(game) {
     const tgt = spec.home ? lockOn(h.x, h.z, yaw, (spec.range || 20) * 0.9, spec.home * D2R, !!spec.air) : -1;
     if (tgt >= 0 && !spec.sky) {                              // aim at him: bearing, and a flat shot drops onto his chest
       yaw = Math.atan2(c.x[tgt] - x, c.z[tgt] - z);
-      // fx r5: never steeper than −4° — a lock < 2 m dove the shot (−15…−40°) into the ground 1.5-5 m out: the heavy
-      // shot's force line was buried half-way and seen end-on from the gameplay lens (≈ 60 px), and no in-flight beam
-      // ever drew; flatter, the shot flies on through the rank behind (beam bow → arrow ≈ 9 m); −4° still meets a
-      // point-blank chest (≈ 1.3 m up)
-      if (!spec.pitch) pitch = Math.max(-0.07, Math.atan2(c.y[tgt] + 1.0 - y, Math.hypot(c.x[tgt] - x, c.z[tgt] - z)));
+      // fx r5: the drop is spread over ≥ 5.4 m (≈ −4° on the flat) — a lock < 2 m dove the shot (−15…−40°) into the
+      // ground 1.5-5 m out: the heavy shot's force line was buried half-way and seen end-on from the gameplay lens, and
+      // no in-flight beam ever drew; flatter, it still meets a point-blank chest (≈ 1.3 m up) and flies on through the
+      // rank behind. A distance floor, not a pitch floor: a lock down a slope still aims down it
+      if (!spec.pitch) pitch = Math.atan2(c.y[tgt] + 1.0 - y, Math.max(5.4, Math.hypot(c.x[tgt] - x, c.z[tgt] - z)));
     }
     let lock = tgt;
     if (spec.groundAim) {                                     // drive it into the ground at the target (or groundAim m ahead)
