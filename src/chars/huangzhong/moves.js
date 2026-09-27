@@ -83,8 +83,9 @@ export const MOVES = {
   // whole ring there
   c6: { frames: 90, cancel: 82, dodgeCancel: 40, steer: 12, lunge: [[26, 30, -0.4]], armor: true, tell: 28,
     // (fx r2: pierce 20 — it flies through the bodies in the way and bursts on the ground ≥ 5 m out, not on the first
-    // soldier at his elbow, which buried him in his own fireball)
-    shots: [{ f: 28, n: 1, pitch: -9, speed: 48, g: 6, range: 12, pierce: 20, rad: 0.5, home: 30, fire: true, big: 1, groundAim: 7,
+    // soldier at his elbow, which buried him in his own fireball; fx r4: lock 60° / 14 m — at 30° / 11 m it missed the
+    // rank beside him and burst on empty grass; the burst distance stays capped at 12 m in projectiles.js)
+    shots: [{ f: 28, n: 1, pitch: -9, speed: 48, g: 6, range: 16, pierce: 20, rad: 0.5, home: 60, fire: true, big: 1, groundAim: 7,
       dmg: 14, kb: 'flinch', force: 2, hitstop: 0,
       burst: { range: 4.8, dmg: 34, kb: 'launch', force: 4, lift: 11, hitstop: 8, heavy: true } }] },
 

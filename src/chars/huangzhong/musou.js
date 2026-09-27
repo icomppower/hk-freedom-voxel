@@ -18,6 +18,8 @@ import { ST, wrap } from '../../crowd/crowd.js';
 import { SUN_DIR } from '../../world/sky.js';
 import { createProjectiles, ARROW, AS } from '../../combat/projectiles.js';
 import { createAim } from './aim.js';
+import { clearance } from '../../camera/occlusion.js';
+import { ground } from '../../world/map.js';
 import { live } from './model.js';
 
 export const HZ_MUSOU = {
@@ -61,7 +63,13 @@ export function createMusou(game) {
   // back, so the ball (≈ 45 % of the frame height) stands over the near helmets instead of behind them
   const juggle = { dist: 7.6, pitch: 0.2, fov: 52, height: 2.7, side: 0 }, blast = { yaw: 0, dist: 12, pitch: 0.32, fov: 56, height: 2.2, side: 0 };
   // (C5 rain gets the same treatment, lighter: the lens turns onto the circle it will fall in)
-  const c6 = { seq: -1, x: 0, z: 0 };
+  // fx r4: the swing only goes to a side whose boom stays over open ground (r3 turned the lens into the valley side:
+  // ten frames of brown rock); both sides blocked → no turn (yaw NaN), the follow rig's own clearance handles it
+  const c6 = { seq: -1, x: 0, z: 0, sd: 0.4 };
+  const boomClear = (h, yaw) => {
+    const fy = ground(h.x, h.z) + blast.height, c = Math.cos(blast.pitch) * blast.dist;
+    return clearance(h.x, fy, h.z, h.x - Math.sin(yaw) * c, fy + Math.sin(blast.pitch) * blast.dist, h.z - Math.cos(yaw) * c, 12, 0);
+  };
   function c6Point(h) {
     const P = mu.proj, c5 = h.move === 'c5';
     if (c6.seq !== h.moveSeq) {                                   // new charge: predict the shot's own aim rule (projectiles.js)
@@ -78,9 +86,14 @@ export function createMusou(game) {
       const k = P.vy[i] < -1 ? P.y[i] / -P.vy[i] : 0.15;
       c6.x = P.x[i] + P.vx[i] * k; c6.z = P.z[i] + P.vz[i] * k;
     }
-    const L = Math.atan2(c6.x - h.x, c6.z - h.z), d = Math.hypot(c6.x - h.x, c6.z - h.z), sd = wrap(game.cam.yaw - L) < 0 ? -0.4 : 0.4;
-    blast.yaw = L + sd; blast.side = d * 0.5 * Math.sin(sd); blast.dist = (c5 ? 7.5 : 9) + d * 0.5;
-    blast.pitch = c5 ? 0.26 : 0.32; blast.height = c5 ? 1.8 : 2.2;
+    const L = Math.atan2(c6.x - h.x, c6.z - h.z), d = Math.hypot(c6.x - h.x, c6.z - h.z);
+    blast.dist = (c5 ? 7.5 : 9) + d * 0.5; blast.pitch = c5 ? 0.26 : 0.32; blast.height = c5 ? 1.8 : 2.2;
+    if (c6.seq !== c6.sdSeq) {                                    // side picked once per charge (no flip-flop in flight)
+      c6.sdSeq = c6.seq; c6.sd = wrap(game.cam.yaw - L) < 0 ? -0.4 : 0.4;
+      if (boomClear(h, L + c6.sd) < 1 && boomClear(h, L - c6.sd) > boomClear(h, L + c6.sd)) c6.sd = -c6.sd;
+    }
+    const ok = boomClear(h, L + c6.sd) >= 0.9;
+    blast.yaw = ok ? L + c6.sd : NaN; blast.side = ok ? d * 0.5 * Math.sin(c6.sd) : 0;
     return blast;
   }
   mu.aimShot = () => {
