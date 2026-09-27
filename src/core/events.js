@@ -14,7 +14,8 @@
 //                                                                         hitstop = hero freeze actually applied (scaled by count)
 //  ko            combat   {i, x,y,z, dx,dz, officer}                    enemy KO'd (counted on the killing hit)
 //  enemy:attack  combat   {x,z, officer}                                an enemy strike reaches its active frame
-//  enemy:land    combat   {x,z, bounce}                                 launched enemy touches down (bounce or lands)
+//  enemy:land    combat   {x,z, bounce}                                 launched soldier touches down (bounce or lands; allies too)
+//  clash         combat   {x,y,z, dx,dz, killed, ally}                  a duel blow lands (Shu ally ↔ Wei grunt; ally: the victim is Shu)
 //  dodge         loco     {x,y,z, dx,dz}
 //  jump          loco     {x,y,z}          land {x,y,z, hard}
 //  footstep      loco     {x,y,z, foot, speed, kick?}                   a foot plants in the run (≥2.5 m/s) / out of a dodge roll
@@ -30,6 +31,7 @@
 //  musou:burst   musou    {count, x,z}                                  finisher: the ring wave starts at Zhao Yun
 //  musou:end     musou    {}
 //  crowd:wave    crowd    {x,z}                                         reinforcements spawned
+//  crowd:allies  crowd    {x,z}                                         a Shu column spawned (runs up the road behind the hero)
 //  story:say     story    {speaker, zh, en, dur, portrait, side}        dialogue line (HUD, top left). speaker: {zh, en} name
 //                                                                       (omitted = the hero); portrait: CHARS id | {face, pal} |
 //                                                                       {seal: glyph, side} | null (omitted = the hero's if the

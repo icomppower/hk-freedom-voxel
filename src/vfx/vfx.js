@@ -991,6 +991,8 @@ export function createVfx(scene, game, world) {
     if (vrng.chance(0.5)) embers(e.x, e.y - 0.4, e.z, 2, 0.3);
     dustPuff(e.x, e.z, 2, 1.4, 0.55, 0.15, 0.4);
   });
+  // duel blow (Shu ally ↔ Wei grunt): a small contact spark, a few needles on a KO — the hero's hits stay the big ones
+  on('clash', (e) => { star(e.x, e.y, e.z, e.killed ? 0.6 : 0.35, 0.1, FLASH_WARM); needleBurst(e.x, e.y, e.z, e.killed ? 5 : 2, e.dx, e.dz, 9, NEEDLE_WARM, 0.035); });
   on('enemy:land', (e) => { dustPuff(e.x, e.z, e.bounce ? 2 : 3, 1.6, 0.46, 0.1, 0.5); if (!e.bounce) chunks(e.x, 0.1, e.z, 2, 0, 0, 1.8, GROUND, 0.08, 0.16, [1.5, 3.5], [1.4, 2.2]); });
   // locomotion-dodge r3: readable ground contact — a kick of dust behind every dodge push-off and roll plant (footstep
   // `kick`), a puff under each take-off, a dust ring on every landing, and sprint footfalls that leave a low trail

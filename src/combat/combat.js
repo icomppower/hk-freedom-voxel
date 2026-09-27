@@ -1,6 +1,8 @@
 // Combat (sim): data-driven hit detection from moves.js hitboxes (never from animated bones → deterministic),
 // damage, hitstop, knockback / launch / juggle / spin physics and reaction states on enemies, KO, enemy strikes.
-// Emits: attack:swing, hit, hits, ko, enemy:land. Hero moves come from the hero's kit (game.hero.kit.moves); a moveId that
+// Soldier-on-soldier blows (Shu ally ↔ Wei grunt duels, crowd.js duel()) land through clash(): flinch or KO throw, no
+// hero rewards; reactions() runs on the allies too (crowd indices N … T-1).
+// Emits: attack:swing, hit, hits, ko, enemy:land, clash. Hero moves come from the hero's kit (game.hero.kit.moves); a moveId that
 // is not in it (the Musou passes 'musou') skips the hero-move rules (hitstop scaling, lens cut, heavy blow-away).
 //
 // Feel targets (bench/notes/hit-feedback.md):
@@ -41,8 +43,8 @@ export function createCombat(game) {
   const cb = {};
   const hitsPayload = { count: 0, x: 0, z: 0, move: '', hitstop: 0, heavy: false };
   const landPayload = { x: 0, z: 0, bounce: false };
-  const floaty = new Uint8Array(game.crowd.N);              // launched (apex hang) vs thrown (flat arc)
-  const rxEnd = new Float64Array(game.crowd.N);             // planned lying angle at touchdown
+  const floaty = new Uint8Array(game.crowd.T);              // launched (apex hang) vs thrown (flat arc)
+  const rxEnd = new Float64Array(game.crowd.T);             // planned lying angle at touchdown
   const victims = new Int32Array(game.crowd.N);
 
   let lastTick = -1;                                         // a move frame is resolved once, even across hitstop
@@ -247,6 +249,29 @@ export function createCombat(game) {
     }
   }
 
+  const clashPayload = { x: 0, y: 0, z: 0, dx: 0, dz: 0, killed: false, ally: false };
+  /** Soldier a's duel blow lands on soldier v (crowd indices, either side) for dmg: a flinch facing the blow, or a KO
+   *  throw (blasted ≈ 2 m out, cartwheels, lands lying). Returns true on the KO. ally: the victim is a Shu ally. */
+  cb.clash = (a, v, dmg) => {
+    const c = game.crowd;
+    let dx = c.x[v] - c.x[a], dz = c.z[v] - c.z[a];
+    const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    c.hp[v] -= dmg; c.flash[v] = COMBAT.tintFrames; c.hitHeavy[v] = 0; c.hs[v] = 2;
+    const killed = c.hp[v] <= 0 && !c.kod[v];
+    if (killed) {
+      c.kod[v] = 1;
+      const sgn = hash01(v, 71) < 0.5 ? -1 : 1;
+      airborne(v, COMBAT.koLift * 0.75, COMBAT.koForce * 0.45, dx, dz, false, 1.2 + Math.PI, sgn * 3);
+    } else if (c.st[v] <= ST.KNOCK) {                          // standing (a body already down just takes the damage)
+      c.st[v] = ST.HURT; c.stT[v] = 0; c.hurtDur[v] = COMBAT.hurtFrames;
+      c.yaw[v] = Math.atan2(-dx, -dz);
+      c.vx[v] = dx * 2 * COMBAT.flinchKick; c.vz[v] = dz * 2 * COMBAT.flinchKick;
+    }
+    Object.assign(clashPayload, { x: c.x[v], y: c.y[v] + 1.1, z: c.z[v], dx, dz, killed, ally: v >= c.N });
+    emit('clash', clashPayload);
+    return killed;
+  };
+
   /** Hero hitboxes for the current move frame. */
   function heroAttacks() {
     const h = game.hero;
@@ -285,7 +310,7 @@ export function createCombat(game) {
   function reactions() {
     const c = game.crowd;
     if (game.freeze > 0) return;
-    for (let i = 0; i < c.N; i++) {
+    for (let i = 0; i < c.T; i++) {
       const s = c.st[i];
       if (s < ST.HURT || s > ST.DEAD || c.hs[i] > 0) continue;
       if (s === ST.HURT) {

@@ -16,12 +16,22 @@
 //  · Reinforcements: while the ring is under strength and no block waits nearer, a column of 8-15 (with its bearer)
 //    spawns 16-26 m out in front of the camera and runs in; `crowd:wave` announces it. Waves only run once a scenario
 //    spawned an army or a ring (setWaves).
-//  · Story API (src/story drives it): spawnSquad, spawnOfficer, clearAll, setWaves, retire — see below. Officers carry a
-//    name (c.offName[i - grunts] = {zh, en}, shown by the HUD tags) and a boss flag (c.boss[i]).
+//  · Story API (src/story drives it): spawnSquad, spawnOfficer, clearAll, setWaves, retire, spawnAllies, setAllies — see
+//    below. Officers carry a name (c.offName[i - grunts] = {zh, en}, shown by the HUD tags) and a boss flag (c.boss[i]).
+//  · Shu allies: the same arrays past the Wei army, indices N … T-1 (N = Wei grunts + officer slots). Everything that
+//    loops i < N (hero hits, arrows, Musou, lock-on, HUD tags, the director, rings, tokens) never sees them; the AI loop,
+//    separate(), combat reactions() and the view run to T. An ally keeps pace with the hero in a slot 7.5-11.5 m off
+//    him, 35-80° off the front on either side (the front = the camera yaw, eased: in view, beside the fight), takes the
+//    road (map.js routeS / routeAt) when he is far ahead or a palisade / pool / cliff is in the way, and pairs with a
+//    Wei grunt 7-20 m from the hero (never the hero's ring, never across him): c.foe links the two, both square up at
+//    arm's length and trade blows (duel(): the strike timings / poses of a blow on the hero, no telegraph; combat.clash
+//    lands it). A Wei soldier the hero comes within CROWD.duelBreak of is released to the ring. Columns of 5-8 run up
+//    the road behind the hero while the allies are under strength (`crowd:allies`); they cheer when he sweeps a ring
+//    (≥ 10 KOs in 1 s) or fells an officer.
 // Reaction states (HURT..GETUP) are driven by src/combat; this module owns the rest.
-import { rng } from '../core/rng.js';
-import { emit } from '../core/events.js';
-import { clampWalk } from '../world/map.js';
+import { rng, hash01 } from '../core/rng.js';
+import { emit, on } from '../core/events.js';
+import { clampWalk, routeS, routeAt } from '../world/map.js';
 
 export const ST = { OFF: 0, IDLE: 1, ADVANCE: 2, GUARD: 3, ATTACK: 4, HURT: 5, KNOCK: 6, AIR: 7, DOWN: 8, GETUP: 9, DEAD: 10 };
 const isReacting = (s) => s >= ST.HURT && s <= ST.GETUP;
@@ -49,16 +59,19 @@ export const CROWD = {
   engaged: 84, transit: 72,                                   // director target: soldiers on the hero; cap on blocks en route
   halt: 15, haltFrames: 36, fold: 7.5,                        // squad: halt at 15 m, then charge, fold at 7.5 m
   wave: [8, 15], waveEvery: [45, 110], waveDist: [16, 26],   // columns every 0.75 s below half strength, else 1.8 s
+  allySlots: 40, allyKeep: 24, allyCol: [5, 8], allyEvery: 1200, allyHp: 50,   // Shu: a column every 20 s while below 24
+  allyScan: 12, allyReach: [7, 20], duelBreak: 4.5, duelR: 1.5,              // foe ≤ 12 m off the ally, 7-20 m off the hero
+  duelCd: [50, 150], duelHit: 0.55, duelDmg: [[7, 11], [5, 8]],              // blow lands 55 %: ally → Wei 7-11, Wei → ally 5-8
 };
 const DT = 1 / 60;
 const CELL = 1.2, GRID = 400, HALF = GRID * CELL / 2;           // ±240 m: the whole 定軍山 field (world/map.js)
 const MAXSQ = 64;
 
 export function createCrowd(game, grunts) {
-  const N = grunts + CROWD.officerSlots;
-  const F = (n = N) => new Float64Array(n), I = (n = N) => new Int32Array(n);
+  const N = grunts + CROWD.officerSlots, T = N + CROWD.allySlots;
+  const F = (n = T) => new Float64Array(n), I = (n = T) => new Int32Array(n);
   const c = {
-    N, grunts,
+    N, T, grunts,
     x: F(), z: F(), y: F(), vx: F(), vz: F(), vy: F(), yaw: F(), hp: F(), hpMax: F(),
     st: I(), stT: I(), type: I(), kind: I(), token: I(), cd: I(), hs: I(), flash: I(),
     rx: F(), rxV: F(), spinV: F(), pref: F(), band: I(), phase: F(), hurtDur: I(), bounce: I(),
@@ -67,21 +80,24 @@ export function createCrowd(game, grunts) {
     sq: { x: F(MAXSQ), z: F(MAXSQ), face: F(MAXSQ), st: I(MAXSQ), t: I(MAXSQ), n: 0 },
     raiseF: I(), feint: I(), wind: I(),                         // raiseF: rallying until (render + ring surge); feint strike; winding up
     hitHeavy: I(),                                              // last hit was heavy (set by combat, read by hitfx.js)
+    foe: I(),                                                   // duel partner (ally ↔ Wei grunt), -1 = none
+    via: I(),                                                   // ally: sf left on the road (the straight line was blocked)
     boss: I(), offName: new Array(CROWD.officerSlots).fill(null),   // story: boss flag; officer display names {zh, en}
     waveT: 0, tokensUsed: 0, strikeF: 0, gap: 0, graceF: 0, heroHp: 0, wavesOn: false, engaged: 0, zMax: Infinity,   // zMax: story stage bound (waves)
+    alliesOn: false, allyT: 0, front: 0, kosAgo: [0, 0], cheerF: 0, allyKos: 0, allyLost: 0,   // allyKos / allyLost: duel KOs
   };
-  const head = new Int32Array(GRID * GRID), next = new Int32Array(N);
-  const px = new Float64Array(N), pz = new Float64Array(N), sqAlive = new Int32Array(MAXSQ);
+  const head = new Int32Array(GRID * GRID), next = new Int32Array(T);
+  const px = new Float64Array(T), pz = new Float64Array(T), sqAlive = new Int32Array(MAXSQ);
   let holdNear = false;
 
   function place(i, x, z, engaged, kind) {
-    const off = i >= grunts;
+    const off = i >= grunts && i < N;
     if (off) kind = KIND.OFFICER;
     [x, z] = clampWalk(x, z, -0.5);
     c.x[i] = x; c.z[i] = z; c.y[i] = 0; c.vx[i] = c.vz[i] = c.vy[i] = 0;
     c.yaw[i] = Math.atan2(game.hero.x - x, game.hero.z - z);
     c.type[i] = off ? 1 : 0; c.kind[i] = kind;
-    c.hpMax[i] = c.hp[i] = off ? CROWD.officerHp : kind === KIND.CAPTAIN ? CROWD.captainHp : CROWD.hp;
+    c.hpMax[i] = c.hp[i] = off ? CROWD.officerHp : i >= N ? CROWD.allyHp : kind === KIND.CAPTAIN ? CROWD.captainHp : CROWD.hp;
     c.st[i] = engaged ? ST.ADVANCE : ST.IDLE; c.stT[i] = rng.int(0, 60);
     c.token[i] = 0; c.cd[i] = rng.int(0, 120); c.hs[i] = 0; c.flash[i] = 0; c.raiseF[i] = 0; c.feint[i] = 0; c.wind[i] = 0;
     c.rx[i] = c.rxV[i] = c.spinV[i] = 0; c.bounce[i] = 0; c.lastHit[i] = -1; c.kod[i] = 0; c.boss[i] = 0;
@@ -90,18 +106,19 @@ export function createCrowd(game, grunts) {
     else setBand(i, off ? 0 : r < CROWD.share[0] ? 0 : r < CROWD.share[1] ? 1 : 2);
     c.phase[i] = rng.range(0, 6.28);
     c.strafe[i] = rng.chance(0.5) ? 1 : -1;
-    c.squad[i] = -1; c.form[i] = 0;
+    c.squad[i] = -1; c.form[i] = 0; c.foe[i] = -1; c.via[i] = 0;
   }
   function setBand(i, k) { c.band[i] = k; c.pref[i] = rng.range(CROWD.bands[k][0], CROWD.bands[k][1]); c.seated[i] = 0; }
 
   c.reset = () => {
     c.offName.fill(null);
     c.st.fill(ST.OFF); c.token.fill(0); c.tokensUsed = 0; c.strikeF = 0; c.gap = 0; c.graceF = 0; c.heroHp = game.hero.hp; c.waveT = 0; c.sq.n = 0; c.wavesOn = false; c.zMax = Infinity;
+    c.foe.fill(-1); Object.assign(c, { alliesOn: false, allyT: 0, front: game.cam.yaw, kosAgo: [0, 0], cheerF: 0, allyKos: 0, allyLost: 0 });
   };
 
-  function freeSlots(officer) {
+  function freeSlots(officer, ally) {
     const out = [];
-    const [a, b] = officer ? [grunts, N] : [0, grunts];
+    const [a, b] = ally ? [N, T] : officer ? [grunts, N] : [0, grunts];
     for (let i = a; i < b; i++) if (c.st[i] === ST.OFF) out.push(i);
     return out;
   }
@@ -185,6 +202,19 @@ export function createCrowd(game, grunts) {
   /** Stage change: grunts still standing idle (holding blocks never sent) south of z are removed, freeing their slots
    *  for the next area; soldiers already on the move keep coming. A squad left empty is freed by squads(). */
   c.retire = (z) => { for (let i = 0; i < grunts; i++) if (c.st[i] === ST.IDLE && c.z[i] < z) c.st[i] = ST.OFF; };
+  /** Shu allies: a block of n (what is free of CROWD.allySlots) at (x, z) facing `face`, `cols` wide, 1.25 × 1.45 m apart,
+   *  a 蜀 standard-bearer every 9th. hold: stand in rank (the story van) until the hero has marched past; else they
+   *  fall in with him at once. */
+  c.spawnAllies = ({ x, z, n, face = 0, cols = 4, hold = false }) => {
+    const sn = Math.sin(face), cs = Math.cos(face);
+    freeSlots(false, true).slice(0, n).forEach((i, k) => {
+      const lx = (k % cols - (cols - 1) / 2) * 1.25 + rng.range(-0.12, 0.12), lz = -Math.floor(k / cols) * 1.45 + rng.range(-0.12, 0.12);
+      place(i, x + lx * cs + lz * sn, z - lx * sn + lz * cs, !hold, k % 9 === 0 ? KIND.BEARER : rng.chance(0.35) ? KIND.SWORD : KIND.SPEAR);
+      c.yaw[i] = face; c.form[i] = hold ? 1 : 0; c.band[i] = 1;
+    });
+  };
+  /** Shu reinforcement columns on/off (they run up the road while the allies are under strength, see allyColumns()). */
+  c.setAllies = (on) => { c.alliesOn = !!on; };
 
   /** Nearest alive enemy within maxR whose bearing is within `cone` radians of `yaw`. */
   c.nearest = (x, z, maxR, yaw, cone) => {
@@ -213,10 +243,11 @@ export function createCrowd(game, grunts) {
     if (h.hp < c.heroHp) c.graceF = game.frame + rng.int(CROWD.grace[0], CROWD.grace[1]);
     c.heroHp = h.hp;
     let strikers = 0;
-    for (let i = 0; i < N; i++) if (c.st[i] === ST.ATTACK && c.stT[i] < CROWD.strike) strikers++;
+    for (let i = 0; i < N; i++) if (c.st[i] === ST.ATTACK && c.stT[i] < CROWD.strike && c.foe[i] < 0) strikers++;
     const busy = h.state === 'attack';
-    // ---- AI
-    for (let i = 0; i < N; i++) {
+    c.front += wrap(game.cam.yaw - c.front) * 0.01;                 // allies' front: the view direction, eased (≈ 1.7 s)
+    // ---- AI (Wei army, then the Shu allies)
+    for (let i = 0; i < T; i++) {
       const s = c.st[i];
       if (s === ST.OFF) continue;
       if (c.flash[i] > 0) c.flash[i]--;
@@ -235,7 +266,8 @@ export function createCrowd(game, grunts) {
       const dx = h.x - c.x[i], dz = h.z - c.z[i], d = Math.hypot(dx, dz) || 1e-6;
       const face = Math.atan2(dx, dz);
       let vx = 0, vz = 0;
-      if (c.form[i]) {
+      if ((c.foe[i] >= 0 && duel(i, h)) || (i >= N && ally(i, h))) { vx = mvx; vz = mvz; }
+      else if (c.form[i]) {
         // in formation: hold / march to the squad slot, facing the squad's heading
         const q = c.squad[i], f = c.sq.face[q], sn = Math.sin(f), cs = Math.cos(f);
         const tx = c.sq.x[q] + c.slotX[i] * cs + c.slotZ[i] * sn, tz = c.sq.z[q] - c.slotX[i] * sn + c.slotZ[i] * cs;
@@ -338,15 +370,150 @@ export function createCrowd(game, grunts) {
       grantTokens(h);
       separate(h);
       waves(h);
+      allyColumns(h);
+      // the hero swept a ring (≥ 10 KOs within ≈ 1 s): the allies near him cheer
+      if (game.frame % 30 === 0) { if (h.kos - c.kosAgo[1] >= 10) cheer(); c.kosAgo[1] = c.kosAgo[0]; c.kosAgo[0] = h.kos; }
     }
   };
+  on('ko', (e) => { if (e.officer) cheer(); });                      // (sim-side: combat emits it inside step())
+
+  // ---- Shu allies + duels. ally() / duel() leave the step's velocity in mvx, mvz.
+  let mvx = 0, mvz = 0;
+  const alive = (s) => s !== ST.OFF && s !== ST.DEAD;
+  /** Straight walk (x0, z0) → (x1, z1) stays on open ground (samples at ¼ ½ ¾; palisades, pools, closed gates, cliffs). */
+  function clear(x0, z0, x1, z1) {
+    for (let k = 1; k < 4; k++) {
+      const x = x0 + (x1 - x0) * k / 4, z = z0 + (z1 - z0) * k / 4, q = clampWalk(x, z, 0);
+      if ((q[0] - x) ** 2 + (q[1] - z) ** 2 > 0.01) return false;
+    }
+    return true;
+  }
+  function unpair(i) { const f = c.foe[i]; if (f >= 0 && c.foe[f] === i) c.foe[f] = -1; c.foe[i] = -1; }
+  /** Duel of i with c.foe[i]: square up at arm's length, circle, trade blows (the wind-up / strike / recover timings
+   *  and poses of a blow on the hero, no telegraph); one side swings at a time, nobody hits a man on the ground.
+   *  Returns false (unpaired: i falls back to its own AI) once the foe is gone, too far, or the Wei side of the pair is
+   *  within CROWD.duelBreak of the hero (he is the hero's now) or the ally side over 26 m off him (back to the front). */
+  function duel(i, h) {
+    const f = c.foe[i], sf = c.st[f], w = i < N ? i : f, a = i < N ? f : i;
+    const ex = c.x[f] - c.x[i], ez = c.z[f] - c.z[i], e = Math.hypot(ex, ez) || 1e-6, ux = ex / e, uz = ez / e;
+    if (c.foe[f] !== i || !alive(sf) || e > 16 || (c.x[w] - h.x) ** 2 + (c.z[w] - h.z) ** 2 < CROWD.duelBreak ** 2 ||
+        (c.x[a] - h.x) ** 2 + (c.z[a] - h.z) ** 2 > 26 * 26) { unpair(i); return false; }   // the ally stays with the front
+    const s = c.st[i], R = CROWD.duelR;
+    mvx = mvz = 0;
+    turn(i, Math.atan2(ex, ez), CROWD.turn);
+    if (s === ST.ATTACK) {
+      const t = c.stT[i];
+      if (t < CROWD.windup - 6 && e > R) { mvx = ux * CROWD.walk; mvz = uz * CROWD.walk; }
+      if (t === CROWD.strike && e < R + 0.9 && sf <= ST.KNOCK && rng.chance(CROWD.duelHit)) {
+        const d = CROWD.duelDmg[i < N ? 1 : 0];
+        if (game.combat.clash(i, f, rng.int(d[0], d[1]))) { if (i < N) c.allyLost++; else c.allyKos++; }
+      }
+      if (t >= CROWD.windup + CROWD.recover) { setSt(i, ST.GUARD); c.cd[i] = rng.int(CROWD.duelCd[0], CROWD.duelCd[1]); }
+      return true;
+    }
+    if (e > R + 0.35) {
+      const sp = e > 3 ? CROWD.run : CROWD.walk;
+      mvx = ux * sp; mvz = uz * sp;
+      if (s !== ST.ADVANCE) setSt(i, ST.ADVANCE);
+    } else {
+      if (e < R - 0.35) { mvx = -ux * 1.3; mvz = -uz * 1.3; }
+      else if (((c.stT[i] + i * 7) % 200) < 60) { mvx = -uz * 0.8 * c.strafe[i]; mvz = ux * 0.8 * c.strafe[i]; }   // circle
+      if (s !== ST.GUARD) setSt(i, ST.GUARD);
+      if (c.cd[i] === 0 && sf !== ST.ATTACK && sf < ST.AIR) { setSt(i, ST.ATTACK); c.feint[i] = 0; }
+    }
+    return true;
+  }
+  /** Unpaired ally i: the van holds its rank until the hero has marched past; then a flank slot off the hero (bearers
+   *  further out); up the road while he is far ahead or the straight line to the slot is blocked (checked every 10 sf,
+   *  then 40 sf on the road); picks a foe every 12 sf. Always returns true (mvx, mvz set). */
+  function ally(i, h) {
+    mvx = mvz = 0;
+    const x = c.x[i], z = c.z[i], dh = Math.hypot(h.x - x, h.z - z);
+    if (c.form[i]) {
+      if (h.z < z - 1 + (i % 4) * 0.8 && dh < 16) return true;
+      c.form[i] = 0; setSt(i, ST.ADVANCE);
+    }
+    const u = hash01(i, 3), a = c.front + (i & 1 ? 1 : -1) * (0.6 + 0.8 * u);   // ahead on the flanks: in view, beside the fight
+    const r = (c.kind[i] === KIND.BEARER ? 11 : 7.5) + 4 * hash01(i, 4);
+    let tx = h.x + Math.sin(a) * r, tz = Math.min(h.z + Math.cos(a) * r, c.zMax - 1);
+    [tx, tz] = clampWalk(tx, tz, 1);                                  // a slot over the river / a cliff: its nearest dry spot
+    if (c.via[i] > 0) c.via[i]--;
+    else if ((game.frame + i) % 10 === 0 && !clear(x, z, tx, tz)) c.via[i] = 40;
+    if (dh > 18 || c.via[i]) {                                       // along the road, never across a cliff / palisade
+      const sa = routeS(x, z), sh = routeS(h.x, h.z);
+      // ≤ 8 m along the road toward him; level with him: the road just past him (through the gate / crossing he took)
+      if (Math.abs(sh - sa) > 12 || c.via[i]) {
+        const p = routeAt(Math.abs(sh - sa) < 8 ? sh + 4 : sa + Math.sign(sh - sa) * 8);
+        tx = p[0] + (u - 0.5) * 4; tz = p[1];
+      }
+    }
+    const ex = tx - x, ez = tz - z, e = Math.hypot(ex, ez);
+    if (e > 0.5 || h.speed > 1) {
+      // keep pace with the hero (his velocity) and close on the slot; ≤ 9.5 m/s, so they catch up with his run (8.5)
+      mvx = h.vx + ex * 1.6; mvz = h.vz + ez * 1.6;
+      const sp = Math.hypot(mvx, mvz) || 1e-6, k = Math.min(1, 9.5 / sp);
+      mvx *= k; mvz *= k;
+      if (c.st[i] !== ST.ADVANCE) setSt(i, ST.ADVANCE);
+      turn(i, Math.atan2(mvx, mvz), CROWD.turn);
+    } else {
+      if (c.st[i] !== ST.GUARD) setSt(i, ST.GUARD);
+      turn(i, c.front, 3);
+    }
+    if ((game.frame + i) % 12 === 0 && c.kind[i] !== KIND.BEARER) pickFoe(i, h);
+    return true;
+  }
+  /** Nearest Wei grunt for ally i: free (not in a duel, no attack token, not mid-strike or reacting), 7-20 m off the
+   *  hero (his ring stays his), inside the stage bound, ≤ CROWD.allyScan off the ally, and not across the hero. */
+  function pickFoe(i, h) {
+    let best = -1, bd = CROWD.allyScan ** 2;
+    const [r0, r1] = CROWD.allyReach, ax = c.x[i] - h.x, az = c.z[i] - h.z;
+    if (ax * ax + az * az > 24 * 24) return;                         // still catching up with the hero
+    for (let j = 0; j < grunts; j++) {
+      const s = c.st[j];
+      if ((s !== ST.IDLE && s !== ST.ADVANCE && s !== ST.GUARD) || c.foe[j] >= 0 || c.token[j] || c.kind[j] === KIND.BEARER || c.z[j] > c.zMax) continue;
+      const wx = c.x[j] - h.x, wz = c.z[j] - h.z, w2 = wx * wx + wz * wz;
+      if (w2 < r0 * r0 || w2 > r1 * r1) continue;
+      const d2 = (wx - ax) ** 2 + (wz - az) ** 2;
+      if (d2 >= bd) continue;
+      // the hero's distance from the ally → foe segment: the ally doesn't run through the fight to reach him
+      const ex = wx - ax, ez = wz - az, t = Math.max(0, Math.min(1, -(ax * ex + az * ez) / (d2 || 1)));
+      if ((ax + ex * t) ** 2 + (az + ez * t) ** 2 < 25) continue;
+      bd = d2; best = j;
+    }
+    if (best < 0 || !clear(c.x[i], c.z[i], c.x[best], c.z[best])) return;
+    c.foe[i] = best; c.foe[best] = i; releaseToken(best);
+    c.form[best] = 0; if (c.st[best] === ST.IDLE) setSt(best, ST.ADVANCE);
+    c.cd[i] = rng.int(20, 70); c.cd[best] = rng.int(40, 100);
+  }
+  /** Unpaired allies within 30 m of the hero raise their weapons and roar (view: the crowd's rally pose). */
+  function cheer() {
+    const h = game.hero;
+    if (game.frame < c.cheerF) return;
+    c.cheerF = game.frame + 300;
+    for (let i = N; i < T; i++) {
+      const s = c.st[i];
+      if ((s === ST.GUARD || s === ST.ADVANCE) && c.foe[i] < 0 && !c.form[i] && (c.x[i] - h.x) ** 2 + (c.z[i] - h.z) ** 2 < 900) c.raiseF[i] = game.frame + 70 - (i % 5) * 5;
+    }
+  }
+  /** A Shu column (CROWD.allyCol) runs up the road from ≈ 26 m behind the hero every CROWD.allyEvery sf while the
+   *  allies are under CROWD.allyKeep. */
+  function allyColumns(h) {
+    if (!c.alliesOn || ++c.allyT < CROWD.allyEvery) return;
+    let n = 0;
+    for (let i = N; i < T; i++) if (alive(c.st[i])) n++;
+    if (n > CROWD.allyKeep - CROWD.allyCol[0]) return;
+    c.allyT = 0;
+    const [x, z] = clampWalk(...routeAt(routeS(h.x, h.z) - 26), 1);
+    c.spawnAllies({ x, z, n: Math.min(CROWD.allyKeep - n, rng.int(CROWD.allyCol[0], CROWD.allyCol[1])), face: Math.atan2(h.x - x, h.z - z), cols: 2 });
+    emit('crowd:allies', { x, z });
+  }
 
   /** A strike starts: the guards nearest the striker raise their weapons and shout with him (DW9: 4-5 of ~30 raise
    *  together), and surge half a step in. The view reads raiseF for the war-cry pose. */
   function rally(s) {
     const k = rng.int(CROWD.rally[0], CROWD.rally[1]), near = [];
     for (let j = 0; j < N; j++) {
-      if (j === s || c.st[j] !== ST.GUARD || c.token[j] || c.form[j] || c.kind[j] === KIND.BEARER) continue;
+      if (j === s || c.st[j] !== ST.GUARD || c.token[j] || c.form[j] || c.kind[j] === KIND.BEARER || c.foe[j] >= 0) continue;
       const d2 = (c.x[j] - c.x[s]) ** 2 + (c.z[j] - c.z[s]) ** 2;
       if (d2 <= 30) near.push([d2, j]);
     }
@@ -371,7 +538,7 @@ export function createCrowd(game, grunts) {
       const s = c.st[i];
       if (s === ST.OFF || s === ST.DEAD) continue;
       if (c.form[i]) alive[c.squad[i]]++;
-      else if (s === ST.ADVANCE || s === ST.GUARD || s === ST.ATTACK) engaged++;
+      else if ((s === ST.ADVANCE || s === ST.GUARD || s === ST.ATTACK) && c.foe[i] < 0) engaged++;
     }
     for (let q = 0; q < S.n; q++) if (S.st[q] > SQ_HOLD) transit += alive[q];
     engaged += transit * 0.35;
@@ -423,7 +590,7 @@ export function createCrowd(game, grunts) {
   }
 
   function rings(h) {
-    const ok = (i) => { const s = c.st[i]; return (s === ST.ADVANCE || s === ST.GUARD || s === ST.ATTACK) && !c.form[i]; };
+    const ok = (i) => { const s = c.st[i]; return (s === ST.ADVANCE || s === ST.GUARD || s === ST.ATTACK) && !c.form[i] && c.foe[i] < 0; };
     // seat the inner ring: new members take the emptiest slots; up to 4 soldiers from a doubled-up slot move to an
     // empty one per tick (a gap left by a sweep fills from both sides)
     secN.fill(0);
@@ -485,7 +652,7 @@ export function createCrowd(game, grunts) {
     for (let k = 0; k < N; k++) {
       const i = (start + k) % N;
       const s = c.st[i];
-      if ((s !== ST.GUARD && s !== ST.ADVANCE) || c.token[i] || c.cd[i] > 0 || c.form[i] || c.kind[i] === KIND.BEARER) continue;
+      if ((s !== ST.GUARD && s !== ST.ADVANCE) || c.token[i] || c.cd[i] > 0 || c.form[i] || c.kind[i] === KIND.BEARER || c.foe[i] >= 0) continue;
       const dx = c.x[i] - h.x, dz = c.z[i] - h.z, d = Math.hypot(dx, dz);
       if (d > 4.5) continue;
       const vis = (dx * fx + dz * fz) / (d || 1);             // 1 = straight beyond the hero (hidden behind his body)
@@ -497,7 +664,7 @@ export function createCrowd(game, grunts) {
 
   function separate(h) {
     head.fill(-1);
-    for (let i = 0; i < N; i++) {
+    for (let i = 0; i < T; i++) {
       const s = c.st[i];
       if (s === ST.OFF || s === ST.DEAD || s === ST.DOWN || c.y[i] > 0.6) continue;
       const gx = Math.floor((c.x[i] + HALF) / CELL), gz = Math.floor((c.z[i] + HALF) / CELL);
@@ -506,7 +673,7 @@ export function createCrowd(game, grunts) {
       next[i] = head[cell]; head[cell] = i;
     }
     const R2 = CROWD.radius * 2, hr = CROWD.heroR + CROWD.radius;
-    for (let i = 0; i < N; i++) {
+    for (let i = 0; i < T; i++) {
       px[i] = 0; pz[i] = 0;
       const s = c.st[i];
       if (s === ST.OFF || s === ST.DEAD || s === ST.DOWN || c.y[i] > 0.6) continue;
@@ -530,7 +697,7 @@ export function createCrowd(game, grunts) {
     // every live body is clamped here, pushed or not: this runs after both movers of the step (the AI integrate above
     // and combat reactions(), which run first in main.js step()), so nobody walks, slides or is thrown through a
     // closed gate, the castle wall or a cliff (airborne bodies too: they stop at the fence instead of landing past it)
-    for (let i = 0; i < N; i++) {
+    for (let i = 0; i < T; i++) {
       if (c.st[i] === ST.OFF) continue;
       [c.x[i], c.z[i]] = clampWalk(c.x[i] + Math.max(-0.2, Math.min(0.2, px[i] * 0.6)), c.z[i] + Math.max(-0.2, Math.min(0.2, pz[i] * 0.6)), -1);
     }

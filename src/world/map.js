@@ -80,9 +80,8 @@ const PIECES = [
 export const PIECE_IDS = PIECES.map((p) => p.id);
 // non-walkable cut-outs [x0, z0, x1, z1]: the 本陣 front palisade either side of its gate; 夏侯淵's pavilion platform
 // on the summit (stair, balustrade and step braziers included: 1.2 m of stone nobody may walk through); the Wei camp
-// courtyard's command table with its stools and brazier (dressing.js: solid set pieces, not walk-through decals);
-// the story's Shu van ranks either side of the road inside the 本陣 gate (dressing.js 'van': |x| 3.5–7.6)
-const PROP_CARVE = [[-4.8, 201.8, 12.8, 214.8], [-6.5, 127.6, -1.5, 132.4], [-8, -125, -3.2, -121.1], [3.2, -125, 8, -121.1]];
+// courtyard's command table with its stools and brazier (dressing.js: solid set pieces, not walk-through decals)
+const PROP_CARVE = [[-4.8, 201.8, 12.8, 214.8], [-6.5, 127.6, -1.5, 132.4]];
 const CARVE = [[-25, -121.5, -9, -117.5], [9, -121.5, 25, -117.5], ...PROP_CARVE];
 /** Render side: (x, z) lies under a solid set piece's cut-out (± pad m): no rock columns / boulders grow there. */
 export const onProp = (x, z, pad = 1) => PROP_CARVE.some((r) => x > r[0] - pad && x < r[2] + pad && z > r[1] - pad && z < r[3] + pad);
@@ -102,6 +101,29 @@ export function routeDist(x, z) {
     d = Math.min(d, Math.hypot(x - ax - ex * t, z - az - ez * t));
   }
   return d;
+}
+
+// arc length along ROUTE (sim: the Shu allies follow the road, so they never try to cut across a cliff or a ramp)
+const ROUTE_S = ROUTE.map(() => 0);
+for (let i = 1; i < ROUTE.length; i++) ROUTE_S[i] = ROUTE_S[i - 1] + Math.hypot(ROUTE[i][0] - ROUTE[i - 1][0], ROUTE[i][1] - ROUTE[i - 1][1]);
+/** Arc length (m) along the road of the road point nearest (x, z). */
+export function routeS(x, z) {
+  let d = 1e9, s = 0;
+  for (let i = 0; i < ROUTE.length - 1; i++) {
+    const [ax, az] = ROUTE[i], [bx, bz] = ROUTE[i + 1], ex = bx - ax, ez = bz - az;
+    const t = Math.min(1, Math.max(0, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez))), e = Math.hypot(x - ax - ex * t, z - az - ez * t);
+    if (e < d) { d = e; s = ROUTE_S[i] + t * (ROUTE_S[i + 1] - ROUTE_S[i]); }
+  }
+  return s;
+}
+/** Road point at arc length s (clamped to the road's ends). Returns a shared [x, z]. */
+const _rp = [0, 0];
+export function routeAt(s) {
+  let i = 0;
+  while (i < ROUTE.length - 2 && ROUTE_S[i + 1] < s) i++;
+  const t = Math.min(1, Math.max(0, (s - ROUTE_S[i]) / (ROUTE_S[i + 1] - ROUTE_S[i])));
+  _rp[0] = ROUTE[i][0] + (ROUTE[i + 1][0] - ROUTE[i][0]) * t; _rp[1] = ROUTE[i][1] + (ROUTE[i + 1][1] - ROUTE[i][1]) * t;
+  return _rp;
 }
 
 let _s = 0, _h = 0, _o = 0;                   // evalPieces out: inside value, height, owner index
