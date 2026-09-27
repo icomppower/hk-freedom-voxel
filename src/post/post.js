@@ -272,7 +272,16 @@ export function createPost({ canvas, width, height }) {
   }
 
   return {
-    renderer,                                       // main.js: compileAsync warm-up behind the loading card / ink wipe
+    /** Warm-up (main.js, behind the loading card / ink wipe): compile the scene's programs for the pass that draws them,
+     *  into sceneRT (linear working space). Compiled with the canvas bound they came out as the sRGB-output variant, which
+     *  the scene never uses: every real program then compiled on its first drawn frame (a crowd pool first shown a
+     *  second into the battle stalled it there). */
+    compile(scene, camera) {
+      renderer.setRenderTarget(sceneRT);
+      const p = renderer.compileAsync(scene, camera);             // programs are chosen synchronously, in this call
+      renderer.setRenderTarget(null);
+      return p;
+    },
     setSize,
     /** focus: world point the camera frames (hero) → DoF focus plane; flash: white screen flash (0..1). */
     render(scene, camera, time, focus, flash) {
