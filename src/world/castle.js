@@ -110,14 +110,33 @@ export function watchtower(b, x, z, H, s) {
   pagoda(b, x, H + 0.2, z, 5.2 * k, 5.2 * k, 1, 0.7);
 }
 
-/** Tiny dark voxel spearman (wall garrison, distant reserve armies). Origin at the feet, faces +Z. band: headband
- *  colour (魏 red; the Shu reserve wears green), coat: torso colour. */
+/** Tiny dark voxel spearman (wall garrison, distant reserve armies; 7 boxes). Origin at the feet, faces +Z. band:
+ *  headband colour (魏 red; the Shu reserve wears green), coat: torso colour. */
 export const figureGeometry = (band = 0xa82a1c, coat = 0x2a2226) => boxesGeometry([
   { s: [0.42, 0.55, 0.28], p: [0, 1.15, 0], c: coat }, { s: [0.24, 0.25, 0.24], p: [0, 1.56, 0], c: 0xc79470 },
   { s: [0.3, 0.14, 0.3], p: [0, 1.72, 0], c: 0x1f1b1e }, { s: [0.32, 0.1, 0.3], p: [0, 1.6, 0], c: band },
   { s: [0.36, 0.9, 0.24], p: [0, 0.45, 0], c: 0x241e22 }, { s: [0.06, 2.6, 0.06], p: [0.3, 1.3, 0.1], c: 0x4a3222 },
   { s: [0.08, 0.26, 0.08], p: [0.3, 2.66, 0.1], c: 0xc3c9d0 },
 ]);
+
+/** The same spearman seen close (the Shu van at the story start, a few metres from the lens): split legs and boots,
+ *  tassets, coat under a lamellar chest plate, belt, pauldrons, arms, face under a brimmed helmet with a headband,
+ *  spear with a tassel (25 boxes, no bottom faces). */
+export const figureGeometryNear = (band, coat, armour = 0x4a4038) => boxesGeometry([
+  { s: [0.15, 0.78, 0.17], p: [-0.1, 0.4, 0], c: 0x2e2a28 }, { s: [0.15, 0.78, 0.17], p: [0.1, 0.4, 0], c: 0x2e2a28 },
+  { s: [0.17, 0.16, 0.24], p: [-0.1, 0.08, 0.03], c: 0x2a1d16 }, { s: [0.17, 0.16, 0.24], p: [0.1, 0.08, 0.03], c: 0x2a1d16 },
+  { s: [0.44, 0.3, 0.3], p: [0, 0.8, 0], c: armour }, { s: [0.42, 0.5, 0.26], p: [0, 1.18, 0], c: coat },
+  { s: [0.36, 0.3, 0.05], p: [0, 1.24, 0.14], c: shade(armour, 1.25) }, { s: [0.36, 0.3, 0.05], p: [0, 1.24, -0.14], c: armour },
+  { s: [0.45, 0.07, 0.29], p: [0, 0.97, 0], c: 0x4d3322 }, { s: [0.08, 0.06, 0.03], p: [0, 0.97, 0.155], c: 0xb89040 },
+  { s: [0.16, 0.13, 0.3], p: [-0.28, 1.38, 0], c: shade(armour, 1.15) }, { s: [0.16, 0.13, 0.3], p: [0.28, 1.38, 0], c: shade(armour, 1.15) },
+  { s: [0.11, 0.46, 0.12], p: [-0.29, 1.12, 0.02], c: coat }, { s: [0.11, 0.46, 0.12], p: [0.29, 1.12, 0.06], c: coat },
+  { s: [0.1, 0.1, 0.1], p: [-0.29, 0.86, 0.04], c: 0xc79470 }, { s: [0.1, 0.1, 0.1], p: [0.29, 0.88, 0.1], c: 0xc79470 },
+  { s: [0.22, 0.23, 0.22], p: [0, 1.56, 0], c: 0xc79470 }, { s: [0.14, 0.03, 0.02], p: [0, 1.58, 0.115], c: 0x1a1210 },
+  { s: [0.28, 0.13, 0.28], p: [0, 1.73, 0], c: 0x3a3634 }, { s: [0.36, 0.04, 0.36], p: [0, 1.67, 0], c: 0x2a2624 },
+  { s: [0.29, 0.06, 0.29], p: [0, 1.63, 0], c: band }, { s: [0.06, 0.1, 0.06], p: [0, 1.84, 0], c: band },
+  { s: [0.05, 2.6, 0.05], p: [0.3, 1.3, 0.1], c: 0x4a3222 }, { s: [0.08, 0.26, 0.03], p: [0.3, 2.66, 0.1], c: 0xc3c9d0 },
+  { s: [0.1, 0.12, 0.1], p: [0.3, 2.47, 0.1], c: band },
+].map((q) => ({ ...q, skip: [3] })));                                            // no bottom faces: never seen
 
 export function buildCastle(scene, { wallZ, gateX }) {
   const r = makeRng(21);

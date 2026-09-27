@@ -155,8 +155,9 @@ export function createTitle(el, flow) {
         g.fillStyle = `rgba(30,18,10,${(0.05 + r(3) * 0.1).toFixed(3)})`;
         g.beginPath(); g.ellipse(r(1) * 128, 60 + r(2) * 260, 6 + r(4) * 22, 4 + r(5) * 16, 0, 0, 7); g.fill();
       }
-      g.fillStyle = '#6a1c12'; g.fillRect(0, 0, 128, 26); g.fillRect(0, 0, 14, 320); g.fillRect(114, 0, 14, 320);
-      for (let y = 300; y < 320; y += 4) g.clearRect(14 + ((y * 7) % 20), y, 100 - ((y * 13) % 30), 4);    // frayed hem
+      // thin faded-vermilion hems (a wide dark border read as a black doorway frame round the cloth when backlit)
+      g.fillStyle = '#a8442a'; g.fillRect(0, 0, 128, 10); g.fillRect(0, 0, 5, 320); g.fillRect(123, 0, 5, 320);
+      for (let y = 300; y < 320; y += 4) g.clearRect(5 + ((y * 7) % 20), y, 110 - ((y * 13) % 30), 4);    // frayed hem
       g.fillStyle = '#140905'; g.font = '700 96px "Xingkai SC", "STXingkai", "HudBrush", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(glyph, 64, 150);
       tex.needsUpdate = true;
@@ -181,7 +182,7 @@ export function createTitle(el, flow) {
       const tex = bannerTex(CHARS[c.id].name.zh[0]);
       const cloth = new THREE.PlaneGeometry(1.15, 3.1, 4, 12);
       // low warm emissive = the low sun glowing through the cloth from behind (the camera sees its shaded face)
-      const mat = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffa060, emissiveIntensity: 0.12, side: THREE.DoubleSide,
+      const mat = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffa060, emissiveIntensity: 0.3, side: THREE.DoubleSide,
         roughness: 0.95, flatShading: true, alphaTest: 0.5 });
       const mesh = new THREE.Mesh(cloth, mat), pole = new THREE.Mesh(new THREE.BoxGeometry(0.09, 6.2, 0.09), new THREE.MeshStandardMaterial({ color: 0x2e1d15, roughness: 0.8 }));
       group.add(mesh, pole);

@@ -9,9 +9,10 @@
 import * as THREE from 'three';
 import { boxesGeometry, shade } from '../core/voxel.js';
 import { makeRng } from '../core/rng.js';
-import { figureGeometry, watchtower, pagoda } from './castle.js';
+import { figureGeometry, figureGeometryNear, watchtower, pagoda } from './castle.js';
 import { TERRAIN as G, ROUTE, ground, riverZ, routeDist, FORDS, WALL_Z, GATE_X, SUMMIT_H, CAMP_H } from './map.js';
-import { topAt } from './terrain.js';
+import { topAt, GRASS_TIME } from './terrain.js';
+import { SUN_DIR } from './sky.js';
 import { lensClear } from '../camera/occlusion.js';
 
 const WIND = new THREE.Vector3(0.75, 0, 0.55).normalize();   // blows up the valley, toward the castle's end
@@ -91,25 +92,35 @@ function animateCloth(m, t) {
 }
 
 // ---------------------------------------------------------------- fire, embers, smoke (instanced, stateless)
-/** Smoke puff: camera-facing quad with a 16×16 pixel-art cloud (hard texels, 3 alpha steps, lighter rim where the
- * low sun catches the edge) — reads as soft smoke yet stays in the voxel/pixel style. Instance matrix = position +
- * rotation/scale in the view plane. */
+/** Smoke puff: camera-facing quad with a soft billow (overlapping lobes, alpha falling off smoothly to 0 well inside
+ * the quad, a lighter upper rim where the low sun catches it). Linear filtered: near the lens a puff stays a soft
+ * cloud, never a stack of hard black texels. Instance matrix = position + rotation/scale in the view plane. */
 function smokeMaterial() {
-  const N = 16, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const N = 64, cv = document.createElement('canvas'); cv.width = cv.height = N;
   const g = cv.getContext('2d'), img = g.createImageData(N, N);
-  const blobs = [[0.5, 0.56, 0.36], [0.33, 0.44, 0.24], [0.66, 0.4, 0.26], [0.48, 0.3, 0.22]];
+  const blobs = [[0.5, 0.56, 0.3], [0.34, 0.46, 0.2], [0.66, 0.42, 0.22], [0.48, 0.3, 0.19], [0.6, 0.64, 0.18], [0.38, 0.62, 0.17]];
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     const u = (x + 0.5) / N, v = (y + 0.5) / N;
-    let d = 9;
-    for (const [bx, by, br] of blobs) d = Math.min(d, Math.hypot(u - bx, v - by) / br);
-    const a = d < 0.7 ? 1 : d < 0.92 ? 0.6 : d < 1.08 ? 0.28 : 0, rim = d > 0.7 ? 1.25 : 1 - 0.18 * (v - 0.3);
+    let dens = 0;
+    for (const [bx, by, br] of blobs) dens += Math.exp(-((Math.hypot(u - bx, v - by) / br) ** 2) * 2.2);
+    const a = Math.min(1, dens * 0.9) * Math.min(1, Math.max(0, 0.5 - Math.hypot(u - 0.5, v - 0.5)) * 6);   // 0 before the quad edge
+    const rim = 0.86 + 0.34 * Math.max(0, 0.55 - v) + 0.2 * (1 - Math.min(1, dens));
     const i = (y * N + x) * 4;
     img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.min(255, 200 * rim); img.data[i + 3] = a * 255;
   }
   g.putImageData(img, 0, 0);
   const map = new THREE.CanvasTexture(cv);
-  map.magFilter = THREE.NearestFilter; map.minFilter = THREE.LinearMipmapLinearFilter;   // mipmapped: no sparkle far off
-  return billboard(new THREE.MeshBasicMaterial({ map, transparent: true, opacity: 0.72, depthWrite: false }));
+  map.minFilter = THREE.LinearMipmapLinearFilter;
+  const mat = new THREE.MeshBasicMaterial({ map, transparent: true, opacity: 0.62, depthWrite: false });
+  mat.onBeforeCompile = (sh) => {                                    // billboard + thinned out near the lens
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vSmNear;').replace('#include <project_vertex>', `
+      vec4 mvPosition = modelViewMatrix * vec4( instanceMatrix[3].xyz, 1.0 );
+      mvPosition.xy += mat2( instanceMatrix[0].xy, instanceMatrix[1].xy ) * transformed.xy;
+      vSmNear = smoothstep(2.0, 9.0, -mvPosition.z);
+      gl_Position = projectionMatrix * mvPosition;`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vSmNear;').replace('#include <dithering_fragment>', 'gl_FragColor.a *= vSmNear;');
+  };
+  return mat;
 }
 
 /** Instanced camera-facing quads: instance matrix = position + rotation/scale in the view plane. */
@@ -127,7 +138,7 @@ function billboard(mat) {
 function glowTexture() {
   const cv = document.createElement('canvas'); cv.width = cv.height = 64;
   const g = cv.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.55)'); gr.addColorStop(0.6, 'rgba(255,255,255,0.14)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  for (let k = 0; k <= 10; k++) gr.addColorStop(k / 10, `rgba(255,255,255,${(Math.exp(-((k / 10) ** 2) * 4.5) - Math.exp(-4.5) * k / 10).toFixed(3)})`);   // gaussian, 0 at the rim
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
   return new THREE.CanvasTexture(cv);
 }
@@ -151,7 +162,7 @@ const FLAME_VS = /* glsl */`
     vec4 mv = viewMatrix * vec4(wp, 1.0);
     vNear = smoothstep(2.5, 7.0, -mv.z);
     float bd = max(-(viewMatrix * vec4(base, 1.0)).z, 0.5);                 // per card (flat): no seams inside a card
-    vGrid = exp2(clamp(floor(log2(10.0 * h / bd)), 0.0, 2.0));
+    vGrid = exp2(clamp(floor(log2(10.0 * h / bd)), 0.0, 3.0));
     vUv = uv; vP = instanceColor;
     gl_Position = projectionMatrix * mv;
   }`;
@@ -173,10 +184,11 @@ const FLAME_FS = /* glsl */`
     float heat = (1.0 - x / mix(0.9, 0.2, uv.y)) * (1.0 - 0.85 * uv.y) + (n - 0.5) * (0.6 + uv.y * 1.3) - 0.05;
     heat *= 0.55 + 0.6 * smoothstep(0.0, 0.16, uv.y);
     if (heat < 0.05) discard;
-    float root = 1.0 - smoothstep(0.1, 0.42, uv.y);                         // the white-hot core lives only at the root
-    vec3 c = mix(vec3(0.1, 0.018, 0.008), vec3(0.8, 0.13, 0.015), smoothstep(0.05, 0.24, heat));   // soot-red tips → red body
-    c = mix(c, vec3(1.3, 0.38, 0.04), smoothstep(0.3, 0.58, heat));                            // orange
-    c = mix(c, vec3(2.2, 1.25, 0.34), smoothstep(0.62, 0.9, heat) * (0.3 + 0.7 * root));      // yellow-white root
+    float root = 1.0 - smoothstep(0.04, 0.26, uv.y);                        // the white-hot core lives only at the base
+    vec3 c = mix(vec3(0.1, 0.018, 0.008), vec3(0.72, 0.1, 0.012), smoothstep(0.05, 0.22, heat));   // soot-red tips → red body
+    c = mix(c, vec3(1.25, 0.3, 0.025), smoothstep(0.3, 0.56, heat));                           // orange tongues
+    c = mix(c, vec3(1.7, 0.72, 0.1), smoothstep(0.6, 0.82, heat) * (0.25 + 0.75 * (1.0 - uv.y)));   // yellow in the lower body
+    c = mix(c, vec3(2.2, 1.4, 0.5), smoothstep(0.78, 0.95, heat) * root);                     // near-white only at the root
     float k = vP.y * vNear;
     // premultiplied: rgb = emitted light, alpha = how much of the background the flame hides (tips/body, not the core)
     float a = smoothstep(0.05, 0.14, heat) * mix(0.72, 0.18, smoothstep(0.2, 0.6, heat));
@@ -229,14 +241,19 @@ function fireSystem(scene, list) {
   scene.add(cm, fm, sm);
   // per fire: a soft additive halo round the flames (heat + light) and a flickering pool of firelight on the ground
   // under it — both fade out near the lens; the halo is kept dim so a brazier by the hero never blows out the frame
-  const glow = glowTexture(), sites = list.map(([x, y, z, s, , g = null]) => ({ x, y, z, s, g, ph: r.range(0, 6.28), py: y - topAt(x, z) < 3.2 ? topAt(x, z) : y }));
+  // (no pool for a fire heaped against a wall — list[6]: a flat plane there only cut a hard orange edge along the wall foot)
+  const glow = glowTexture(), sites = list.map(([x, y, z, s, , g = null, wall = false]) => ({ x, y, z, s, g, wall, ph: r.range(0, 6.28), py: y - topAt(x, z) < 3.2 ? topAt(x, z) : y }));
   const glowMat = (bb) => {
     const gm = new THREE.MeshBasicMaterial({ map: glow, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide });
     gm.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vNear;').replace('#include <project_vertex>', bb ? `
         vec4 mvPosition = modelViewMatrix * vec4( instanceMatrix[3].xyz, 1.0 );
-        mvPosition.xy += mat2( instanceMatrix[0].xy, instanceMatrix[1].xy ) * transformed.xy;
-        gl_Position = projectionMatrix * mvPosition; vNear = smoothstep(5.0, 14.0, -mvPosition.z);` : '#include <project_vertex>\nvNear = smoothstep(4.0, 12.0, -mvPosition.z);');
+        float hR = length(instanceMatrix[0].xyz) * 0.5;
+        vNear = smoothstep(5.0, 14.0, -mvPosition.z);
+        float hD = -mvPosition.z, hS = min(hR * 0.85, max(hD - 1.0, 0.0));
+        mvPosition.z += hS;                                                     // in front of whatever the fire stands on / by,
+        mvPosition.xy += mat2( instanceMatrix[0].xy, instanceMatrix[1].xy ) * transformed.xy * (hD - hS) / hD;   // same size on screen
+        gl_Position = projectionMatrix * mvPosition;` : '#include <project_vertex>\nvNear = smoothstep(4.0, 12.0, -mvPosition.z);');
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vNear;').replace('#include <dithering_fragment>', 'gl_FragColor.rgb *= vNear;');
     };
     gm.customProgramCacheKey = () => 'fire-glow|' + bb;   // halo (billboard) and pool (flat) share the callback text: keep two programs
@@ -247,7 +264,7 @@ function fireSystem(scene, list) {
   for (const k of [hm, pm]) { k.frustumCulled = false; k.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(sites.length * 3), 3); k.renderOrder = 2; scene.add(k); }
   hm.name = 'fire-halo'; pm.name = 'fire-pool';
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
-  const SMOKE_LO = new THREE.Color(0x221a18), SMOKE_HI = new THREE.Color(0x5a5056), GLOW = new THREE.Color(0.4, 0.14, 0.03);
+  const SMOKE_LO = new THREE.Color(0x3a2e2a), SMOKE_HI = new THREE.Color(0x6e6470), GLOW = new THREE.Color(0.4, 0.14, 0.03);
   return (t, lit) => {
     uTime.value = t;
     for (let i = 0; i < cards.length; i++) {
@@ -289,9 +306,9 @@ function fireSystem(scene, list) {
     for (let j = 0; j < sites.length; j++) {
       const f = sites[j], s = f.g && !lit(f.g) ? 0 : f.s, fl = 0.8 + 0.12 * Math.sin(t * 11 + f.ph) + 0.08 * Math.sin(t * 23.7 + f.ph * 3);
       hm.setMatrixAt(j, m.compose(p.set(f.x, f.y + 1.1 * s, f.z), q.identity(), sc.set(3.8 * s * fl, 4.6 * s * fl, 1)));
-      hm.setColorAt(j, c.setRGB(0.5, 0.17, 0.04).multiplyScalar(fl));
-      pm.setMatrixAt(j, m.compose(p.set(f.x, f.py + 0.07, f.z), q.identity(), sc.set(7 * s * fl, 1, 7 * s * fl)));
-      pm.setColorAt(j, c.setRGB(0.7, 0.22, 0.05).multiplyScalar(fl));
+      hm.setColorAt(j, c.setRGB(0.42, 0.13, 0.03).multiplyScalar(fl));
+      pm.setMatrixAt(j, m.compose(p.set(f.x, f.py + 0.07, f.z), q.identity(), sc.set(5.2 * s * fl, 1, 5.2 * s * fl).multiplyScalar(f.wall ? 0 : 1)));
+      pm.setColorAt(j, c.setRGB(0.55, 0.17, 0.035).multiplyScalar(fl));
     }
     for (const k of [hm, pm]) { k.instanceMatrix.needsUpdate = true; k.instanceColor.needsUpdate = true; }
   };
@@ -354,8 +371,23 @@ function cart(b, r, x, z, yaw, burnt = false) {
   if (burnt) return;
   for (let k = 0, n = r.int(3, 5); k < n; k++) {
     const sack = r.chance(0.5), s = sack ? [0.8, 0.5, 0.6] : [0.7, 0.7, 0.7];
-    L(r.range(-0.45, 0.45), 1.3 + (k > 2 ? 0.6 : 0) + s[1] / 2, r.range(-1, 1), s, sack ? shade(0xc2ad86, r.range(0.85, 1.05)) : shade(0x6e5038, r.range(0.8, 1.1)), [0, r.range(-0.3, 0.3), 0]);
+    L(r.range(-0.45, 0.45), 1.3 + (k > 2 ? 0.6 : 0) + s[1] / 2, r.range(-1, 1), s, sack ? shade(SACK, r.range(0.85, 1.05)) : shade(0x6e5038, r.range(0.8, 1.1)), [0, r.range(-0.3, 0.3), 0]);
   }
+}
+
+/** A fallen Wei soldier sprawled on his back (head +Z), one arm flung out, legs apart, his spear dropped beside him:
+ *  sun-faded armour and the red sash so he reads as a body at gameplay range, not a black plank. Origin on the ground. */
+function fallenGeometry() {
+  const B = (s, p, c, ry = 0, rx = 0) => ({ s, p, c, r: [rx, ry, 0] });
+  return boxesGeometry([
+    B([0.46, 0.24, 0.6], [0, 0.13, 0.18], 0x5e504a), B([0.36, 0.05, 0.4], [0, 0.26, 0.24], 0x7e6e62), B([0.48, 0.25, 0.09], [0, 0.13, -0.08], 0x8a2a1c),
+    B([0.24, 0.22, 0.24], [0.02, 0.12, 0.62], 0xb88a68), B([0.3, 0.2, 0.16], [0.02, 0.12, 0.78], 0x4a4341), B([0.31, 0.06, 0.2], [0.02, 0.2, 0.72], 0xb02a1c),
+    B([0.13, 0.12, 0.52], [0.42, 0.07, 0.5], 0x5e3026, 1.1), B([0.1, 0.1, 0.12], [0.62, 0.06, 0.62], 0xb88a68, 1.1),   // arm flung out
+    B([0.13, 0.12, 0.48], [-0.31, 0.07, 0.08], 0x5e3026, -0.25),
+    B([0.15, 0.14, 0.78], [0.17, 0.08, -0.5], 0x3a302b, 0.28), B([0.15, 0.14, 0.76], [-0.15, 0.08, -0.5], 0x3a302b, -0.12),
+    B([0.16, 0.2, 0.14], [0.28, 0.1, -0.9], 0x2a1d16, 0.28), B([0.16, 0.2, 0.14], [-0.2, 0.1, -0.88], 0x2a1d16, -0.12),
+    B([0.05, 0.05, 2.1], [0.95, 0.03, 0.2], 0x6b4a2e, 0.45), B([0.1, 0.03, 0.24], [1.45, 0.03, 1.2], 0xa8adb2, 0.45),
+  ]);
 }
 
 /** Iron brazier on legs: returns its fire spot. */
@@ -367,12 +399,12 @@ function brazier(b, x, z, s = 0.6) {
 }
 
 /** War drum (lacquered barrel on a frame, skin toward `yaw`). */
-function drum(b, x, z, yaw) {
-  const L = local(b, x, ground(x, z), z, yaw);
+function drum(b, x, z, yaw, y = ground(x, z)) {
+  const L = local(b, x, y, z, yaw);
   for (const sx of [-1.45, 1.45]) L(sx, 1.6, 0, [0.28, 3.2, 0.28], 0x2e1d15);
   L(0, 3.1, 0, [3.3, 0.26, 0.3], 0x2e1d15);
   L(0, 1.9, 0, [2.0, 2.0, 1.4], 0x7c2b1d); L(0, 1.9, 0, [2.3, 1.4, 1.25], 0x7c2b1d); L(0, 1.9, 0, [1.4, 2.3, 1.25], 0x7c2b1d);
-  for (const sz of [-0.72, 0.72]) L(0, 1.9, sz, [1.75, 1.75, 0.06], 0xd8c8a4);
+  for (const sz of [-0.72, 0.72]) L(0, 1.9, sz, [1.75, 1.75, 0.06], 0x8a7656);   // hide skin (a pale one blew out by firelight)
   for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2; L(Math.cos(a) * 1.08, 1.9 + Math.sin(a) * 1.08, -0.66, [0.1, 0.1, 0.1], 0xc9a040); }
   L(1.9, 0.9, -0.4, [0.12, 1.4, 0.12], 0x4a3222, [0, 0, 0.5]);               // drumstick leaning on the frame
 }
@@ -386,16 +418,21 @@ function frise(L, lx, ly, lz) {
   }
 }
 
-/** Supply pile: crates (banded lids) and rice sacks, some sacks thrown on the crates. */
+/** Supply pile: crates (banded lids) and burlap rice sacks (twine tie, slumped top), some thrown on the crates. */
+const SACK = 0x8a7a5c;
 function supplies(b, r, x, z, yaw, n = 6) {
   const L = local(b, x, ground(x, z), z, yaw);
+  const sackAt = (lx, y, lz, ry, c) => {
+    L(lx, y, lz, [0.85, 0.46, 0.6], c, ry); L(lx, y + 0.25, lz, [0.7, 0.08, 0.48], shade(c, 0.92), ry);   // slumped top
+    L(lx + 0.3 * Math.cos(ry[1]), y, lz - 0.3 * Math.sin(ry[1]), [0.07, 0.48, 0.63], 0x4a3a28, ry);       // twine tie near one end
+  };
   for (let k = 0; k < n; k++) {
     const lx = (k % 3 - 1) * 0.95 + r.range(-0.1, 0.1), lz = Math.floor(k / 3) * 0.95, sack = r.chance(0.4), ry = [0, r.range(-0.25, 0.25), 0];
-    const sackC = shade(0xc2ad86, r.range(0.78, 1.05));
-    if (sack) { L(lx, 0.25, lz, [0.85, 0.5, 0.6], sackC, ry); continue; }
+    const sackC = shade(SACK, r.range(0.8, 1.0));
+    if (sack) { sackAt(lx, 0.23, lz, ry, sackC); continue; }
     L(lx, 0.4, lz, [0.8, 0.8, 0.8], shade(0x6e5038, r.range(0.75, 1.1)), ry);
     L(lx, 0.7, lz, [0.84, 0.08, 0.84], 0x2e1d15, ry);                          // iron-banded lid
-    if (r.chance(0.5)) L(lx, 1.05, lz, [0.85, 0.5, 0.6], sackC, [0, r.range(-0.5, 0.5), 0]);
+    if (r.chance(0.5)) sackAt(lx, 1.03, lz, [0, r.range(-0.5, 0.5), 0], sackC);
   }
 }
 
@@ -502,6 +539,11 @@ export function buildDressing(scene, { castle, fieldFires }) {
     props.push(...tb);
     flag(x + 1.4 * s, gy + h + 1, z - 1.4 * s, 3, mat);
   };
+  const glowBoxes = [];                              // self-lit paper lanterns (one basic-material mesh)
+  const paperLantern = (x, y, z, s = 1) => glowBoxes.push({ s: [0.04, 0.7 * s, 0.04], p: [x, y + 0.75 * s, z], c: 0x1a120c },
+    { s: [0.62 * s, 0.8 * s, 0.62 * s], p: [x, y, z], c: 0xff7a3a }, { s: [0.5 * s, 0.9 * s, 0.5 * s], p: [x, y, z], c: 0xff9a4a },
+    { s: [0.44 * s, 0.1 * s, 0.44 * s], p: [x, y + 0.45 * s, z], c: 0x2a1a0e }, { s: [0.44 * s, 0.1 * s, 0.44 * s], p: [x, y - 0.45 * s, z], c: 0x2a1a0e },
+    { s: [0.08, 0.35 * s, 0.08], p: [x, y - 0.65 * s, z], c: 0x7c2b1d });
   const fires = [];                                  // [x, y, z, scale, smoke?, gate?]
   const embers = [];                                 // ground-level fires near the fight: the vfx embers rise from them
   const burn = (x, z, s, gate) => { fires.push([x, ground(x, z), z, s, s >= 1.3, gate]); if (!gate) embers.push([x, z]); };
@@ -545,7 +587,8 @@ export function buildDressing(scene, { castle, fieldFires }) {
     if (Math.abs(x) < 16 && Math.abs(z) > 28) continue;                        // keep the road mouths clear
     standard(x, z, r.range(1, 1.2), r.chance(0.15) ? mats.red : mats.wei);
   }
-  for (const [x, z] of [[-16, -42], [16, -42], [-6, 38], [19, 47], [-4, 53], [12, 55], [-11, 72], [4, 74]]) standard(x, z, 1.05, mats.wei, 7.6);
+  // (none at the foot of the climb: the title key art stands there, its sky gap above the officers' heads kept clear)
+  for (const [x, z] of [[-16, -42], [16, -42], [19, 47], [-4, 53], [12, 55], [-11, 72], [4, 74]]) standard(x, z, 1.05, mats.wei, 7.6);
   tower(-10.5, 60, 5.5, 1.3); tower(16, 57, 6, 1.35);
   const pass = barricade(scene, 2, 61, 0, 11);
   burn(-1, 61.5, 1.1, 'pass'); burn(6.5, 61, 1.0, 'pass');
@@ -574,7 +617,7 @@ export function buildDressing(scene, { castle, fieldFires }) {
   for (const [x, z, yaw] of [[-41.2, 118, Math.PI / 2], [-41.2, 122.5, Math.PI / 2], [-14, 139.3, Math.PI], [3.4, 131, -Math.PI / 2]]) shieldRack(props, r, x, z, yaw);
   commandTable(props, -4, 130.5, 0.2);
   standard(-7.5, 134.5, 1.0, mats.xiahou, 7.5, [-4, 124]); standard(-0.5, 134.5, 1.0, mats.wei, 7.5, [-4, 124]);
-  lamp(-9, 128, 0.55); lamp(-30, 116, 0.55);
+  lamp(-2.2, 128.3, 0.55); lamp(-30, 116, 0.55);                                 // (the table + this brazier: a map CARVE)
   supplies(props, r, -33, 113, 0.1, 6); supplies(props, r, -16, 138.6, Math.PI, 6); supplies(props, r, 0.5, 138.6, Math.PI, 5);
   drum(props, 1.5, 119, -Math.PI / 2); drum(props, -24, 137.5, 0.15);
   // watchtowers on the camp shelf beyond the flank wall (the old concept view: the sun between the corner tower and them)
@@ -604,26 +647,28 @@ export function buildDressing(scene, { castle, fieldFires }) {
       for (let x = x0; x <= x1 + 0.01; x += (x1 - x0) / 4) props.push({ s: [0.18, 0.85, 0.18], p: [x, gy + 1.62, 203.35], c: 0x7a2418 }, { s: [0.24, 0.12, 0.24], p: [x, gy + 2.08, 203.35], c: 0xa07c34 });
     }
     for (const x of [0.2, 7.8]) {                                              // stone lanterns at the stair foot, a small flame inside
-      const lz = 201.3;
+      const lz = 202.45;
       props.push({ s: [0.7, 0.3, 0.7], p: [x, gy + 0.15, lz], c: 0x6a5a50 }, { s: [0.3, 0.8, 0.3], p: [x, gy + 0.7, lz], c: 0x6a5a50 },
         { s: [0.62, 0.08, 0.62], p: [x, gy + 1.12, lz], c: 0x5a4c44 }, { s: [0.9, 0.16, 0.9], p: [x, gy + 1.62, lz], c: 0x5a4c44 }, { s: [0.3, 0.2, 0.3], p: [x, gy + 1.8, lz], c: 0x6a5a50 });
       for (const [dx, dz] of [[-0.24, -0.24], [0.24, -0.24], [-0.24, 0.24], [0.24, 0.24]]) props.push({ s: [0.1, 0.42, 0.1], p: [x + dx, gy + 1.35, lz + dz], c: 0x5a4c44 });
       fires.push([x, gy + 1.16, lz, 0.2, false]);
     }
     pagoda(P, 4, gy + 1.2, 209, 13, 8, 2, 1);
-    props.push(...P); }
-  drum(props, -7, 201, 0.25); drum(props, 15, 201, -0.25); drum(props, -12, 190, 0.9);
+    props.push(...P);
+    // paper lanterns under both eaves: self-lit, they carry the backlit facade (the sun sits straight behind it)
+    for (const lx of [-4.6, -1.6, 1.6, 4.6]) paperLantern(4 + lx, gy + 4.05, 205.3, 1.15);
+    for (const lx of [-2.6, 0, 2.6]) paperLantern(4 + lx, gy + 7.2, 206.4, 0.95);
+    // war drums on the terrace either side of the stair, lit by the step braziers (on the stone: nobody walks there)
+    drum(props, -2.5, 205.4, -Math.PI / 2 + 0.35, gy + 1.2); drum(props, 10.5, 205.4, Math.PI / 2 - 0.35, gy + 1.2); }   // side-on: frame to the lens
   { const x = -6, z = 213, gy = ground(x, z), P = 20;
     poles.push({ s: [0.4, P, 0.4], p: [x, gy + P / 2, z], c: 0x2e1d15 }, { s: [5.6, 0.3, 0.3], p: [x + 2.6, gy + P - 0.5, z], c: 0x2e1d15 }, { s: [0.3, 1.4, 0.3], p: [x, gy + P + 0.7, z], c: 0xc9a040 });
     addCloth(mats.xiahou, 5, 10, 'hang', x + 0.2, gy + P - 0.7, z, 0.1); }
-  fires.push([15, beaconTower(props, r, 15, 215), 215, 2.4, true]);          // the beacon: its smoke marks the goal from the valley
+  fires.push([15, beaconTower(props, r, 15, 215), 215, 3.2, true]);          // the beacon: its smoke marks the goal from the valley
   // braziers flanking the pavilion steps (they light its backlit front), supplies and shield racks by the pavilion,
   // a command table on the parade ground's edge, and a jagged crest of voxel crags round the back of the rim so the
   // summit reads as a mountain top against the sky
-  for (const [x, z] of [[-2.5, 203], [10.5, 203]]) lamp(x, z, 0.6);
-  for (const [x, z, yaw] of [[-9, 208, 0.3], [17.5, 207, -0.4]]) supplies(props, r, x, z, yaw, 6);
-  for (const [x, z, yaw] of [[-14, 202, 0.9], [20, 198, -1.2]]) shieldRack(props, r, x, z, yaw);
-  commandTable(props, -15, 194, 1.3);
+  // (the pavilion terrace is a map CARVE; nothing else stands on the walkable parade ground but thin standards)
+  for (const [x, z] of [[-2.5, 203], [10.5, 203]]) lamp(x, z, 0.85);
   for (let i = 0; i < 34; i++) {
     const a = -2.0 + (i / 33) * 4.0 + r.range(-0.04, 0.04), rr = r.range(27.5, 32), x = 2 + Math.sin(a) * rr, z = 194 + Math.cos(a) * rr;
     if (inAt(x, z) > -1.5 || Math.hypot(x + 6, z - 227) < 9 || Math.hypot(x - 20, z - 229) < 9) continue;
@@ -725,7 +770,17 @@ export function buildDressing(scene, { castle, fieldFires }) {
     if (inAt(ax, z) > -3) continue;
     rims[x < 0 ? 0 : 1].push({ x: ax, y: topAt(ax, z), z, yaw: (x < 0 ? Math.PI / 2 : -Math.PI / 2) + r.range(-0.3, 0.3), ph: r.range(0, 6.28) });
   }
-  const figGeo = { shu: figureGeometry(0x3c7a3a, 0x3a3428), wei: figureGeometry() }, armyMat = lit();
+  // story opening: the Shu van drawn up either side of the road just inside the 本陣 gate, facing the ford with their
+  // flags (render-only; the hero starts at its head, map.js spawnPoint, and marches out between the ranks)
+  for (const sx of [-1, 1]) {
+    const list = []; troops.push(['van', list]);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) {
+      const x = sx * (3.7 + i * 1.25) + r.range(-0.15, 0.15), z = -121.6 - j * 1.45 + r.range(-0.15, 0.15);
+      list.push({ x, y: ground(x, z), z, yaw: r.range(-0.12, 0.12), ph: r.range(0, 6.28) });
+    }
+    flag(sx * 5.6, ground(sx * 5.6, -123.1), -123.1, 3.4, mats.shuFlag);
+  }
+  const figGeo = { shu: figureGeometry(0x3c7a3a, 0x3a3428), van: figureGeometryNear(0x3c8a3a, 0x4e6e3e, 0x5e5846), wei: figureGeometry() }, armyMat = lit();
   // the fallen: bodies sprawled in the courtyard, the plaza, on the summit and around the field wrecks (one instanced
   // mesh; laid flat, never an obstacle to the eye)
   { const spots = [], zones = [[-40, 3, 112, 138, 16], [-27, 3, 78, 95, 8], [-20, 24, 180, 210, 14], [-40, 40, -110, 60, 22]];
@@ -734,8 +789,8 @@ export function buildDressing(scene, { castle, fieldFires }) {
       if (inAt(x, z) < 1 || routeDist(x, z) < 2 || Math.abs(z - riverZ(x)) < 6) continue;
       c++; spots.push([x, z, r.range(0, 6.28), r.chance(0.5) ? -1 : 1]);
     }
-    const dead = new THREE.InstancedMesh(figGeo.wei, armyMat, spots.length), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
-    spots.forEach(([x, z, yaw, back], i) => dead.setMatrixAt(i, m.compose(p.set(x, topAt(x, z) + 0.14, z), q.setFromEuler(e.set(back * Math.PI / 2 + r.range(-0.08, 0.08), yaw, r.range(-0.3, 0.3))), one)));
+    const dead = new THREE.InstancedMesh(fallenGeometry(), armyMat, spots.length), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+    spots.forEach(([x, z, yaw], i) => dead.setMatrixAt(i, m.compose(p.set(x, topAt(x, z) - 0.02, z), q.setFromEuler(e.set(r.range(-0.06, 0.06), yaw, r.range(-0.08, 0.08))), one)));
     dead.receiveShadow = true; dead.name = 'fallen';
     scene.add(dead); }
   const armies = troops.filter(([, list]) => list.length).map(([k, list]) => {
@@ -753,22 +808,37 @@ export function buildDressing(scene, { castle, fieldFires }) {
   poseArmy(0);
   for (const [m] of armies) { m.computeBoundingSphere(); m.boundingSphere.radius += 2; }   // + the figure's height and bob
 
-  // reeds (instanced, static): dry gold to olive. Stalks within 3 m of the lens → hero line duck to 30 % (nothing
-  // hides the fight, the tufts' rule)
-  const reedMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  // reeds (instanced, static): tapered straw-gold stalks with a brown seed head, lit like the grass cards (normal pinned
+  // up: never a black backlit stake) with a gold glow toward the low sun; swaying a little. Stalks near the lens or on
+  // the hero line duck to 30 % and thin out (nothing hides the fight, the tufts' rule)
+  const reedMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 });
   reedMat.onBeforeCompile = (sh) => {
-    sh.uniforms.uFocus = FOCUS;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec3 uFocus;').replace('#include <begin_vertex>', `#include <begin_vertex>
+    sh.uniforms.uFocus = FOCUS; sh.uniforms.uTime = GRASS_TIME; sh.uniforms.uSunW = { value: SUN_DIR };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec3 uFocus; uniform float uTime; varying float vReedY;').replace('#include <begin_vertex>', `#include <begin_vertex>
       vec2 rA = cameraPosition.xz, rD = uFocus.xz - rA, rP = instanceMatrix[3].xz;
       float rT = dot(rP - rA, rD) / max(dot(rD, rD), 1e-4);
       float rClear = rT > 1.0 ? 1.0 : smoothstep(1.4, 3.0, distance(rP, rA + rD * max(rT, 0.0)));
-      transformed.y = (transformed.y + 0.5) * mix(0.3, 1.0, rClear) - 0.5;`);
+      rClear = min(rClear, smoothstep(2.0, 5.0, distance(rP, rA)));
+      vReedY = transformed.y + 0.5;
+      transformed.y = vReedY * mix(0.3, 1.0, rClear) - 0.5;
+      transformed.xz *= mix(0.4, 1.0, rClear);
+      transformed.xz += vec2(0.75, 0.55) * (sin(uTime * 1.7 + rP.x * 0.4 + rP.y * 0.3) * 0.5 + 0.5) * 2.2 * vReedY * vReedY;`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uSunW; varying float vReedY;')
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float rBack = pow(max(dot(normalize(-vViewPosition), normalize((viewMatrix * vec4(uSunW, 0.0)).xyz)), 0.0), 3.0);
+        totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.55, 0.2) * (0.03 + 0.2 * rBack * vReedY);`);
   };
-  const reedM = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), reedMat, reeds.length);
+  // unit stalk (y -0.5 … 0.5): three tapering sections, then a slim seed head
+  const reedGeo = boxesGeometry([
+    { s: [1, 0.5, 1], p: [0, -0.25, 0], c: 0x9a8454, skip: [3] }, { s: [0.55, 0.4, 0.55], p: [0, 0.2, 0], c: 0xb09662, skip: [3] },
+    { s: [1.15, 0.13, 1.15], p: [0, 0.455, 0], c: 0x5e3e22, skip: [3] },
+  ]);
+  const reedM = new THREE.InstancedMesh(reedGeo, reedMat, reeds.length);
   { const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color();
     reeds.forEach(([x, y, z, h, tx, tz], i) => {
-      reedM.setMatrixAt(i, m.compose(p.set(x, y + h / 2 - 0.1, z), q.setFromEuler(e.set(tx, 0, tz)), s.set(0.06, h, 0.06)));
-      reedM.setColorAt(i, c.set(r.chance(0.6) ? 0xc0a468 : 0x8e8a58).multiplyScalar(r.range(0.8, 1.1)));   // straw gold, a few still green
+      reedM.setMatrixAt(i, m.compose(p.set(x, y + h / 2 - 0.1, z), q.setFromEuler(e.set(tx, 0, tz)), s.set(0.055, h, 0.055)));
+      reedM.setColorAt(i, c.set(r.chance(0.7) ? 0xffffff : 0xc8d0a0).multiplyScalar(r.range(0.8, 1.05)));   // straw gold, a few still green
     }); }
   reedM.name = 'reeds';
   scene.add(reedM);
@@ -803,19 +873,30 @@ export function buildDressing(scene, { castle, fieldFires }) {
     scene.add(sp); dusts.push(sp);
   }
 
+  const glowMesh = new THREE.Mesh(boxesGeometry(glowBoxes), new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(4, 4, 4) }));
+  glowMesh.name = 'paper-lanterns';
+  scene.add(glowMesh);
   const poleMesh = new THREE.Mesh(boxesGeometry(poles.concat(props)), lensClear(lit(), 2.5));
   poleMesh.castShadow = true; poleMesh.receiveShadow = true;
   scene.add(poleMesh);
 
   // fires: castle braziers / burning debris (castle frame → + CAMP_H), field wrecks, braziers, barricades, the beacon
-  for (const [x, y, z, s] of castle.fires) { fires.push([x, y + CAMP_H, z, s]); if (y < 1) embers.push([x, z]); }
-  const logs = [];
+  for (const [x, y, z, s] of castle.fires) { fires.push([x, y + CAMP_H, z, s, undefined, null, WALL_Z - z < 4]); if (y < 1) embers.push([x, z]); }
+  // under each flame: two charred logs (lit) on a bed of self-lit coals — scattered small voxels from glowing orange to
+  // dull red to black ash, never one flat orange slab
+  const logs = [], coals = [], cr = makeRng(91), COALS = [0xff8a30, 0xe0561c, 0xa8300f, 0x5a180a, 0x1e0e08];
   for (const [x, y, z, s, , g] of fires) {
     if (g) continue;                                                            // barricade fires burn on the wreck itself
     logs.push({ s: [1.8 * s, 0.32 * s, 0.32 * s], p: [x, y + 0.16 * s, z], r: [0, 0.5, 0], c: 0x241510 }, { s: [1.8 * s, 0.32 * s, 0.32 * s], p: [x, y + 0.36 * s, z], r: [0, -0.7, 0], c: 0x2e1c10 });
-    logs.push({ s: [0.6 * s, 0.12, 0.6 * s], p: [x, y + 0.08, z], c: 0xff9a3a });
+    for (let k = 0; k < 9; k++) {
+      const q = cr.range(0.07, 0.16) * s, a = cr.range(0, 6.28), d = Math.sqrt(cr.next()) * 0.42 * s;
+      coals.push({ s: [q, q * 0.7, q], p: [x + Math.cos(a) * d, y + q * 0.3, z + Math.sin(a) * d], r: [0, cr.range(0, 3), 0], c: COALS[Math.min(4, Math.floor(d / (0.42 * s) * 3 + cr.next() * 2))] });
+    }
   }
   scene.add(new THREE.Mesh(boxesGeometry(logs), lit()));
+  const coalMesh = new THREE.Mesh(boxesGeometry(coals), new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(1.5, 1.5, 1.5) }));
+  coalMesh.name = 'coals';
+  scene.add(coalMesh);
   // far-off burning 60-140 m off the route: warm points of fire in the hazy band — a battlefield ablaze to the horizon
   const farFires = [[-72, -96], [70, -62], [-78, 28], [72, 148], [-74, 172], [40, 236], [-86, -150]].map(([x, z]) => [x, topAt(x, z), z, 3.2]);
   const updateFire = fireSystem(scene, fires.concat(farFires));

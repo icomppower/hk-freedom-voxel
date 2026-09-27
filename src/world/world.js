@@ -17,6 +17,7 @@ const FIELD_FIRES = [[-33, -64, 1.2], [32, -58, 1.1], [-30, 8, 1.3], [30, -8, 1.
 // key light: from behind-left of the up-valley view, higher than the visible sun so the ground reads (hard shadows
 // fall toward the camera, soldiers get a warm rim)
 const LIGHT_DIR = new THREE.Vector3(0.5, 0.58, 0.64).normalize();
+const smooth01 = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 installHaze();
 // the sun's shadow fades out over the outer 20 % of its box instead of cutting off: soldiers and props at the box edge
@@ -58,13 +59,23 @@ export function createWorld(scene) {
   const castle = buildCastle(camp, { wallZ: WALL_Z, gateX: GATE_X });
   const dressing = buildDressing(scene, { castle, fieldFires: FIELD_FIRES });
 
-  // fire glow on the gate and on two field wrecks
-  // (the last one, by the ford wreck, is borrowed by the select screen as the officer's warm key: select.js 'stage-key')
-  const fireLights = [[GATE_X - 6.5, WALL_Z - 3.5], [GATE_X + 7, WALL_Z - 3.5], [-30, 8], [-33, -64]].map(([x, z], i) => {
-    const l = new THREE.PointLight(0xff8a3a, 30, 11, 2); l.position.set(x, ground(x, z) + 2.2, z); scene.add(l);
-    if (i === 3) l.name = 'stage-key';
-    return l;
-  });
+  // firelight: three point lights that follow the fight — each frame they sit on the three light sites nearest the
+  // focus (gate fires, the summit's step braziers and beacon, the courtyard braziers, field wrecks), faded by distance
+  // so a swap happens unseen; the same light count as before (every lit shader loops over them). The fourth stays by
+  // the ford wreck: the select screen borrows it as the officer's warm key (select.js 'stage-key').
+  // site: [x, y (above ground), z, intensity, range]
+  const SITES = [[GATE_X - 6.5, 2.2, WALL_Z - 3.5, 30, 11], [GATE_X + 7, 2.2, WALL_Z - 3.5, 30, 11], [-30, 2.2, 8, 30, 11], [30, 2.2, -8, 26, 10],
+    [-2.5, 1.9, 202.0, 30, 12], [10.5, 1.9, 202.0, 30, 12], [15, 9, 213, 60, 18], [-2.2, 1.9, 127.6, 30, 10], [-14, 1.9, 137.2, 26, 10], [-8, 1.9, 196, 24, 10]]
+    .map(([x, y, z, i, d]) => ({ x, y: ground(x, z) + y, z, i, d, k: 0 }));
+  const NEAR = [null, null, null, null];
+  const fireLights = [0, 1, 2].map(() => { const l = new THREE.PointLight(0xff8a3a, 0, 11, 2); scene.add(l); return l; });
+  const stageKey = new THREE.PointLight(0xff8a3a, 30, 11, 2);
+  stageKey.position.set(-33, ground(-33, -64) + 2.2, -64); stageKey.name = 'stage-key'; scene.add(stageKey);
+  // summit fill: the sun sits straight behind 夏侯淵's pavilion, so its lacquer and gilt face the lens in shade — a warm
+  // low fill from the valley side (the fires below / sky bounce) eases in on the summit approach only
+  const fill = new THREE.DirectionalLight(0xffb27a, 0);
+  fill.position.set(-0.35, 0.45, -1).multiplyScalar(60); fill.target.position.set(0, 0, 0);
+  scene.add(fill, fill.target);
 
   // gates: render-side eased 0 (shut) … 1 (open) toward the sim state; doors swing in ≈ 1 s, barricades collapse and char
   const open = { weiCamp: 1, pass: 1, summit: 1 }, CHAR = new THREE.Color(0x3a2a24), WHITE = new THREE.Color(1, 1, 1);
@@ -90,7 +101,23 @@ export function createWorld(scene) {
         g.m.rotation.x = -0.25 * k; g.m.scale.y = 1 - 0.72 * k; g.m.position.y = g.y - 0.1 * k;   // broken down to a low burning wreck
         g.mat.color.copy(WHITE).lerp(CHAR, k);
       }
-      fireLights.forEach((l, i) => { l.intensity = 28 + Math.sin(t * (13 + i * 3.1) + i) * 5 + Math.sin(t * 7.3 + i * 2) * 4; });
+      // the four sites nearest the focus (partial selection, no allocation); lights 0-2 take the first three, each faded
+      // out as the fourth closes in on it, so the hand-over from one site to the next is never a pop
+      for (const s of SITES) s.k = Math.hypot(s.x - focus.x, s.z - focus.z);
+      for (let n = 0; n < 4; n++) {
+        let best = null;
+        for (const s of SITES) if (!s.used && (!best || s.k < best.k)) best = s;
+        best.used = true; NEAR[n] = best;
+      }
+      for (let n = 0; n < 3; n++) {
+        const b = NEAR[n], l = fireLights[n], fl = 0.93 + Math.sin(t * (13 + n * 3.1) + n) * 0.17 + Math.sin(t * 7.3 + n * 2) * 0.13;
+        l.position.set(b.x, b.y, b.z); l.distance = b.d;
+        l.intensity = b.i * fl * (1 - smooth01(26, 40, b.k)) * smooth01(0, 6, NEAR[3].k - b.k);
+      }
+      for (const s of SITES) s.used = false;
+      stageKey.intensity = 28 + Math.sin(t * 22.3 + 3) * 5 + Math.sin(t * 7.3 + 6) * 4;
+      fill.intensity = 1.5 * smooth01(160, 188, focus.z);
+      fill.target.position.set(focus.x, 0, focus.z); fill.position.set(focus.x - 21, 27, focus.z - 60);
     },
   };
 }

@@ -78,8 +78,13 @@ const PIECES = [
   { id: 'summit', ell: [2, 194, 26, 26], h: SUMMIT_H, edge: 1.5 },
 ];
 export const PIECE_IDS = PIECES.map((p) => p.id);
-// non-walkable cut-outs [x0, z0, x1, z1]: the 本陣 front palisade either side of its gate
-const CARVE = [[-25, -121.5, -9, -117.5], [9, -121.5, 25, -117.5]];
+// non-walkable cut-outs [x0, z0, x1, z1]: the 本陣 front palisade either side of its gate; 夏侯淵's pavilion platform
+// on the summit (stair, balustrade and step braziers included: 1.2 m of stone nobody may walk through); the Wei camp
+// courtyard's command table with its stools and brazier (dressing.js: solid set pieces, not walk-through decals)
+const PROP_CARVE = [[-4.8, 201.8, 12.8, 214.8], [-6.5, 127.6, -1.5, 132.4]];
+const CARVE = [[-25, -121.5, -9, -117.5], [9, -121.5, 25, -117.5], ...PROP_CARVE];
+/** Render side: (x, z) lies under a solid set piece's cut-out (± pad m): no rock columns / boulders grow there. */
+export const onProp = (x, z, pad = 1) => PROP_CARVE.some((r) => x > r[0] - pad && x < r[2] + pad && z > r[1] - pad && z < r[3] + pad);
 // Han River: centreline z(x), deep pools between the shallow crossings (x ranges)
 export const riverZ = (x) => -86 + 5 * Math.sin(x * 0.055 + 0.6);
 export const FORDS = [[-30, -18], [-6, 6], [18, 30]];
@@ -216,9 +221,11 @@ export function blocksArrow(x, z, y) {
   return walkIn(x, z) < -0.6 && Math.abs(z - riverZ(x)) > 6.5;
 }
 
-/** Where the hero starts: { x, z, yaw }. Story: inside the 蜀軍本陣 gate facing the valley; free: the pass basin
- *  (the origin, where the free-mode army forms up around him). Battle start: also resets every gate to open. */
+/** Where the hero starts: { x, z, yaw, tilt }. Story: at the head of the Shu ranks just inside the 蜀軍本陣 gate,
+ *  facing the ford through it (tilt: camera pitch offset, rad — levelled a little so the gate towers, standards and the
+ *  valley fill the top of the first frame, not the paving); free: the pass basin (the origin, where the free-mode army
+ *  forms up around him). Battle start: also resets every gate to open. */
 export function spawnPoint(charId, mode) {
   for (const g of GATE_LIST) g.open = true;
-  return mode === 'story' ? { x: 0, z: -142, yaw: 0 } : { x: 0, z: 0, yaw: 0 };
+  return mode === 'story' ? { x: 0, z: -127, yaw: 0, tilt: -0.09 } : { x: 0, z: 0, yaw: 0, tilt: 0 };
 }

@@ -124,7 +124,7 @@ function weaponGeos() {
   ]);
   // round shield strapped to the forearm: centred in front of it, facing +Z of the hand frame
   const R = 0.29;
-  const shield = sculpt([b([-R, 0.12 - R, 0.07], [R, 0.12 + R, 0.13], (x, y, z) => {
+  const shieldBoxes = [b([-R, 0.12 - R, 0.07], [R, 0.12 + R, 0.13], (x, y, z) => {
     const r = Math.hypot(x, y - 0.12);
     if (r > R) return null;
     if (z < 0.1 && r > R - 0.06) return null;                                         // bevel the back
@@ -132,11 +132,12 @@ function weaponGeos() {
     if (r < 0.06) return z > 0.1 ? 0xe0b860 : BRONZE;
     if (Math.abs(r - 0.16) < 0.025) return 0xc8a050;
     return (Math.floor(Math.atan2(x, y - 0.12) / (Math.PI / 4)) & 1) ? 0x7a2418 : 0x5e1a12;
-  }), b([-0.07, 0.1, 0.13], [0.07, 0.15, 0.17], 0xe0b860)], V, 0.1);
+  }), b([-0.07, 0.1, 0.13], [0.07, 0.15, 0.17], 0xe0b860)];
+  const shield = sculpt(shieldBoxes, V, 0.1), mid_shield = sculpt(shieldBoxes, V * 2, 0.1);
   // far LOD shield (≈ 36 tris vs ≈ 736): a stepped cross of solid boxes, the painted face's red + the bronze boss
   const far_shield = boxesGeometry([box([0.58, 0.34, 0.06], [0, 0.12, 0.1], 0x6a1f15), box([0.34, 0.58, 0.06], [0, 0.12, 0.1], 0x6a1f15),
     box([0.12, 0.12, 0.05], [0, 0.12, 0.14], 0xc8a050)]);
-  return { spear, sword, glaive, pole, shield, far_shield };
+  return { spear, sword, glaive, pole, shield, mid_shield, far_shield };
 }
 
 /** All crowd geometries. */
@@ -145,6 +146,9 @@ function buildCrowdGeometries() {
   const grunt = bodyParts(GRUNT, false), off = bodyParts(OFFICER, true);
   for (const k of ['hips', 'torso', 'head', 'crest', 'arm', 'thigh', 'shin']) g[k] = sculpt(grunt[k], V, 0.12);
   for (const k of ['hips', 'torso', 'head', 'arm', 'thigh', 'shin']) g['o_' + k] = sculpt(off[k], V, 0.1);
+  // mid LOD (8-28 m from the lens): the same parts re-voxelised at twice the voxel size — ≈ a quarter of the faces, same silhouette,
+  // lamellar rows and headband still read at that range
+  for (const k of ['hips', 'torso', 'head', 'arm', 'thigh', 'shin']) g['mid_' + k] = sculpt(grunt[k], V * 2, 0.12);
   // grunt shadow proxies: the same solid boxes, un-voxelised (~12 tris each) — the shadow pass never sees the voxel
   // detail. Hips + torso + head share one proxy on the torso matrix.
   const proxy = (boxes, dy = 0) => boxes.filter((q) => !q.paint).map((q) => ({
@@ -309,16 +313,19 @@ export function createCrowdView(scene, game) {
     hips: mk(geos.hips, G, mat, false), torso: mk(geos.torso, G, mat, geos.shadow_trunk), head: mk(geos.head, G, mat, false),
     crest: mk(geos.crest, G), arm: mk(geos.arm, G * 2, mat, geos.shadow_arm), thigh: mk(geos.thigh, G * 2, mat, geos.shadow_thigh),
     shin: mk(geos.shin, G * 2, mat, geos.shadow_shin),
-    spear: mk(geos.spear, G), sword: mk(geos.sword, G), shield: mk(geos.shield, G), far_shield: mk(geos.far_shield, G), glaive: mk(geos.glaive, G + O), pole: mk(geos.pole, G),
+    spear: mk(geos.spear, G), sword: mk(geos.sword, G), shield: mk(geos.shield, G), mid_shield: mk(geos.mid_shield, G), far_shield: mk(geos.far_shield, G), glaive: mk(geos.glaive, G + O), pole: mk(geos.pole, G),
     o_hips: mk(geos.o_hips, O), o_torso: mk(geos.o_torso, O), o_head: mk(geos.o_head, O),
     o_arm: mk(geos.o_arm, O * 2), o_thigh: mk(geos.o_thigh, O * 2), o_shin: mk(geos.o_shin, O * 2),
   };
   const PG = { hips: M.hips, torso: M.torso, head: M.head, arm: M.arm, thigh: M.thigh, shin: M.shin };
   const PO = { hips: M.o_hips, torso: M.o_torso, head: M.o_head, arm: M.o_arm, thigh: M.o_thigh, shin: M.o_shin };
-  // grunts farther than FAR_LOD m from the camera draw the low-poly set (one trunk + limbs), same pose and matrices
-  const FAR_LOD = 28;
+  // LOD by distance from the camera, same pose and matrices: full voxel set inside MID_LOD m, the half-resolution set
+  // (≈ 1.2k tris instead of ≈ 4.9k) to FAR_LOD, then the low-poly box set (one trunk + limbs)
+  const MID_LOD = 8, FAR_LOD = 28;
+  const PM = { hips: mk(geos.mid_hips, G, mat, false), torso: mk(geos.mid_torso, G, mat, geos.shadow_trunk), head: mk(geos.mid_head, G, mat, false),
+    arm: mk(geos.mid_arm, G * 2, mat, geos.shadow_arm), thigh: mk(geos.mid_thigh, G * 2, mat, geos.shadow_thigh), shin: mk(geos.mid_shin, G * 2, mat, geos.shadow_shin) };
   const PF = { torso: mk(geos.far_trunk, G), arm: mk(geos.far_arm, G * 2), thigh: mk(geos.far_thigh, G * 2), shin: mk(geos.far_shin, G * 2) };
-  let farNow = false;
+  let farNow = false, midNow = false;
   const uTime = { value: 0 };
   const flagGeo = new THREE.PlaneGeometry(0.9, 1.5, 4, 6).rotateX(Math.PI / 2).translate(0.5, 0, 1.78);
   const flagMat = new THREE.MeshStandardMaterial({ map: flagTexture(), side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.9 });
@@ -532,7 +539,7 @@ export function createCrowdView(scene, game) {
     // telegraph: the last 14 sf of a blow that will really come (feints don't flare)
     const hotStrike = s === ST.ATTACK && !crowd.feint[i] && t >= CROWD.windup - 14 && t < CROWD.windup;
     if (cap) _c.setRGB(_ch.r * 1.45, _ch.g * 1.1, _ch.b * 0.7); else _c.copy(_ch);                  // captains: bronze armour
-    const far = farNow && !officer, P = officer ? PO : far ? PF : PG;
+    const far = farNow && !officer, P = officer ? PO : far ? PF : midNow ? PM : PG;
     mHips.copy(_root); if (!far) push(P.hips, mHips, _c);
     local(mTorso, mHips, 0, J.waist, 0, C[TO], C[TO + 1], C[TO + 2]); push(P.torso, mTorso, _c);
     local(mOut, mTorso, 0, J.neck, 0, C[HE], C[HE + 1], C[HE + 2]); if (!far) push(P.head, mOut, _ch);
@@ -549,7 +556,7 @@ export function createCrowdView(scene, game) {
     const wm = g === 0 ? M.spear : g === 1 ? M.sword : g === 2 ? M.glaive : M.pole;
     push(wm, mW, _c);
     if (g === 3) push(M.flag, mW, null);
-    if (g === 1) push(far ? M.far_shield : M.shield, local(mOut, mArmL, 0, -J.hand, 0, C[WL], C[WL + 1], C[WL + 2]), _c);
+    if (g === 1) push(far ? M.far_shield : midNow ? M.mid_shield : M.shield, local(mOut, mArmL, 0, -J.hand, 0, C[WL], C[WL + 1], C[WL + 2]), _c);
     // telegraph: pixel-star glint on the weapon tip through the wind-up (drawn over the crowd); a real blow flares it
     // into a big solid red pixel star (white core) for the last 14 sf
     if (s === ST.ATTACK && t >= 3 && t < CROWD.windup && M.glint.count < 32) {
@@ -581,7 +588,8 @@ export function createCrowdView(scene, game) {
         const s = crowd.st[i];
         if (s === ST.OFF) { seen[i] = 0; continue; }
         if (camera && !frustum.intersectsSphere(sph.set(sph.center.set(crowd.x[i], crowd.y[i] + 1, crowd.z[i]), 2.5))) { seen[i] = 0; continue; }
-        farNow = !!camera && (crowd.x[i] - camera.position.x) ** 2 + (crowd.z[i] - camera.position.z) ** 2 > FAR_LOD * FAR_LOD;
+        const d2 = camera ? (crowd.x[i] - camera.position.x) ** 2 + (crowd.z[i] - camera.position.z) ** 2 : 0;
+        farNow = d2 > FAR_LOD * FAR_LOD; midNow = d2 > MID_LOD * MID_LOD;
         // standing soldiers (idle ranks) are recomputed every 4th frame and replayed in between
         if (s === ST.IDLE && seen[i] && crowd.type[i] === 0 && !crowd.flash[i] && ((frameNo + i) & 3)) replay(i);
         else write(i, s, (s === ST.IDLE ? 4 : 1) * dt);
