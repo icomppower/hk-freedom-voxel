@@ -36,7 +36,7 @@ import { AS, ARROW } from '../combat/projectiles.js';
 import { ground } from '../world/map.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _d = new THREE.Vector3();
-const FWD = new THREE.Vector3(0, 0, 1), ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
+const FWD = new THREE.Vector3(0, 0, 1);
 const B = (a, b, c) => ({ a, b, c });
 // palette (linear HDR): Huang Zhong's gold / fire, off Zhao Yun's teal
 // fire stays under the grade's per-channel shoulder (R ≈ 2.4, G ≤ 1): hotter values bleached to a pale yellow line
@@ -55,7 +55,7 @@ export function createArrowView(scene, game, proj, fx) {
   { off: [-0.5, -0.5, 0], jitter: 0, ao: 0.1 });
   const arrows = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, flatShading: true }), N + NPIN);
   arrows.instanceMatrix.setUsage(THREE.DynamicDrawUsage); arrows.frustumCulled = false; arrows.castShadow = true;
-  for (let i = 0; i < N + NPIN; i++) arrows.setMatrixAt(i, ZERO);
+  arrows.count = 0;
   root.add(arrows);
 
   const prev = new Int32Array(N), ringAcc = new Float32Array(N);
@@ -389,8 +389,7 @@ export function createArrowView(scene, game, proj, fx) {
 
   on('scenario', () => {
     fx.clear(); prev.fill(0); pin.t.fill(9); giant.on = false; giant.fade = 0; rn.t.fill(9); rainFx.t = rainFx.t1 + 1; rainMesh.count = 0;
-    for (let i = 0; i < N + NPIN; i++) arrows.setMatrixAt(i, ZERO);
-    arrows.instanceMatrix.needsUpdate = true;
+    arrows.count = 0;
   });
 
   // ---------------------------------------------------------------- draw / charge on the arrowhead
@@ -480,12 +479,13 @@ export function createArrowView(scene, game, proj, fx) {
     shed += dt;
     const emit = shed >= 1 / 60;                               // trail particles at ≤ 60 Hz whatever the frame rate
     if (emit) shed = 0;
-    let hi = 0;                                                // draw only up to the last live slot (the pool is 544 × 468 tris)
+    // perf r5: live arrows are packed from slot 0 (count = live). "Up to the last live slot" drew all 544 × 468 tris
+    // (× 2 with the shadow pass) as soon as one arrow was pinned: ≈ 510k of C6's 2.1M.
+    let hi = 0;
     for (let i = 0; i < N; i++) {
       const st = P.st[i];
       if (!st) {
         if (prev[i]) {
-          arrows.setMatrixAt(i, ZERO);
           if (beamOn[i]) endBeam(i, P.x[i], P.y[i], P.z[i]);
           if (prev[i] === AS.FLY && P.big[i] < 2 && P.kind[i] !== 3) {
             const ex = P.x[i] - tx[i], ey = P.y[i] - ty[i], ez = P.z[i] - tz[i], L = Math.hypot(ex, ey, ez);
@@ -572,19 +572,19 @@ export function createArrowView(scene, game, proj, fx) {
       // (fx r2: the ×5 giant shrinks near the lens — right after the loose its fletching filled the release frame)
       const sc = P.big[i] === 2 && st !== AS.STUCK ? bigK * Math.max(0.35, Math.min(1, fx.px(x, y, z) * 90)) : bigK;
       _m.compose(_p.set(x, y + ground(x, z), z), _q, _s.setScalar(sc));
-      arrows.setMatrixAt(i, _m);
-      prev[i] = st; hi = i + 1;
+      arrows.setMatrixAt(hi++, _m);
+      prev[i] = st;
     }
     // pinned arrows ride the soldier they stopped in
     for (let j = 0; j < NPIN; j++) {
-      if (pin.t[j] >= PIN_T) { if (pin.t[j] < 9) { pin.t[j] = 9; arrows.setMatrixAt(N + j, ZERO); } continue; }
+      if (pin.t[j] >= PIN_T) { pin.t[j] = 9; continue; }
       pin.t[j] += dt;
       const e = pin.e[j], sink = Math.min(1, (PIN_T - pin.t[j]) / 0.25);
       _d.set(pin.dx[j], pin.dy[j], pin.dz[j]);
       _q.setFromUnitVectors(FWD, _d);
       const px = c.x[e] + pin.ox[j], pz = c.z[e] + pin.oz[j];
       _m.compose(_p.set(px, c.y[e] + pin.oy[j] + ground(px, pz), pz), _q, _s.setScalar(pin.s[j] * sink));
-      arrows.setMatrixAt(N + j, _m); hi = N + NPIN;
+      arrows.setMatrixAt(hi++, _m);
     }
     arrows.count = hi;
     arrows.instanceMatrix.needsUpdate = true;
