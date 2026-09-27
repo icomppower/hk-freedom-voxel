@@ -39,6 +39,10 @@ function clumpGeometry() {
   for (const x of [-0.25, 0.25]) for (const y of [-0.25, 0.25]) for (const z of [-0.25, 0.25]) {
     if (x > 0 && y > 0 && z > 0) continue;
     const g = new THREE.BoxGeometry(0.5, 0.5, 0.5).translate(x, y, z), v = shade[k++];
+    // perf r5: drop the faces shared with a neighbour cube (never visible): 84 → 48 tris per chunk, ×1,300 chunks × 2
+    // passes at C6. BoxGeometry faces are +x −x +y −y +z −z, 6 indices each.
+    const inside = (d, s) => { const p = [x, y, z]; p[d] += s * 0.5; return Math.abs(p[d]) < 0.5 && !(p[0] > 0 && p[1] > 0 && p[2] > 0); };
+    g.setIndex(Array.from(g.index.array).filter((_, j) => !inside((j / 12) | 0, ((j / 6) | 0) % 2 ? -1 : 1)));
     g.setAttribute('color', new THREE.Float32BufferAttribute(new Array(g.attributes.position.count * 3).fill(v), 3));
     parts.push(g);
   }
@@ -494,9 +498,10 @@ function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = 
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
   mesh.castShadow = castShadow;
-  for (let i = 0; i < n; i++) { mesh.setMatrixAt(i, ZERO); mesh.setColorAt(i, _c.setRGB(1, 1, 1)); }
+  mesh.setColorAt(0, _c.setRGB(1, 1, 1)); mesh.count = 0;
   scene.add(mesh);
   const F = () => new Float32Array(n);
+  const col = new Float32Array(n * 3);
   const p = { mesh, n, next: 0, x: F(), y: F(), z: F(), vx: F(), vy: F(), vz: F(), life: F(), max: F(), size: F(), kind: new Uint8Array(n), rot: F(), rv: F(), a: F(), last: F() };
   let fadeAttr = null;
   if (fade) {
@@ -508,8 +513,7 @@ function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = 
     p.x[i] = x; p.y[i] = y; p.z[i] = z; p.vx[i] = vx; p.vy[i] = vy; p.vz[i] = vz;
     p.life[i] = life; p.max[i] = life; p.size[i] = size; p.kind[i] = kind; p.rot[i] = vrng.range(0, 6.3); p.rv[i] = vrng.range(-12, 12) * (kind === 1 ? Math.min(1, 0.16 / size) : 1);   // big rocks tumble slowly (mass)
     p.a[i] = alpha; p.last[i] = now();
-    mesh.setColorAt(i, _c.setRGB(r, g, b));
-    mesh.instanceColor.needsUpdate = true;
+    col[i * 3] = r; col[i * 3 + 1] = g; col[i * 3 + 2] = b;
   };
   function integrate(i, dt) {
     const k = p.kind[i];
@@ -529,16 +533,15 @@ function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = 
     p.x[i] += p.vx[i] * dt; p.y[i] += p.vy[i] * dt; p.z[i] += p.vz[i] * dt;
     p.rot[i] += p.rv[i] * dt;
   }
-  p.clear = () => { p.life.fill(0); for (let i = 0; i < n; i++) mesh.setMatrixAt(i, ZERO); mesh.instanceMatrix.needsUpdate = true; };
+  p.clear = () => { p.life.fill(0); mesh.count = 0; };
   p.update = () => {
     const f = now();
-    let hi = -1;
+    let j = 0;
     for (let i = 0; i < n; i++) {
       if (p.life[i] <= 0) continue;
       const dtAll = Math.max(0, (f - p.last[i]) / 60);
       p.last[i] = f;
-      if (p.life[i] <= dtAll) { p.life[i] = 0; mesh.setMatrixAt(i, ZERO); continue; }
-      hi = i;
+      if (p.life[i] <= dtAll) { p.life[i] = 0; continue; }
       if (dtAll > 0) {
         const sub = Math.ceil(dtAll / (1 / 30)), dt = dtAll / sub;       // substeps keep big capture gaps stable
         for (let k = 0; k < sub; k++) integrate(i, dt);
@@ -556,7 +559,7 @@ function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = 
         _q.setFromAxisAngle(_d.set(0, 1, 0), p.rot[i] * 0.15);
         const w = p.size[i] * (0.6 + (1 - u) * 0.9);
         _s.set(w, w * 0.8, w);
-        if (fadeAttr) fadeAttr.array[i] = 0.8 * p.a[i] * Math.min(1, u * 1.4) * Math.min(1, (1 - u) * 12 + 0.25);
+        if (fadeAttr) fadeAttr.array[j] = 0.8 * p.a[i] * Math.min(1, u * 1.4) * Math.min(1, (1 - u) * 12 + 0.25);
       } else if (k === 5) {
         _q.setFromUnitVectors(_up, _d.set(0, 1, 0));                    // flame wisp: long axis (z) up, head on top
         const w = p.size[i] * Math.min(1, u * 2.2) * Math.min(1, (1 - u) * 8);
@@ -570,12 +573,13 @@ function makePool(scene, n, mat, now, { castShadow = false, fade = false, geo = 
         const w = p.size[i] * (k === 1 ? Math.min(1, u * 6) : u);
         _s.set(w, w, w);
       }
-      mesh.setMatrixAt(i, _m.compose(_p, _q, _s));
+      mesh.instanceColor.array.set(col.subarray(i * 3, i * 3 + 3), j * 3);
+      mesh.setMatrixAt(j++, _m.compose(_p, _q, _s));
     }
-    // draw only up to the last live slot: the ring fills from 0, so between wraps most of the pool (debris clumps are
-    // 84 triangles, drawn twice with the shadow pass) is not submitted at all
-    mesh.count = hi + 1;
-    mesh.instanceMatrix.needsUpdate = true;
+    // perf r5: live particles are packed from slot 0 (count = live). "Up to the last live slot" drew the whole ring once
+    // it wrapped, dead slots included (C6: up to 1,400 debris clumps × 2 passes for ≈ 580 alive)
+    mesh.count = j;
+    mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true;
     if (fadeAttr) fadeAttr.needsUpdate = true;
   };
   return p;

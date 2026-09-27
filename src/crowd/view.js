@@ -311,6 +311,10 @@ export function createCrowdView(scene, game) {
     if (shadow && shadow !== true) {
       const p = new THREE.InstancedMesh(shadow, proxyMat, n);
       p.instanceMatrix = m.instanceMatrix; p.castShadow = true; p.frustumCulled = false; p.count = 0;
+      // perf r5: shadow pass only — the main pass calls onBeforeRender (the shadow pass doesn't), so the invisible proxy
+      // draws 0 indices there (it used to cost as many main-pass tris as its shadow: ≈ 110k at C6)
+      p.onBeforeRender = () => { shadow.drawRange.count = 0; };
+      p.onAfterRender = () => { shadow.drawRange.count = Infinity; };
       scene.add(p); proxies.push([p, m]);
     }
     return m;
