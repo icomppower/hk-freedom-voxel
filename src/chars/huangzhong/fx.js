@@ -408,7 +408,8 @@ export function createFx(parent, camera) {
     // smoke
     n = 0;
     const kp = kA.aPos.array, kc = kA.aCol.array, ks = kA.aSeed.array, kh = kA.aHeat.array;
-    for (let i = 0; i < NK; i++) {
+    for (let q = 0; q < NK; q++) {
+      const i = (K.next + q) % NK;                                   // r5: oldest first, so spawn order = draw order across the ring's wrap
       if (K.life[i] <= 0) continue;
       if (K.dl[i] > 0) { K.dl[i] -= dt; continue; }
       K.life[i] -= dt;

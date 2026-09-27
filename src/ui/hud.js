@@ -309,6 +309,7 @@ export function createHud(root, game, camera) {
       offs.forEach((o, j) => {
         const i = c.grunts + j;
         o.show = false;
+        if (inMusou) return;                                          // r5: the Musou cut is clean (a tag sat on the dragon's face)
         if (i >= c.N || c.st[i] === ST.OFF || c.st[i] === ST.DEAD) return;
         const dist = Math.hypot(c.x[i] - h.x, c.z[i] - h.z);
         if (dist >= HUD_TAG_R) return;                               // faded out (alpha < 0.05)
