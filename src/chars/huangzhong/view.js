@@ -101,7 +101,16 @@ export function createMusouView(parent, game, camera) {
       x += vx / 60; y += vy / 60; z += vz / 60;
       if (y <= 0) break;
       if (!gold && headAt(x, y, z) >= 0) { gold = true; hx = x; hy = y; hz = z; if (!rf) { rf = f; rx = x; ry = y; rz = z; } }
-      if (!rf && (f % 2 === 0 && f > 4 && bodyAt(x, y, z) >= 0 || f === 14)) { rf = f; rx = x; ry = y; rz = z; }
+      // fx r5: from the bow, 3 samples a frame (was every 2nd frame from f 6 = 8.8 m: the reticle skipped the soldiers
+      // 2-8 m in front that the arrow hits first and floated ≈ 20 m down range over the HUD; a 2.9 m stride also stepped
+      // over bodies), and it sits on the path abreast of the struck body's axis, not on the sample past it
+      for (let k = 2; k >= 0 && !rf; k--) {
+        const sx = x - vx / 180 * k, sy = y - vy / 180 * k, sz = z - vz / 180 * k, b = bodyAt(sx, sy, sz);
+        if (b < 0) continue;
+        const vh = Math.hypot(vx, vz), t = ((game.crowd.x[b] - sx) * vx + (game.crowd.z[b] - sz) * vz) / (vh * vh);
+        rf = f; rx = sx + vx * t; ry = sy + vy * t; rz = sz + vz * t;
+      }
+      if (!rf && f === 14) { rf = f; rx = x; ry = y; rz = z; }
       if (f % 2 === 0 && f > 2) {
         const k = 1 - n / ND, s = (0.07 + 0.03 * A.d) * (1 + f / 40);         // grows down range: reads at 20 m
         _m.compose(_p.set(x, y + ground(x, z), z), _q.identity(), _s.setScalar(s));
@@ -158,7 +167,9 @@ export function createMusouView(parent, game, camera) {
 
   function updateGrade(t) {
     // dim: warm ember night on him (≈ 0.7× centre, 0.3× edges), lifting from the plant into the volley
-    const dim = (t < 1 ? 0.45 : t < 2 ? 0.8 : 1) * (1 - ramp(t, M.plant, M.volley + 6));
+    // fx r5: cut frame dimmed 0.9 (was 0.45: under the white kick it read ≈1.5× gameplay luma, one blown-out frame) —
+    // the white kick alone is the flash, full dim from the next frame
+    const dim = (t < 1 ? 0.9 : 1) * (1 - ramp(t, M.plant, M.volley + 6));
     const redim = 0.55 * ramp(t, M.big, M.big + 12) * (1 - ramp(t, M.release, M.release + 3));   // the giant draw darkens again
     const d = Math.max(dim, redim);
     show(dimEl, d > 0.003 ? 1 : 0);
