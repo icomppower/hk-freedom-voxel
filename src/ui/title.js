@@ -9,7 +9,9 @@
 // 2D: ink scrim band on the left carrying the logo (三國 seal + gold-leaf 無雙 + VOXEL MUSOU) and the menu, brush name
 // tags projected beside each officer's head (hidden at ≤ 4:3), key/pad prompts along the bottom. First boot shows a
 // "press any key" card (also unlocks audio); returns go straight to the menu.
-// Menu: 第一章「定軍山」 → select {mode:'story'} · 自由演武 → select {mode:'free'} · 操作說明 → controls panel (Esc back).
+// Menu: 第一章「定軍山」 / 自由演武 → the difficulty panel in place of the menu (初級 普通 上級 修羅 + a card: the tier's line and
+// 敵勢 / 敵將 / 傷害 pips; 修羅 shows its unlock rule while locked, core/difficulty.js), confirm → select {mode}, Esc back to
+// the menu · 操作說明 → controls panel (Esc back).
 // Mouse: hover highlights an item, click activates it.
 // Screen contract: createTitle(el, flow) → { enter(ctx), exit(), view } (src/main.js header).
 import * as THREE from 'three';
@@ -19,6 +21,7 @@ import { heroLook } from '../hero/model.js';
 import { createNav, sfx, inkWipe, wiping, afterWipe, stamp, clearStamp, replay } from './menu.js';
 import { ground } from '../world/map.js';
 import { dotTex, scatter, passPoint, standOfficer, poseOfficer } from './stage.js';
+import { DIFFS, LOCK, unlocked, difficulty, setDifficulty } from '../core/difficulty.js';
 
 // brush swash drawn under the focused item (revealed left → right) — one tapered stroke, dry tail
 export const SWASH = `<svg class="swash" viewBox="0 0 400 26" preserveAspectRatio="none" aria-hidden="true"><path d="M3 15C40 7 118 4 214 8
@@ -86,15 +89,18 @@ export function createTitle(el, flow) {
       <div class="t-logo"><i class="t-seal">三國</i><h1 data-t="無雙"><span>無雙</span></h1>
         <p class="t-en"><span>VOXEL MUSOU</span></p></div>
       <div class="t-press"><b>按任意鍵開始</b><small><kbd>Enter</kbd> Press any key</small></div>
-      <nav class="t-menu">${ITEMS.map((it, i) => `<button data-i="${i}" style="--i:${i}"><b>${it.zh}</b><small>${it.en}</small>${SWASH}</button>`).join('')}</nav>
+      <nav class="t-menu t-main">${ITEMS.map((it, i) => `<button data-i="${i}" style="--i:${i}"><b>${it.zh}</b><small>${it.en}</small>${SWASH}</button>`).join('')}</nav>
+      <div class="t-dpanel"><nav class="t-menu t-dif">${DIFFS.map((d, i) => `<button data-d="${i}" style="--i:${i}"><b>${d.zh}<i class="t-lk">鎖</i></b><small>${d.en}</small>${SWASH}</button>`).join('')}</nav>
+        <div class="t-dcard"><h3>難度<small>Difficulty</small></h3><p class="t-dline"><b></b><small></small></p>
+          <ul class="s-stats t-dbars">${[['敵勢', 'Pressure'], ['敵將', 'Officers'], ['傷害', 'Damage']].map(([zh, en]) => `<li><b>${zh}</b><small>${en}</small><span>${'<i></i>'.repeat(5)}</span></li>`).join('')}</ul></div></div>
     </div>
     <section class="t-ctl"><h2>操作說明<small>Controls</small></h2>
       <table>${CONTROLS.map(([zh, en, kb, pad]) => `<tr><th>${zh}<small>${en}</small></th><td>${kb}</td><td class="pad">${pad}</td></tr>`).join('')}</table>
       <p>Tap attack for the combo, press charge mid-combo for a finisher. Fill the gold gauge and unleash 無雙.</p></section>
     <footer class="ui-foot"></footer>`;
-  const $ = (s) => el.querySelector(s), btns = [...el.querySelectorAll('.t-menu button')];
+  const $ = (s) => el.querySelector(s), btns = [...el.querySelectorAll('.t-main button')], dbtns = [...el.querySelectorAll('.t-dif button')];
   const tags = [...el.querySelectorAll('.t-tag')];
-  let cur = 0, pre = true, ctl = false, busy = false;
+  let cur = 0, pre = true, ctl = false, busy = false, dcur = 1, dmode = null;   // dmode: the mode picked, while the difficulty panel is up
 
   const focus = (i, quiet) => {
     i = (i + btns.length) % btns.length;
@@ -102,10 +108,29 @@ export function createTitle(el, flow) {
     btns[cur].classList.remove('on'); cur = i; btns[cur].classList.add('on');
     if (!quiet) sfx('move');
   };
-  const setCtl = (v) => {
-    ctl = v; el.classList.toggle('ctl', v);
-    $('.ui-foot').innerHTML = v ? `<span><kbd>Esc</kbd><kbd class="pad">B</kbd>返回<small>Back</small></span>`
-      : `<span><kbd>↑</kbd><kbd>↓</kbd>選擇<small>Select</small></span><span><kbd>Enter</kbd><kbd class="pad">A</kbd>決定<small>Confirm</small></span>`;
+  const foot = () => {
+    $('.ui-foot').innerHTML = ctl ? `<span><kbd>Esc</kbd><kbd class="pad">B</kbd>返回<small>Back</small></span>`
+      : `<span><kbd>↑</kbd><kbd>↓</kbd>選擇${dmode ? '難度' : ''}<small>Select</small></span><span><kbd>Enter</kbd><kbd class="pad">A</kbd>決定<small>Confirm</small></span>`
+        + (dmode ? `<span><kbd>Esc</kbd><kbd class="pad">B</kbd>返回<small>Back</small></span>` : '');
+  };
+  const setCtl = (v) => { ctl = v; el.classList.toggle('ctl', v); foot(); };
+  // difficulty panel: the card shows the focused tier (a locked 修羅: its unlock rule instead of the line)
+  const dfocus = (i, quiet) => {
+    i = (i + dbtns.length) % dbtns.length;
+    if (i === dcur && dbtns[i].classList.contains('on')) return;
+    dcur = i; dbtns.forEach((b, k) => b.classList.toggle('on', k === i));
+    const d = DIFFS[i], open = unlocked(d), [zh, en] = open ? d.line : LOCK;
+    $('.t-dcard').classList.toggle('lock', !open);
+    $('.t-dline b').textContent = zh; $('.t-dline small').textContent = en;
+    el.querySelectorAll('.t-dbars li').forEach((li, k) => li.querySelectorAll('i').forEach((q, j) => q.classList.toggle('f', j < d.bars[k])));
+    if (!quiet) sfx('move');
+  };
+  const setDif = (mode) => {
+    dmode = mode; el.classList.toggle('dif', !!mode); foot();
+    if (!mode) return;
+    dbtns.forEach((b, k) => b.classList.toggle('lock', !unlocked(DIFFS[k])));
+    dbtns[dcur].classList.remove('on'); dfocus(DIFFS.indexOf(difficulty()), true);
+    measure();                                          // the band widened: the key art glides right (the tiers slide in: CSS)
   };
   const wake = () => { pre = false; el.classList.remove('pre'); sfx('ok'); };
   const ok = () => {
@@ -113,28 +138,37 @@ export function createTitle(el, flow) {
     if (wiping()) return afterWipe(ok);
     if (pre) return wake();
     if (ctl) return back();
+    if (dmode) {
+      const d = DIFFS[dcur], mode = dmode;
+      if (!unlocked(d)) return sfx('back');
+      setDifficulty(d); busy = true;
+      stamp(dbtns[dcur], '決');
+      return setTimeout(() => inkWipe(() => flow.go('select', { mode })), 380);
+    }
     const it = ITEMS[cur];
     if (it.go === 'controls') { sfx('ok'); return setCtl(true); }
-    busy = true;
-    stamp(btns[cur], '決');
-    setTimeout(() => inkWipe(() => flow.go('select', { mode: it.go })), 380);
+    sfx('ok'); setDif(it.go);
   };
   const back = () => {
     if (busy) return;
     if (wiping()) return afterWipe(back);
     if (pre) return wake();
     if (ctl) { sfx('back'); setCtl(false); }
+    else if (dmode) { sfx('back'); setDif(null); measure(); }
   };
   // "press any key": any key wakes the menu and is swallowed (capture, before the menu driver would act on it too)
   let active = false;
   addEventListener('keydown', (e) => { if (active && pre && !e.metaKey && !e.ctrlKey) { e.stopImmediatePropagation(); e.preventDefault(); wake(); } }, true);
-  const nav = createNav({ move: (d) => { if (pre) wake(); else if (!ctl && !busy) focus(cur + d); }, ok, back });
+  const nav = createNav({ move: (d) => { if (pre) wake(); else if (!ctl && !busy) dmode ? dfocus(dcur + d) : focus(cur + d); }, ok, back });
 
-  el.addEventListener('pointerover', (e) => { const b = e.target.closest('.t-menu button'); if (b && !pre && !ctl && !busy) focus(+b.dataset.i); });
+  el.addEventListener('pointerover', (e) => {
+    const b = e.target.closest('.t-menu button');
+    if (b && !pre && !ctl && !busy) b.dataset.d ? dfocus(+b.dataset.d) : focus(+b.dataset.i);
+  });
   el.addEventListener('click', (e) => {
     if (pre) return wake();
     const b = e.target.closest('.t-menu button');
-    if (b) { if (!ctl) { focus(+b.dataset.i, true); ok(); } else back(); }
+    if (b) { if (ctl) back(); else { b.dataset.d ? dfocus(+b.dataset.d, true) : focus(+b.dataset.i, true); ok(); } }
     else if (ctl && !e.target.closest('.t-ctl')) back();
   });
   // mouse parallax target (-1..1), eased in view()
@@ -152,7 +186,7 @@ export function createTitle(el, flow) {
   let menuR = 0; const tagW = [0, 0];
   const measure = () => {
     const r = $('.t-band').getBoundingClientRect(); if (r.width) fitL = Math.min(0.6, (r.right + innerHeight / 72 * 3) / innerWidth);
-    menuR = Math.max(...[...el.querySelectorAll('.t-menu b, .t-menu small')].map((e) => e.getBoundingClientRect().right)) + innerHeight / 72 * 1.2;
+    menuR = Math.max(...[...el.querySelectorAll('.t-menu b, .t-menu small, .t-dcard')].map((e) => e.getBoundingClientRect().right)) + innerHeight / 72 * 1.2;
     tags.forEach((e, i) => { tagW[i] = e.offsetWidth; });
   };
   addEventListener('resize', measure); document.fonts?.ready.then(measure);
@@ -339,7 +373,7 @@ export function createTitle(el, flow) {
   return {
     view,
     enter() {
-      busy = false; clearStamp(el); setCtl(false);
+      busy = false; clearStamp(el); dmode = null; el.classList.remove('dif'); setCtl(false);
       el.classList.toggle('pre', pre);
       focus(cur, true); btns[cur].classList.add('on');
       replay(el, 'in');                                                     // logo ink-in

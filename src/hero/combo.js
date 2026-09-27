@@ -3,7 +3,7 @@
 // entries (n1 / c1 / dash / jatk / jc).
 import { lungeAt } from './moveset.js';
 import { stickDir, turnToward, startDodge, startJump, setState, LOCO } from './locomotion.js';
-import { ST, CROWD } from '../crowd/crowd.js';
+import { ST } from '../crowd/crowd.js';
 import { emit } from '../core/events.js';
 
 const BUF = 14;           // frames a press stays buffered once it is eligible to fire
@@ -76,7 +76,7 @@ function startMove(h, id, inp, game) {
   const [dx, dz, mag] = stickDir(inp, game.cam.yaw);
   if (mag) h.yaw = Math.atan2(dx, dz);
   else {
-    const t = softTarget(h, m, game.crowd);
+    const t = softTarget(h, m, game.crowd, game.diff.windup);
     if (t >= 0) h.yaw = Math.atan2(game.crowd.x[t] - h.x, game.crowd.z[t] - h.z);
   }
   emit('attack:start', { move: id, x: h.x, y: h.y, z: h.z, yaw: h.yaw, charge: id[0] === 'c' || id === 'jc', tell: m.tell });
@@ -96,13 +96,13 @@ function covers(hit, lz, lx) {
  *  the nearest enemy roughly in front. Facing the threat is what keeps a string from being interrupted in a crowd.
  *  Coverage is judged from where the lunge will have carried the hero by the first active frame (a step-in swing can
  *  leave a flank attacker behind the arc). */
-function softTarget(h, m, c) {
+function softTarget(h, m, c, strike) {
   const hit = m.hits[0], sn = Math.sin(h.yaw), cs = Math.cos(h.yaw);
   const fwd = lungeAt(m, m.tell);
   let best = -1, bt = -1, covered = false;
   for (let i = 0; i < c.N; i++) {
     const t = c.stT[i];
-    if (c.st[i] !== ST.ATTACK || t + m.tell >= CROWD.strike) continue;
+    if (c.st[i] !== ST.ATTACK || t + m.tell >= strike) continue;   // strike: the blow's frame (game.diff.windup)
     const dx = c.x[i] - h.x, dz = c.z[i] - h.z;
     if (dx * dx + dz * dz > 3.2 * 3.2) continue;
     if (hit && covers(hit, dx * sn + dz * cs - fwd, dx * cs - dz * sn)) { covered = true; continue; }

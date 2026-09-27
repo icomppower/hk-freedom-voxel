@@ -9,6 +9,7 @@
 // ctx in: { mode, char, art? }. main.js drives progress(p, zh?, en?) and ready(); nothing here touches the sim.
 import { CHARS } from '../chars/index.js';
 import { replay } from './menu.js';
+import { difficulty } from '../core/difficulty.js';
 
 export const MODE = { story: ['第一章「定軍山」', 'Story · Chapter I · Mount Dingjun'], free: ['自由演武', 'Free battle · endless waves'] };
 // [zh, en, char id | undefined = any officer] — keep in step with the controls table (title.js CONTROLS)
@@ -44,7 +45,8 @@ export function createLoading(el) {
       el.style.setProperty('--acc', ch.accent);
       $('.l-art').style.backgroundImage = c.art ? `url("${c.art}")` : 'none';
       el.classList.remove('ready'); replay(el, 'in');
-      $('.l-ch b').textContent = zh; $('.l-ch small').textContent = en;
+      const d = difficulty();
+      $('.l-ch b').textContent = `${zh}・${d.zh}`; $('.l-ch small').textContent = `${en} · ${d.en}`;
       $('.l-name h1').textContent = ch.name.zh; $('.l-seal').textContent = ch.seal;
       $('.l-en').textContent = `${ch.name.en} · ${ch.title.en}`;
       $('.l-line b').textContent = ch.lines.intro.zh; $('.l-line small').textContent = ch.lines.intro.en;

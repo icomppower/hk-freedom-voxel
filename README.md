@@ -26,6 +26,7 @@ No build step: plain ES modules, Three.js r186 vendored in `vendor/three/`, dete
   - **Huang Zhong** — bow: limb slashes and point-blank shots, charge shots (fan, barrage, arrow rain, fire arrow), aim mode, Musou 百步穿楊 (a flaming volley and a giant arrow)
 - Story mode, Chapter I 「定軍山」: prologue, scripted battle with dialogue, objectives, enemy officers and gates, result screen; play it as either officer (the other one joins the dialogue)
 - Free battle: endless waves
+- Four difficulties, picked after the mode on the title: 初級 · 普通 · 上級 · 修羅 (修羅 opens once Chapter I is cleared on 上級). Grunts stay one-sweep fodder; the tiers turn enemy pressure, officer toughness and the cost of a hit
 - Jump, jump attack, dodge; hit-stop and impact VFX
 - Dense voxel crowds of Wei soldiers (~300, InstancedMesh) blasted apart into voxel debris, allied Shu troops
 - Enemy officers with name and HP tags

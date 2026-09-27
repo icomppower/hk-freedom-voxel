@@ -14,6 +14,7 @@ import { sampleClip, POSE_SIZE } from '../hero/rig.js';
 import { createNav, sfx, inkWipe, wiping, afterWipe, stamp, clearStamp, replay } from './menu.js';
 import { SWASH, STAGE as TITLE } from './title.js';
 import { MODE } from './loading.js';
+import { difficulty } from '../core/difficulty.js';
 import { dotTex, scatter, passPoint, standOfficer, poseOfficer } from './stage.js';
 
 const STATS = [['atk', '攻', 'Attack'], ['def', '防', 'Defence'], ['speed', '速', 'Speed'], ['range', '射程', 'Reach']];
@@ -173,7 +174,8 @@ export function createSelect(el, flow) {
     enter(c) {
       ctx = c; busy = false; armed = false; clearStamp($('.s-act'));
       const [zh, en] = MODE[c.mode] || MODE.free;
-      $('.s-mode b').textContent = zh; $('.s-mode small').textContent = en;
+      const d = difficulty();
+      $('.s-mode b').textContent = `${zh}・${d.zh}`; $('.s-mode small').textContent = `${en} · ${d.en}`;
       show(cur, true); replay(el, 'in');                   // header, roster and actions slide in as the ink uncovers
       nav.start();
     },
