@@ -7,20 +7,22 @@
 // ctx in: { win, stats: { kos, time, hp, hpMax, maxChain, dmg, char, rank? }, mode, char, chapter }.
 import { CHARS, paintPortrait } from '../chars/index.js';
 import { EPILOGUE } from './ch1.js';
-import { inkWipe } from '../ui/menu.js';
+import { inkWipe, afterWipe } from '../ui/menu.js';
 
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 export function createResult(el, flow) {
-  let ctx = {}, raf = 0;
+  let ctx = {}, raf = 0, gone = false;
+  // one exit per visit; pressed while this screen is still being uncovered it is queued (afterWipe), not dropped
+  const leave = (mid) => { if (!gone) { gone = true; afterWipe(() => inkWipe(mid)); } };
   el.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.act === 'retry') inkWipe(() => flow.go('loading', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter, art: ctx.art, retry: true }));
-    else inkWipe(() => flow.go('title'));
+    if (b.dataset.act === 'retry') leave(() => flow.go('loading', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter, art: ctx.art, retry: true }));
+    else leave(() => flow.go('title'));
   });
   const key = (e) => {
-    if (e.code === 'Escape') return inkWipe(() => flow.go('title'));
+    if (e.code === 'Escape') return leave(() => flow.go('title'));
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
       const bs = [...el.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
       bs[(i + (e.code === 'ArrowLeft' || e.code === 'ArrowUp' ? bs.length - 1 : 1)) % bs.length]?.focus();
@@ -30,7 +32,7 @@ export function createResult(el, flow) {
 
   return {
     enter(c) {
-      ctx = c;
+      ctx = c; gone = false;
       const { win, stats: s } = c, ch = CHARS[c.char] || CHARS.zhaoyun, epi = EPILOGUE[ch.id] || EPILOGUE.huangzhong;
       const rows = [
         ['擊破數', 'K.O. COUNT', s.kos, (v) => v],

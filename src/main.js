@@ -5,8 +5,10 @@
 // focus, dt) = optional render-only camera/stage hook run after the gameplay rig while that screen is up); the sim only steps in
 // 'battle' and not paused (Esc: pause menu #menu). startBattle() resets the sim for a character / mode / chapter.
 // flow.go() returns a promise that settles once the new state's materials are compiled and two frames have presented
-// (menu.js inkWipe holds the ink until then). Every screen change goes through the ink wipe. 'loading' (after 出陣, or 再戰
-// on the result) runs deploy(): once the card is fully uncovered, startBattle for the chosen officer, compile, warm frames
+// (menu.js inkWipe holds the ink until then; the page boots under it, inkBoot). Every screen change but prologue →
+// battle (its own fade onto the live field) goes through the ink wipe; the HUD slides in on each battle entry (#hud.in).
+// 'loading' (after 出陣, or 再戰 on the result) runs deploy(): once the card is fully uncovered, startBattle for the chosen
+// officer (flow.go('battle') then keeps it: no second reset under a visible field), compile, warm frames
 // (the bar tracks those real stages), a minimum dwell, then ink on into the prologue / battle — the officer on the field
 // is the chosen one before anything of the field is seen again, and his kit's first draws never stall on screen.
 // Select → loading also snaps the select stage's key-art frame of the officer (snapArt) for the loading card and result.
@@ -31,7 +33,7 @@ import { createStory } from './story/index.js';
 import { createTitle, CONTROLS } from './ui/title.js';
 import { createSelect } from './ui/select.js';
 import { createLoading } from './ui/loading.js';
-import { inkWipe, wiping, createNav, sfx } from './ui/menu.js';
+import { inkWipe, inkBoot, wiping, createNav, sfx, replay } from './ui/menu.js';
 import { createPrologue } from './story/prologue.js';
 import { createResult } from './story/result.js';
 
@@ -165,8 +167,9 @@ const flow = {
   go(s, c = {}) {
     if (s === 'loading' && state === 'select') c.art = arts[c.char] = snapArt();
     if (screens[state]) { screens[state].exit(); $(state).hidden = true; }
+    const set = state === 'loading' || state === 'prologue';   // deploy() already started this battle (its field is on screen)
     state = s; ctx = c;
-    if (s === 'battle') { startBattle(c); setPaused(false); }
+    if (s === 'battle') { if (!set) startBattle(c); setPaused(false); replay(hudEl, 'in'); }
     else { setPaused(false); hudEl.hidden = true; $(s).hidden = false; screens[s].enter(c); }
     emit('flow', { state: s, ctx: c });
     if (s === 'loading') { deploy(c); return nextFrame(); }
@@ -179,7 +182,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  *  KHR_parallel_shader_compile, then let two frames present: the screen's first draws don't stall. */
 async function warm() {
   screens[state]?.view?.(scene, camRig.camera, camRig.focus, 0);   // a screen's stage (select: every officer's model) exists now
-  await post.renderer.compileAsync(scene, camRig.camera);
+  await post.compile(scene, camRig.camera);
   await nextFrame(); await nextFrame();
 }
 /** Key-art still of the officer focused on the select stage, taken under full ink: one render in the select screen's
@@ -202,7 +205,7 @@ async function deploy(c) {
   await stage(0.18, '點將', 'Summoning the officer');
   startBattle(c);
   await stage(0.5, '佈陣', 'Deploying the ranks');
-  await post.renderer.compileAsync(scene, camRig.camera);
+  await post.compile(scene, camRig.camera);
   await stage(0.82, '整軍備戰', 'Preparing the field');
   hold = false;                                    // the loop renders the field behind the card: shadow / first-draw variants
   for (let i = 0; i < 4; i++) await nextFrame();
@@ -241,7 +244,6 @@ const frame = (now) => {
 };
 
 const dev = params.get('go');
-if (dev) flow.go('battle', { mode: dev === 'story' ? 'story' : 'free', char: params.get('char') || 'zhaoyun', chapter: 'ch1' });
-else flow.go('title');
-render();
+// the page opens under full ink (index.html): the first screen is built and compiled under it, then the ink sweeps off
+inkBoot(() => dev ? flow.go('battle', { mode: dev === 'story' ? 'story' : 'free', char: params.get('char') || 'zhaoyun', chapter: 'ch1' }) : flow.go('title'));
 requestAnimationFrame(frame);
