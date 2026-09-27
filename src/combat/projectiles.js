@@ -138,7 +138,8 @@ export function createProjectiles(game) {
       }
       emit('arrow:rain', { x: cx, z: cz, r: R.r, delay: R.delay / 60, over: R.over / 60 });
     }
-    emit('arrow:fire', { x, y, z, yaw, pitch, spread: sp, n, heavy: !!spec.heavy, fire: !!spec.fire, big: spec.big || 0, sky: !!spec.sky, move });
+    emit('arrow:fire', { x, y, z, yaw, pitch, spread: sp, n, heavy: !!spec.heavy, fire: !!spec.fire, big: spec.big || 0, sky: !!spec.sky, move,
+      reach: tgt >= 0 ? Math.hypot(c.x[tgt] - x, c.z[tgt] - z) : 0 });   // r5: locked soldier's distance (heavy line length)
     return tgt;
   };
 

@@ -245,7 +245,8 @@ export function createArrowView(scene, game, proj, fx) {
     // fx r3 acc: heavy single shots (N6, C1, C4's last, a full-draw aim shot) draw their force line on the loose itself —
     // a point-blank arrow is often spent inside a sim step before any render sees it fly, so the in-flight beam never showed
     if (e.heavy && e.big === 1 && !e.fire && e.n === 1) {
-      const o = lens ? 2.5 : 0.3, L = lens ? 16 : 12, bw0 = lens ? Math.max(0.25, Math.min(1, fx.px(x + dx * o, y + dy * o, z + dz * o) * 90)) : 1;
+      const o = lens ? 2.5 : 0.3, L = lens ? 16 : e.reach ? Math.min(12, Math.max(6, e.reach + 4)) : 12,   // r5: ends ≈ 4 m past a locked soldier
+        bw0 = lens ? Math.max(0.25, Math.min(1, fx.px(x + dx * o, y + dy * o, z + dz * o) * 90)) : 1;
       heavyBeam(x + dx * (o + L), y + dy * (o + L), z + dz * (o + L), dx, dy, dz, L, bw0, 0.42);
     }
     if ((e.heavy || e.big) && !e.fire && !e.sky && e.big < 2 && !lens) {   // fx r3 acc: a shock cone punched off the bow
