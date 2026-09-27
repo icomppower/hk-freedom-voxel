@@ -312,6 +312,7 @@
   #title .t-menu button { position: relative; isolation: isolate; display: block; padding: .7rem 0 1.3rem 4rem; color: #ddd0b4;
     transition: color .2s, transform .25s cubic-bezier(.3,0,.2,1), opacity .4s; }
   .t-menu b { display: block; font: 700 4.3rem/1 var(--brush); letter-spacing: .3rem; white-space: nowrap; text-shadow: .15rem .25rem 0 rgba(0,0,0,.75); }
+  .t-menu b, .t-menu small { width: max-content; }   /* title.js measures the menu text's right edge (name tag clearance) */
   .t-menu small { display: block; margin-top: .6rem; font: 600 max(13px, 1.4rem)/1.1 var(--sans); letter-spacing: .1em; color: #c4b596; white-space: nowrap; }
   .t-menu .swash { left: 3rem; bottom: 2.9rem; width: 32rem; height: 2rem; z-index: -1; }
   .t-menu button::before { content: ""; position: absolute; left: .6rem; top: 2.3rem; width: 1.1rem; height: 1.1rem; background: var(--sealr);
@@ -338,8 +339,8 @@
     text-shadow: 0 0 .9rem rgba(0,0,0,.9), .15rem .25rem 0 rgba(0,0,0,.8); }
   .t-tag i { font: 700 1.6rem/1.02 var(--brush); font-style: normal; color: #fbe9d6; background: var(--sealr); writing-mode: vertical-rl; padding: .35rem .25rem;
     border-radius: .25rem; box-shadow: inset 0 0 0 .14rem var(--sealr), inset 0 0 0 .24rem rgba(251,233,214,.8), 0 .2rem .5rem rgba(0,0,0,.6); }
-  .t-tag small { font: 700 max(12px, 1.2rem)/1 var(--sans); letter-spacing: .18em; color: #f0e2c2; text-shadow: 0 .1rem .3rem #000; white-space: nowrap;
-    background: rgba(9,6,4,.6); padding: .35rem .6rem; }
+  .t-tag small { font: 700 max(12px, 1.2rem)/1.25 var(--sans); letter-spacing: .18em; color: #f0e2c2; text-shadow: 0 .1rem .3rem #000;
+    width: min-content; text-align: center; background: rgba(9,6,4,.6); padding: .35rem .6rem; }   /* one word per line: a narrow column */
   #title.in .t-tag { animation: fadeIn 1s ease 1.6s both; }
   #title.ctl .t-tag { opacity: 0; }
 
