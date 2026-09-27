@@ -10,7 +10,7 @@ import { buildTerrain, GRASS_TIME } from './terrain.js';
 import { buildCastle } from './castle.js';
 import { createRiver } from './river.js';
 import { buildDressing } from './dressing.js';
-import { WALL_Z, GATE_X, CAMP_H, GATES, ground } from './map.js';
+import { WALL_Z, GATE_X, CAMP_H, GATES, ground, smooth } from './map.js';
 
 // burning wrecks on the field, near the walkable edges so the fight stays clear: [x, z, scale]
 const FIELD_FIRES = [[-33, -64, 1.2], [32, -58, 1.1], [-30, 8, 1.3], [30, -8, 1.2], [-22, -28, 1.0], [24, 24, 1.1], [15, 40, 1.0],
@@ -18,7 +18,6 @@ const FIELD_FIRES = [[-33, -64, 1.2], [32, -58, 1.1], [-30, 8, 1.3], [30, -8, 1.
 // key light: from behind-left of the up-valley view, higher than the visible sun so the ground reads (hard shadows
 // fall toward the camera, soldiers get a warm rim)
 const LIGHT_DIR = new THREE.Vector3(0.5, 0.58, 0.64).normalize();
-const smooth01 = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 installHaze();
 // the sun's shadow fades out over the outer 20 % of its box instead of cutting off: soldiers and props at the box edge
@@ -58,7 +57,7 @@ export function createWorld(scene) {
   const camp = new THREE.Group();                                   // the castle set stands on the camp plateau
   camp.position.y = CAMP_H;
   scene.add(camp);
-  const castle = buildCastle(camp, { wallZ: WALL_Z, gateX: GATE_X });
+  const castle = buildCastle(camp);
   const dressing = buildDressing(scene, { castle, fieldFires: FIELD_FIRES });
 
   // firelight: three point lights that follow the fight — each frame they sit on the three light sites nearest the
@@ -81,7 +80,6 @@ export function createWorld(scene) {
 
   // gates: render-side eased 0 (shut) … 1 (open) toward the sim state; doors swing in ≈ 1 s, barricades collapse and char
   const open = { weiCamp: 1, pass: 1, summit: 1 }, CHAR = new THREE.Color(0x3a2a24), WHITE = new THREE.Color(1, 1, 1);
-  const lit = (id) => GATES[id].open;
   const tmp = new THREE.Vector3();
   let t = 0;
   return {
@@ -95,7 +93,7 @@ export function createWorld(scene) {
       sun.target.position.copy(tmp);
       sun.position.copy(LIGHT_DIR).multiplyScalar(70).add(tmp);
       sky.material.uniforms.uTime.value = t; GRASS_TIME.value = t;
-      dressing.update(t, lit, focus);
+      dressing.update(t, focus);
       castle.update(t);
       for (const id in open) open[id] += ((GATES[id].open ? 1 : 0) - open[id]) * Math.min(1, dt * 3);
       castle.setDoors(open.weiCamp * (2 - open.weiCamp));
@@ -115,11 +113,11 @@ export function createWorld(scene) {
       for (let n = 0; n < 3; n++) {
         const b = NEAR[n], l = fireLights[n], fl = 0.93 + Math.sin(t * (13 + n * 3.1) + n) * 0.17 + Math.sin(t * 7.3 + n * 2) * 0.13;
         l.position.set(b.x, b.y, b.z); l.distance = b.d;
-        l.intensity = b.i * fl * (1 - smooth01(26, 40, b.k)) * smooth01(0, 6, NEAR[3].k - b.k);
+        l.intensity = b.i * fl * (1 - smooth(26, 40, b.k)) * smooth(0, 6, NEAR[3].k - b.k);
       }
       for (const s of SITES) s.used = false;
       stageKey.intensity = 28 + Math.sin(t * 22.3 + 3) * 5 + Math.sin(t * 7.3 + 6) * 4;
-      fill.intensity = 1.5 * smooth01(160, 188, focus.z);
+      fill.intensity = 1.5 * smooth(160, 188, focus.z);
       fill.target.position.set(focus.x, 0, focus.z); fill.position.set(focus.x - 21, 27, focus.z - 60);
     },
   };

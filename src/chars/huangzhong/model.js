@@ -7,8 +7,8 @@
 // (drawn through the right hand when it holds the nock) and the nocked arrow (flaming for fire shots). The bow-blade slash
 // ribbon is vfx.js's (kit.trail: the upper limb along the weapon frame's y).
 import * as THREE from 'three';
-import { vox, V, HV, C, bodyParts, heroLook } from '../../hero/model.js';
-import { chain } from '../../hero/secondary.js';
+import { vox, V, HV, C, bodyParts, buildBody, heroLook } from '../../hero/model.js';
+import { bodyChains } from '../../hero/secondary.js';
 import { hash01 } from '../../core/rng.js';
 
 export const HC = {
@@ -101,28 +101,10 @@ function quiverGeo() {
 
 export function createHzModel(rig) {
   const mat = heroLook(new THREE.MeshStandardMaterial({ color: new THREE.Color(0.82, 0.82, 0.82), vertexColors: true, roughness: 0.55, metalness: 0.1, flatShading: true }));
-  const { parts, pauldron } = bodyParts(HC);
+  const body = bodyParts(HC);
   // tiger-face gold belt plate over the buckle
-  parts.hips.push(B([-3, -1, 5], [3, 4, 7], HC.S), Pt([-2, 2, 6], [-1, 3, 7], HC.Tl), Pt([1, 2, 6], [2, 3, 7], HC.Tl), Pt([-1, 0, 6], [1, 1, 7], HC.Sd));
-  const meshes = {};
-  const add = (parent, geo, name, m = mat) => {
-    const mesh = new THREE.Mesh(geo, m);
-    mesh.castShadow = true; mesh.receiveShadow = true;
-    parent.add(mesh); meshes[name] = mesh;
-    return mesh;
-  };
-  for (const [joint, boxes] of Object.entries(parts)) {
-    const odd = /foreArm|thigh|shin/.test(joint);
-    add(rig.joints[joint], vox(boxes, V, { off: odd ? [-0.5, 0, -0.5] : [0, 0, 0] }), joint);
-  }
-  add(rig.joints.head, vox(head(), HV, { off: [-0.5, 0, 0], jitter: 0.04 }), 'head');
-  for (const [s, sx] of [['R', -1], ['L', 1]]) {
-    const pd = new THREE.Object3D();
-    pd.name = 'pauldron' + s;
-    rig.joints['shoulder' + s].add(pd);
-    rig.joints['pauldron' + s] = pd;
-    add(pd, vox(pauldron(sx), V), 'pauldron' + s);
-  }
+  body.parts.hips.push(B([-3, -1, 5], [3, 4, 7], HC.S), Pt([-2, 2, 6], [-1, 3, 7], HC.Tl), Pt([1, 2, 6], [2, 3, 7], HC.Tl), Pt([-1, 0, 6], [1, 1, 7], HC.Sd));
+  const { meshes, add } = buildBody(rig, mat, body, head());
   const quiver = new THREE.Object3D();                                // right hip, tilted back, fletchings behind the elbow
   quiver.position.set(-0.19, -0.02, -0.08); quiver.rotation.set(-0.55, 0, 0.18);
   rig.joints.hips.add(quiver);
@@ -152,16 +134,9 @@ const beardSeg = (i, n) => {
 };
 const tailSeg = () => vox([B([-1, -6, 0], [1, 0, 1], HC.band)], 0.014, { off: [0, 0, -0.5], jitter: 0.03, ao: 0.15 });
 
-/** live.game is set by the kit's Musou sim (musou.js) so the render side can read hero state (fire arrows). */
-export const live = { game: null };
-
-export function createHzSecondary(scene, rig, mat) {
-  const j = rig.joints, chains = [];
-  const add = (joint, o) => chains.push(chain(scene, mat, joint, o));
-  add(j.chest, { anchor: [0, 0.255, -0.16], rest: [0, -1, 0.15], n: 6, len: 0.17, stiff: 0.16, drag: 0.22, wind: 1.1, cone: 80, sway: 0.2,
-    seg: capeSeg, hit: ['chest', 'hips', 'thighL', 'thighR', 'kneeL', 'kneeR'] });
-  add(j.hips, { anchor: [0, -0.02, 0.19], rest: [0, -1, 0.12], n: 3, len: 0.12, stiff: 0.12, drag: 0.14, wind: 0.4, face: [0, 0, 1], cone: 70, sway: 0.08,
-    seg: apronSeg, hit: [['thighL', 0.02], ['thighR', 0.02], ['kneeL', 0.02], ['kneeR', 0.02]] });
+/** hero (hero.js; select / title models pass none): whose state lights the fire arrow. */
+export function createHzSecondary(scene, rig, mat, hero) {
+  const j = rig.joints, body = bodyChains(scene, rig, mat, capeSeg, apronSeg), { add } = body;
   add(j.head, { anchor: [0, -4 * HV, 3 * HV], rest: [0, -1, 0.3], n: 3, len: 0.055, stiff: 0.2, drag: 0.2, wind: 0.6, face: [0, 0, 1], cone: 60, sway: 0.1,
     seg: beardSeg, hit: [['chest', 0.03]] });
   for (const sx of [-1, 1]) add(j.head, { anchor: [sx * 1.5 * HV, 15 * HV, -3 * HV], rest: [sx * 0.3, -0.4, -1], n: 3, len: 0.08, stiff: 0.03, drag: 0.06,
@@ -177,14 +152,9 @@ export function createHzSecondary(scene, rig, mat) {
   arrow.matrixAutoUpdate = false; scene.add(arrow);
   const flame = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.2), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.3, 0.3), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
   flame.matrixAutoUpdate = false; scene.add(flame);
-  const cols = {};
-  for (const k of ['head', 'chest', 'hips', 'thighL', 'thighR', 'kneeL', 'kneeR']) cols[k] = { c: new THREE.Vector3(), r: 0 };
-  const setCol = (k, joint, x, y, z, r) => { cols[k].c.set(x, y, z).applyMatrix4(joint.matrixWorld); cols[k].r = r; };
-  const back = new THREE.Vector3(), _q = new THREE.Quaternion(), _d = new THREE.Vector3(), DOWN = new THREE.Vector3(0, -1, 0);
   const hand = new THREE.Vector3(), loc = new THREE.Vector3(), t0 = new THREE.Vector3(), t1 = new THREE.Vector3(), nock = new THREE.Vector3();
   const m4 = new THREE.Matrix4(), inv = new THREE.Matrix4(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
   const m4b = new THREE.Matrix4(), m4c = new THREE.Matrix4();
-  let t = 0;
   /** Segment mesh from a to b (world), thickness w. */
   const seg = (m, a, b, w) => {
     _y.subVectors(b, a); const len = _y.length(); _y.normalize();
@@ -194,19 +164,9 @@ export function createHzSecondary(scene, rig, mat) {
   };
   const FIRE = new Set(['c6', 'jc']);
   return {
-    reset() { for (const c of chains) c.reset(); },
+    reset: body.reset,
     update(dt) {
-      t += dt;
-      for (const s of ['L', 'R']) {
-        _d.set(0, -1, 0).applyQuaternion(j['upperArm' + s].quaternion);
-        _q.setFromUnitVectors(DOWN, _d);
-        j['pauldron' + s].quaternion.identity().slerp(_q, 0.5);
-      }
-      j.root.updateMatrixWorld(true);
-      setCol('head', j.head, 0, 7 * HV, 0, 7.4 * HV); setCol('chest', j.chest, 0, 0.08, 0, 0.19); setCol('hips', j.hips, 0, -0.06, 0, 0.155);
-      for (const s of ['L', 'R']) { setCol('thigh' + s, j['thigh' + s], 0, -0.22, 0, 0.095); setCol('knee' + s, j['shin' + s], 0, -0.02, 0, 0.09); }
-      back.set(0, 0.15, -1).applyQuaternion(j.root.getWorldQuaternion(_q));
-      for (const c of chains) c.update(dt, t, cols, back);
+      const t = body.update(dt);            // cloth, beard, tails, pauldrons (world matrices now current)
 
       // bowstring: through the right hand when it holds the nock (behind the bow, on the arrow line), else straight
       const W = j.weapon.matrixWorld;
@@ -222,7 +182,7 @@ export function createHzSecondary(scene, rig, mat) {
         // nocked arrow along the line from the nock (bow-local frame)
         m4.copy(W).multiply(m4b.makeTranslation(0, 0, loc.z - 0.02));
         arrow.matrix.copy(m4); arrow.matrixWorldNeedsUpdate = true;
-        const g = live.game, h = g && g.hero, fire = h && ((h.state === 'attack' && FIRE.has(h.move)) || h.state === 'musou');
+        const h = hero, fire = h && ((h.state === 'attack' && FIRE.has(h.move)) || h.state === 'musou');
         flame.visible = !!fire;
         if (fire) {
           const k = 1 + 0.25 * Math.sin(t * 40);

@@ -19,12 +19,11 @@ import * as THREE from 'three';
 import { makeRng, vrng } from '../core/rng.js';
 import { ST } from '../crowd/crowd.js';
 import { SUN_DIR, SKY_UP } from './sky.js';
-import { TERRAIN as G, ground, riverZ, FORDS, WATER_Y } from './map.js';
+import { TERRAIN as G, ground, riverZ, FORDS, WATER_Y, smooth } from './map.js';
 
 const X0 = G.x0, W = (G.nx - 1) * G.step, HW = 7.8;       // strip: the whole grid along x, 15.6 m across the centreline
 const RIPS = 32;
 const riverDz = (x) => 5 * 0.055 * Math.cos(x * 0.055 + 0.6); // d riverZ / dx
-const smooth = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 const WATER_VS = /* glsl */`
   uniform float uTime;

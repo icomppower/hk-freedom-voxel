@@ -7,11 +7,13 @@
 //    gone within 0.5 s, so the payoff plays at the normal golden-hour contrast.
 //  · floating light motes (streak during the chase), rising energy ribbons, electric aura in the close-up
 //  · the voxel azure dragon (path shared with the sim hits: dragonAt), shedding light-voxel shards, dissolving at the end
-//  · finisher lightning ring band (DW9 ring wave), calligraphy cut-in (無雙 + seal) over the close-up (DOM, frame-driven)
+//  · finisher lightning ring band (DW9 ring wave), calligraphy cut-in (無雙 + seal) over the close-up (overlay.js, frame-driven)
 import * as THREE from 'three';
 import { on } from '../core/events.js';
 import { vrng, hash01 } from '../core/rng.js';
 import { MUSOU, dragonAt, dragonArc } from './musou.js';
+import { createOverlay, ramp } from './overlay.js';
+import { makePool } from '../vfx/vfx.js';
 import { ground } from '../world/map.js';
 import { dragonSight } from '../crowd/view.js';
 
@@ -19,8 +21,7 @@ const _m = new THREE.Matrix4(), _l = new THREE.Matrix4(), _q = new THREE.Quatern
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _v = new THREE.Vector3(), _c = new THREE.Color();
 const _cam = new THREE.Vector3();                           // camera in the view's sim space (y above the ground under him)
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0), UP = new THREE.Vector3(0, 1, 0), FWD = new THREE.Vector3(0, 0, 1);
-const clamp01 = (v) => Math.min(1, Math.max(0, v));
-const ramp = (t, a, b) => clamp01((t - a) / (b - a));
+const { clamp } = THREE.MathUtils;
 
 /** Box geometry with baked per-face shade (top bright, bottom dark) so flat-coloured voxels still read as solids. */
 function shadedBox() {
@@ -117,9 +118,10 @@ export function createMusouView(parent, game, camera) {
     }` }));
   add.frustumCulled = false; add.renderOrder = 1e6 + 1; add.visible = false;
   scene.add(add);
-  const layer = (blend) => { const d = document.createElement('div'); d.style.cssText = `position:fixed;inset:0;pointer-events:none;opacity:0;mix-blend-mode:${blend}`; return d; };
-  const dimEl = layer('multiply'), washEl = layer('screen');
-  (document.getElementById('c') || document.body.firstChild).after(dimEl, washEl);     // above the canvas, below the HUD
+  const ov = createOverlay({ sub: '常山 趙子龍', seal: '龍膽', css: {
+    big: 'color: #f7f3ea; text-shadow: 0 0 2px #0b1418, 6px 8px 0 rgba(4,10,14,.55), 0 0 28px rgba(110,220,255,.55);',
+    sub: 'color: #d8f4ff; text-shadow: 0 0 10px rgba(80,200,255,.7), 2px 2px 0 rgba(0,0,0,.6);' } });
+  const { dim: dimEl, wash: washEl, setStyle, show } = ov;
 
   // ---- light voxels: motes | ribbons | aura | ring wall
   const NM = 220, NH = 72, NA = 48, NR = 144, H0 = NM, A0 = NM + NH, R0 = A0 + NA;
@@ -128,16 +130,12 @@ export function createMusouView(parent, game, camera) {
   // disc (the intro's bokeh blobs, the close-up's blue smears)
   const fx = instanced(scene, new THREE.BoxGeometry(1, 1, 1), Object.assign(addMat(), { depthWrite: true }), R0 + NR);
 
-  // ---- light-voxel shards (dragon trail, contact/finisher bursts, musou KOs)
-  const NSH = 700;
-  const sh = { m: instanced(scene, new THREE.BoxGeometry(1, 1, 1), Object.assign(addMat(), { depthWrite: true }), NSH), next: 0,   // (r3: depth for the DOF, as fx)
-    x: new Float32Array(NSH * 3), v: new Float32Array(NSH * 3), life: new Float32Array(NSH), max: new Float32Array(NSH), size: new Float32Array(NSH), rot: new Float32Array(NSH) };
-  const shard = (x, y, z, vx, vy, vz, life, size, r, g, b) => {
-    const i = sh.next; sh.next = (sh.next + 1) % NSH;
-    sh.x[i * 3] = x; sh.x[i * 3 + 1] = y; sh.x[i * 3 + 2] = z; sh.v[i * 3] = vx; sh.v[i * 3 + 1] = vy; sh.v[i * 3 + 2] = vz;
-    sh.life[i] = sh.max[i] = life; sh.size[i] = size; sh.rot[i] = vrng.range(0, 6.3);
-    sh.m.setColorAt(i, _c.setRGB(r, g, b)); sh.m.instanceColor.needsUpdate = true; sh.m.visible = true;
-  };
+  // ---- light-voxel shards (dragon trail, contact/finisher bursts, musou KOs): vfx.js glow-shard pool (sim space, so it
+  // sits in the scene, not in the ground-lifted group), full size until the last 40 % of life, none at the lens (DoF made
+  // them cyan blobs; fx r4: 4–8 m fade)
+  const shards = makePool(parent, 700, Object.assign(addMat(), { depthWrite: true }), () => game.frame,   // (r3: depth for the DOF, as fx)
+    { drag: 2.2, shrink: 2.5, near: (p) => ramp(p.distanceTo(camera.position), 4, 8) });
+  const shard = (x, y, z, vx, vy, vz, life, size, r, g, b) => shards.spawn(x, y, z, vx, vy, vz, life, size, 4, r, g, b);
   const burst = (x, y, z, n, spd, up, size = 0.12, k = 1) => {
     for (let i = 0; i < n; i++) {
       const a = vrng.range(0, 6.283), s = spd * vrng.range(0.3, 1), w = vrng.range(0.6, 1.1) * k;
@@ -186,27 +184,6 @@ export function createMusouView(parent, game, camera) {
   const glow = new THREE.PointLight(0x9fefff, 0, 20, 1.4);
   scene.add(glow);
 
-  // ---- calligraphy cut-in (DOM overlay, frame-driven)
-  // integration r1: placed under the HUD's square minimap (ends ≈ 34 vh) and left of the HUD's vertical musou copy
-  const css = document.createElement('style');
-  css.textContent = `
-    .mu-cut { position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0; font-family: "Xingkai SC", "STXingkai", "Libian SC", "Kaiti SC", "STKaiti", serif; }
-    .mu-cut .big { position: absolute; right: 11%; top: 36%; writing-mode: vertical-rl; font-size: 18vh; line-height: 1; color: #f7f3ea; transform-origin: 50% 40%;
-      text-shadow: 0 0 2px #0b1418, 6px 8px 0 rgba(4,10,14,.55), 0 0 28px rgba(110,220,255,.55); letter-spacing: -1vh; }
-    .mu-cut .seal { position: absolute; right: 21.5%; top: 64%; width: 7vh; height: 7vh; background: #a8261b; color: #f3e2c8; border-radius: 0.8vh;
-      font: 3.1vh/3.4vh "Kaiti SC", "STKaiti", serif; writing-mode: vertical-rl; display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 0 0 0.35vh rgba(243,226,200,.25) inset, 3px 4px 0 rgba(0,0,0,.4); transform-origin: 50% 50%; }
-    .mu-cut .sub { position: absolute; right: 22.5%; top: 37%; writing-mode: vertical-rl; font: 3vh/1 "Kaiti SC", "STKaiti", serif; letter-spacing: 1.2vh;
-      color: #d8f4ff; text-shadow: 0 0 10px rgba(80,200,255,.7), 2px 2px 0 rgba(0,0,0,.6); }`;
-  document.head.appendChild(css);
-  const cut = document.createElement('div');
-  cut.className = 'mu-cut';
-  cut.innerHTML = '<div class="sub">常山 趙子龍</div><div class="big">無雙</div><div class="seal">龍膽</div>';
-  document.body.appendChild(cut);
-  const [cutSub, cutBig, cutSeal] = cut.children;
-  const setStyle = (el, k, v) => { if (el.style[k] !== v) el.style[k] = v; };
-  const show = (el, v) => { setStyle(el, 'display', v > 0 ? 'block' : 'none'); setStyle(el, 'opacity', v.toFixed(3)); };   // unused layers leave the compositor
-
   // ---- events
   let tv = -1, time = 0, startX = 0, startZ = 0;            // tv: musou frame (continues past the end for fades)
   let contactF = -99, burstF = -99;                          // game frames of the payoff events (flashes ignore hitstop)
@@ -216,32 +193,12 @@ export function createMusouView(parent, game, camera) {
   on('musou:burst', (e) => { burstF = game.frame; burst(e.x, 0.6, e.z, 18, 18, 9, 0.11, 0.26); });
   // fx r4: one sub-bloom shard per KO (two HDR ones per KO bloomed + DOF'd into the big cyan balls over the contact fan)
   on('ko', (e) => { if (mu.active) shard(e.x, e.y, e.z, e.dx * 5 + vrng.range(-2, 2), vrng.range(2, 7), e.dz * 5 + vrng.range(-2, 2), vrng.range(0.3, 0.55), vrng.range(0.05, 0.09), 0.3, 0.75, 1.05); });
-  on('scenario', () => { tv = -1; sh.life.fill(0); for (let i = 0; i < NSH; i++) sh.m.setMatrixAt(i, ZERO); sh.m.instanceMatrix.needsUpdate = true; });
+  on('scenario', () => { tv = -1; shards.clear(); });
 
   function hideAll() {
     add.visible = fx.visible = dragon.visible = shell.visible = ink.visible = bolts.visible = false;
     glow.intensity = 0; dragonSight.w = 0;
-    for (const el of [cut, dimEl, washEl]) show(el, 0);
-  }
-
-  function updateShards(dt) {
-    let any = false;
-    for (let i = 0; i < NSH; i++) {
-      if (sh.life[i] <= 0) continue;
-      sh.life[i] -= dt;
-      if (sh.life[i] <= 0) { sh.m.setMatrixAt(i, ZERO); continue; }
-      any = true;
-      const o = i * 3, dr = Math.max(0, 1 - 2.2 * dt);
-      sh.v[o + 1] -= 6 * dt; sh.v[o] *= dr; sh.v[o + 2] *= dr;
-      sh.x[o] += sh.v[o] * dt; sh.x[o + 1] = Math.max(0.05, sh.x[o + 1] + sh.v[o + 1] * dt); sh.x[o + 2] += sh.v[o + 2] * dt;
-      sh.rot[i] += dt * 9;
-      const cd = Math.hypot(sh.x[o] - camera.position.x, sh.x[o + 1] - camera.position.y, sh.x[o + 2] - camera.position.z);
-      const w = sh.size[i] * Math.min(1, sh.life[i] / sh.max[i] * 2.5) * Math.min(1, Math.max(0, (cd - 4) / 4));   // (r3 acc: none at the lens — DoF made them cyan blobs; fx r4: 4–8 m fade)
-      _q.setFromAxisAngle(_v.set(0.5, 1, 0.3).normalize(), sh.rot[i]);
-      sh.m.setMatrixAt(i, _m.compose(_p.set(sh.x[o], sh.x[o + 1], sh.x[o + 2]), _q, _s.set(w, w, w)));
-    }
-    sh.m.instanceMatrix.needsUpdate = true;
-    if (!any) sh.m.visible = false;
+    ov.hide();
   }
 
   /** Orthonormal frame at arc length a along the dragon path (world), rolled by `roll`; returns false if unborn. */
@@ -459,7 +416,7 @@ export function createMusouView(parent, game, camera) {
     show(dimEl, dim + cool > 0.003 ? 1 : 0);
     if (dim > 0.003) {
       _p.set(hero.x, (t < M.closeup ? 1.1 : 1.5) + scene.position.y, hero.z).project(camera);
-      const hx = (clamp01(_p.x * 0.5 + 0.5) * 100).toFixed(1), hy = ((1 - clamp01(_p.y * 0.5 + 0.5)) * 100).toFixed(1);
+      const hx = (clamp(_p.x * 0.5 + 0.5, 0, 1) * 100).toFixed(1), hy = ((1 - clamp(_p.y * 0.5 + 0.5, 0, 1)) * 100).toFixed(1);
       setStyle(dimEl, 'background', `radial-gradient(ellipse 30% 58% at ${hx}% ${hy}%, ${rgb([150, 182, 222])} 0%, ` +
         `${rgb([84, 118, 165])} 55%, ${rgb([48, 72, 112])} 100%)`);
     } else if (cool > 0.003) setStyle(dimEl, 'background', rgb([255, 255, 255]));
@@ -474,7 +431,7 @@ export function createMusouView(parent, game, camera) {
     if (f >= 0) _p.set(hero.x, 1.4, hero.z);
     else { mu.toWorld([0, 1.3, 2.2], W3); _p.set(W3[0], W3[1], W3[2]); }
     _p.y += scene.position.y; _p.project(camera);
-    const cx = clamp01(_p.x * 0.5 + 0.5), cy = clamp01(_p.y * 0.5 + 0.5);
+    const cx = clamp(_p.x * 0.5 + 0.5, 0, 1), cy = clamp(_p.y * 0.5 + 0.5, 0, 1);
     show(washEl, wash);
     if (wash > 0) setStyle(washEl, 'background', flash ? '#fff' :
       `radial-gradient(ellipse at ${(cx * 100).toFixed(1)}% ${((1 - cy) * 100).toFixed(1)}%, rgba(246,255,255,1) 0%, rgba(214,246,250,.75) 30%, rgba(160,214,228,.35) 100%)`);
@@ -499,38 +456,25 @@ export function createMusouView(parent, game, camera) {
     }
   }
 
-  function updateCut(t) {
-    const M = MUSOU;
-    const k = ramp(t, M.closeup, M.closeup + 5) * (1 - ramp(t, M.pullback + 2, M.pullback + 10));
-    show(cut, k);
-    if (k <= 0) return;
-    const st = ramp(t, M.closeup, M.closeup + 5), se = ramp(t, M.closeup + 8, M.closeup + 12);
-    setStyle(cutBig, 'transform', `scale(${(1.6 - 0.6 * st * st).toFixed(3)}) translateY(${((t - M.closeup) * -0.06).toFixed(2)}vh)`);
-    setStyle(cutSeal, 'transform', `scale(${(2.2 - 1.2 * se).toFixed(3)}) rotate(-8deg)`);
-    setStyle(cutSeal, 'opacity', se.toFixed(3));
-    setStyle(cutSub, 'opacity', ramp(t, M.closeup + 10, M.closeup + 20).toFixed(3));
-  }
-
-  let warm = 2;                                              // first renders: draw everything as a no-op so shaders compile at boot, not mid-Musou
   return {
     update(dt) {
       time += dt;
       scene.position.y = ground(hero.x, hero.z);                // sim space → the terrain under him (world/map.js)
-      if (warm > 0 && tv < 0) { warm--; addU.uRays.value = 0; add.visible = fx.visible = dragon.visible = shell.visible = ink.visible = bolts.visible = sh.m.visible = true; return; }
       if (mu.active) tv = mu.t;
       else if (tv >= 0) { tv += dt * 60; if (tv > MUSOU.end + 50) tv = -1; }
-      if (sh.m.visible) updateShards(dt);
+      shards.update();
       if (tv < 0) { hideAll(); return; }
+      const M = MUSOU;
       updateGrade(tv);
       updateFx(tv);
       updateDragon(tv, dt);
-      updateCut(tv);
+      ov.cut(tv, M.closeup, ramp(tv, M.closeup, M.closeup + 5) * (1 - ramp(tv, M.pullback + 2, M.pullback + 10)), ramp(tv, M.closeup, M.closeup + 5));
     },
-    /** Rebuilt per character (main.js): drop the 3D group and the DOM layers (event subscriptions: events.js collect). */
+    /** Rebuilt per character (main.js): drop the 3D group, the shard pool and the DOM layers (event subscriptions: events.js collect). */
     dispose() {
-      parent.remove(scene);
-      scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
-      for (const el of [dimEl, washEl, css, cut]) el.remove();
+      parent.remove(scene, shards.mesh);
+      for (const o of [scene, shards.mesh]) o.traverse((c) => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); });
+      ov.dispose();
     },
   };
 }

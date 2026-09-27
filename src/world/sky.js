@@ -41,6 +41,15 @@ const AP = [25.0, 160.0, 0.42], AP_COOL = lin(0x8490b8);
 // darker than the sunset behind them (the concept's backlit silhouettes) instead of dissolving into it
 const FOG_K = 0.62;
 
+/** 2D value noise (sin-hash lattice, smoothstep blend): dwHash(p) → [0, 1), dwNoise(p) → [0, 1). Sky clouds, ground
+ *  macro tone + paving (terrain.js), flame cards (dressing.js). */
+export const NOISE_GLSL = /* glsl */`
+  float dwHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float dwNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(dwHash(i), dwHash(i + vec2(1.0, 0.0)), f.x), mix(dwHash(i + vec2(0.0, 1.0)), dwHash(i + vec2(1.0, 1.0)), f.x), f.y);
+  }`;
+
 const HAZE_GLSL = /* glsl */`
   vec3 dwHaze(vec3 d, vec3 base) {
     float s = max(dot(d, vec3(${SUN_DIR.x.toFixed(4)}, ${SUN_DIR.y.toFixed(4)}, ${SUN_DIR.z.toFixed(4)})), 0.0);
@@ -101,12 +110,8 @@ export function createSky() {
     fragmentShader: /* glsl */`
       uniform float uTime; varying vec3 vDir;
       ${HAZE_GLSL}
-      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float vnoise(vec2 p) {
-        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
-      }
-      float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * vnoise(p); p = p * 2.07 + vec2(17.1, 9.2); a *= 0.5; } return s; }
+      ${NOISE_GLSL}
+      float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * dwNoise(p); p = p * 2.07 + vec2(17.1, 9.2); a *= 0.5; } return s; }
       void main() {
         vec3 d = normalize(vDir);
         float h = d.y;

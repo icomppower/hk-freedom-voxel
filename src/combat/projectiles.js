@@ -15,7 +15,7 @@
 // (soldier), x,y,z (contact), dx,dy,dz (flight dir), big, fire, spent} (one reused object: read it, never keep it) ·
 // arrow:rain {x, z, r, delay, over (s)} (where and when a rain volley will fall).
 // Render: src/vfx/arrows.js reads the SoA pool (x/y/z, vx/vy/vz, st, t, kind, fire, big) and never writes it.
-import { ST } from '../crowd/crowd.js';
+import { ST, wrap } from '../crowd/crowd.js';
 import { emit } from '../core/events.js';
 import { hash01 } from '../core/rng.js';
 import { blocksArrow } from '../world/map.js';
@@ -43,9 +43,9 @@ export function createProjectiles(game) {
   };
   const queue = [];                                     // rain arrows waiting to fall: {at, x, y, z, vx, vy, vz, spec, move}
   const G = ARROW.grid, HALF = G * ARROW.cell / 2, head = new Int32Array(G * G), next = new Int32Array(game.crowd.N);
-  let seq = 0, lastTick = -1, gridF = -1;
+  let seq = 0, lastTick = -1;
 
-  P.reset = () => { P.st.fill(0); queue.length = 0; lastTick = -1; gridF = -1; seq = 0; };
+  P.reset = () => { P.st.fill(0); queue.length = 0; lastTick = -1; seq = 0; };
   const newKey = () => 1e7 + (seq = (seq + 1) % 1e9);
 
   function alloc() {
@@ -66,8 +66,7 @@ export function createProjectiles(game) {
       if (s === ST.OFF || s === ST.DEAD || (s === ST.DOWN && !air)) continue;
       const dx = c.x[i] - x, dz = c.z[i] - z, d2 = dx * dx + dz * dz;
       if (d2 >= bd && d2 >= ba) continue;
-      let a = Math.atan2(dx, dz) - yaw; a = Math.atan2(Math.sin(a), Math.cos(a));
-      if (Math.abs(a) > cone) continue;
+      if (Math.abs(wrap(Math.atan2(dx, dz) - yaw)) > cone) continue;
       if (air && s === ST.AIR && d2 < ba) { ba = d2; bestAir = i; }
       if (d2 < bd) { bd = d2; best = i; }
     }
@@ -159,8 +158,6 @@ export function createProjectiles(game) {
   }
 
   function buildGrid() {
-    if (gridF === game.frame) return;
-    gridF = game.frame;
     const c = game.crowd, C = ARROW.cell;
     head.fill(-1);
     for (let i = 0; i < c.N; i++) {

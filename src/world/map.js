@@ -92,30 +92,24 @@ const fordIn = (x) => { let v = -1e9; for (const [a, b] of FORDS) v = Math.max(v
 /** Main road through every zone (render: paving, road dust, minimap trail). [x, z] */
 export const ROUTE = [[0, -150], [0, -118], [0, -86], [0, -46], [0, 0], [0, 28], [7, 44], [4, 55], [2, 64], [-5, 72], [-10, 84], [GATE_X, 104],
   [GATE_X, 118], [-22, 128], [-30, 133], [-41, 145], [-45, 159], [-33, 171], [-17, 176.5], [-6, 180], [2, 192]];
-/** Distance (m) from (x, z) to the main road. */
-export function routeDist(x, z) {
-  let d = 1e9;
-  for (let i = 0; i < ROUTE.length - 1; i++) {
-    const [ax, az] = ROUTE[i], [bx, bz] = ROUTE[i + 1], ex = bx - ax, ez = bz - az;
-    const t = Math.min(1, Math.max(0, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez)));
-    d = Math.min(d, Math.hypot(x - ax - ex * t, z - az - ez * t));
-  }
-  return d;
-}
-
 // arc length along ROUTE (sim: the Shu allies follow the road, so they never try to cut across a cliff or a ramp)
 const ROUTE_S = ROUTE.map(() => 0);
 for (let i = 1; i < ROUTE.length; i++) ROUTE_S[i] = ROUTE_S[i - 1] + Math.hypot(ROUTE[i][0] - ROUTE[i - 1][0], ROUTE[i][1] - ROUTE[i - 1][1]);
-/** Arc length (m) along the road of the road point nearest (x, z). */
-export function routeS(x, z) {
-  let d = 1e9, s = 0;
+/** Road point nearest (x, z): d = distance (m), s = its arc length (m), p = [x, z]. Returns a shared object. */
+const _rn = { d: 0, s: 0, p: [0, 0] };
+export function routeNear(x, z) {
+  _rn.d = 1e9;
   for (let i = 0; i < ROUTE.length - 1; i++) {
     const [ax, az] = ROUTE[i], [bx, bz] = ROUTE[i + 1], ex = bx - ax, ez = bz - az;
     const t = Math.min(1, Math.max(0, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez))), e = Math.hypot(x - ax - ex * t, z - az - ez * t);
-    if (e < d) { d = e; s = ROUTE_S[i] + t * (ROUTE_S[i + 1] - ROUTE_S[i]); }
+    if (e < _rn.d) { _rn.d = e; _rn.s = ROUTE_S[i] + t * (ROUTE_S[i + 1] - ROUTE_S[i]); _rn.p[0] = ax + ex * t; _rn.p[1] = az + ez * t; }
   }
-  return s;
+  return _rn;
 }
+/** Distance (m) from (x, z) to the main road. */
+export const routeDist = (x, z) => routeNear(x, z).d;
+/** Arc length (m) along the road of the road point nearest (x, z). */
+export const routeS = (x, z) => routeNear(x, z).s;
 /** Road point at arc length s (clamped to the road's ends). Returns a shared [x, z]. */
 const _rp = [0, 0];
 export function routeAt(s) {
@@ -184,6 +178,8 @@ for (let j = 0; j < HNZ; j++) for (let i = 0; i < HNX; i++) { evalPieces(GX0 + i
 }
 /** Render-side read-only view of the terrain grid (terrain mesh, cliffs, minimap). in: walk inside value (m). */
 export const TERRAIN = { x0: GX0, z0: GZ0, x1: GX1, z1: GZ1, step: HS, nx: HNX, nz: HNZ, h: HGT, own: OWN, in: FIELD };
+/** Index of the grid node nearest (x, z) (no bounds check). */
+export const node = (x, z) => Math.round((x - GX0) / HS) + Math.round((z - GZ0) / HS) * HNX;
 
 function bilerp(g, nx, nz, s, x, z) {
   let fx = (x - GX0) / s, fz = (z - GZ0) / s;
@@ -248,7 +244,7 @@ export function blocksArrow(x, z, y) {
  *  facing the ford through it (tilt: camera pitch offset, rad — levelled a little so the gate towers, standards and the
  *  valley fill the top of the first frame, not the paving); free: the pass basin (the origin, where the free-mode army
  *  forms up around him). Battle start: also resets every gate to open. */
-export function spawnPoint(charId, mode) {
+export function spawnPoint(mode) {
   for (const g of GATE_LIST) g.open = true;
   return mode === 'story' ? { x: 0, z: -127, yaw: 0, tilt: -0.09 } : { x: 0, z: 0, yaw: 0, tilt: 0 };
 }

@@ -139,8 +139,6 @@ export const MOVES = {
     hits: [{ f: [36, 39], every: ONCE, shape: 'circle', range: 4.4, dmg: 22, kb: 'launch', force: 5, lift: 8, hitstop: 7, heavy: true }] },
 };
 
-// Re-used by the combo system: what C1 hangs off (charge from neutral).
-export const NEUTRAL = { attack: 'n1', charge: 'c1', dash: 'dash', air: 'jatk', airCharge: 'jc' };
 export const AIR_CHAIN_MAX = 10;  // swipes per jump (the rapid DW8 jump attack shows ~10 over 2.9 s; locomotion-dodge r2: 8 → 10)
 
 prepMoves(MOVES);

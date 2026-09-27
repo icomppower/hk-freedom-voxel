@@ -174,7 +174,7 @@ export function createCombat(game) {
     const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
 
     c.hp[i] -= hit.dmg;
-    // hot silhouette only on a fresh contact (hitfx.js); rapid re-hits (multi-hit moves, juggles) just refresh the tint.
+    // hot silhouette only on a fresh contact (crowd/view.js hitGlow); rapid re-hits (multi-hit moves, juggles) just refresh the tint.
     // Heavy hits tint 3 sf longer and deeper (amber).
     c.flash[i] = c.flash[i] > COMBAT.tintFrames / 2 ? COMBAT.tintFrames - 2 : COMBAT.tintFrames + (hit.heavy ? 3 : 0);
     c.hitHeavy[i] = hit.heavy ? 1 : 0;
@@ -207,7 +207,7 @@ export function createCombat(game) {
     } else if (downed && (kb === 'flinch' || kb === 'push')) { // hit on the ground: bounce the body, it stays lying
       airborne(i, COMBAT.otgLift, force * 0.4, dx, dz, false, 0, sgn * 2);
     } else if (kb === 'flinch') {
-      c.st[i] = ST.HURT; c.stT[i] = 0; c.hurtDur[i] = COMBAT.hurtFrames;
+      c.st[i] = ST.HURT; c.stT[i] = 0;
       c.yaw[i] = Math.atan2(-dx, -dz);                         // face the blow: the recoil reads along the hit
       c.vx[i] = dx * force * COMBAT.flinchKick; c.vz[i] = dz * force * COMBAT.flinchKick;
     } else if (kb === 'push' && !officer) {                    // quick knockdown: lifted off the feet, lands lying
@@ -249,9 +249,9 @@ export function createCombat(game) {
     }
   }
 
-  const clashPayload = { x: 0, y: 0, z: 0, dx: 0, dz: 0, killed: false, ally: false };
+  const clashPayload = { x: 0, y: 0, z: 0, dx: 0, dz: 0, killed: false };
   /** Soldier a's duel blow lands on soldier v (crowd indices, either side) for dmg: a flinch facing the blow, or a KO
-   *  throw (blasted ≈ 2 m out, cartwheels, lands lying). Returns true on the KO. ally: the victim is a Shu ally. */
+   *  throw (blasted ≈ 2 m out, cartwheels, lands lying). Returns true on the KO. */
   cb.clash = (a, v, dmg) => {
     const c = game.crowd;
     let dx = c.x[v] - c.x[a], dz = c.z[v] - c.z[a];
@@ -263,11 +263,11 @@ export function createCombat(game) {
       const sgn = hash01(v, 71) < 0.5 ? -1 : 1;
       airborne(v, COMBAT.koLift * 0.75, COMBAT.koForce * 0.45, dx, dz, false, 1.2 + Math.PI, sgn * 3);
     } else if (c.st[v] <= ST.KNOCK) {                          // standing (a body already down just takes the damage)
-      c.st[v] = ST.HURT; c.stT[v] = 0; c.hurtDur[v] = COMBAT.hurtFrames;
+      c.st[v] = ST.HURT; c.stT[v] = 0;
       c.yaw[v] = Math.atan2(-dx, -dz);
       c.vx[v] = dx * 2 * COMBAT.flinchKick; c.vz[v] = dz * 2 * COMBAT.flinchKick;
     }
-    Object.assign(clashPayload, { x: c.x[v], y: c.y[v] + 1.1, z: c.z[v], dx, dz, killed, ally: v >= c.N });
+    Object.assign(clashPayload, { x: c.x[v], y: c.y[v] + 1.1, z: c.z[v], dx, dz, killed });
     emit('clash', clashPayload);
     return killed;
   };
@@ -315,7 +315,7 @@ export function createCombat(game) {
       if (s < ST.HURT || s > ST.DEAD || c.hs[i] > 0) continue;
       if (s === ST.HURT) {
         c.x[i] += c.vx[i] * DT; c.z[i] += c.vz[i] * DT; c.vx[i] *= COMBAT.flinchDamp; c.vz[i] *= COMBAT.flinchDamp;
-        if (c.stT[i] >= c.hurtDur[i]) { c.st[i] = ST.GUARD; c.stT[i] = 0; }
+        if (c.stT[i] >= COMBAT.hurtFrames) { c.st[i] = ST.GUARD; c.stT[i] = 0; }
       } else if (s === ST.KNOCK) {
         c.x[i] += c.vx[i] * DT; c.z[i] += c.vz[i] * DT; c.vx[i] *= COMBAT.groundFriction; c.vz[i] *= COMBAT.groundFriction;
         if (c.stT[i] >= 22) { c.st[i] = ST.GUARD; c.stT[i] = 0; }

@@ -1,20 +1,18 @@
 // Huang Zhong's kit (contract: src/chars/index.js): the bow moveset (moves.js, anims.js), the voxel veteran on the shared
 // rig in bow mode (model.js), the per-battle sim with 百步穿楊, the arrow pool and aim mode (musou.js, aim.js), and its
-// view (view.js: arrows, aim preview, Musou presentation). Locomotion physics, dodge ghosts and roll are shared.
-import { MOVES, NEUTRAL, AIR_CHAIN_MAX } from './moves.js';
-import { HZ_CLIPS, ATTACK_CLIPS, runPose, rollPose } from './anims.js';
+// view (view.js: arrows, aim preview, Musou presentation). Locomotion physics, dodge ghosts and roll are shared (hero.js).
+import { MOVES, AIR_CHAIN_MAX } from './moves.js';
+import { HZ_CLIPS, runPose, rollPose } from './anims.js';
 import { createHzModel, createHzSecondary } from './model.js';
-import { applyRoll, createDodgeGhosts } from '../../hero/anims/locomotion.js';
 import { createMusou } from './musou.js';
 import { createMusouView } from './view.js';
 
 export const HUANGZHONG_KIT = {
-  moves: MOVES, neutral: NEUTRAL, airChainMax: AIR_CHAIN_MAX,
-  clips: HZ_CLIPS, attackClips: ATTACK_CLIPS, feet: {},
+  moves: MOVES, airChainMax: AIR_CHAIN_MAX,
+  clips: HZ_CLIPS, feet: {},
   runPose, rollPose,
   dashPlant: -1,                  // the dash is a slide: no lunge landing
-  hpMax: 400, musouMax: 100,
-  model: createHzModel, secondary: createHzSecondary, ghosts: createDodgeGhosts, applyRoll,
+  model: createHzModel, secondary: createHzSecondary,
   // bow-limb ribbon (vfx.js): the upper limb runs along the weapon frame's y (axis), from the grip to past the tip; only
   // the slashes draw it (moves), over the hit window widened by pad [before, after] frames; a slower limb than the spear
   // still reads (gain: tip travel per sim frame, m, where the ribbon fades in → is full)
@@ -33,5 +31,4 @@ export const HUANGZHONG_KIT = {
     trail: { white: [1.1, 0.95, 0.68], fringe: [1.0, 0.42, 0.06], hot: [1.7, 1.3, 0.7], glow: [1.6, 0.72, 0.14], grad: true },   // grad: white leading edge → amber → clear tail (vfx.js)
   },
   createMusou, createMusouView,
-  aimShot: (game) => game.musou.aimShot?.() ?? null,   // camera.js: over-the-shoulder aim shot (aim.js)
 };

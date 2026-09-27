@@ -5,16 +5,12 @@
 // a pick stamps a red seal with a low slam, and every screen change is a single dry-brush ink stroke sweeping right →
 // left (≈ 0.4 s to cover, the next screen is swapped in under full ink, ≈ 0.5 s to uncover). Transform-only animation
 // of one composited layer: no layout work, holds 60 fps at any size.
+import { noiseBuf } from '../audio/bank.js';
 
 // ---------------------------------------------------------------- sound (own tiny WebAudio graph; audio.js is battle-only)
-let ac = null, noise = null;
+let ac = null;
 function actx() {
-  if (!ac) {
-    try { ac = new AudioContext({ latencyHint: 'interactive' }); } catch { return null; }
-    noise = ac.createBuffer(1, ac.sampleRate * 0.3, ac.sampleRate);
-    const d = noise.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;        // UI noise only, never the sim
-  }
+  if (!ac) try { ac = new AudioContext({ latencyHint: 'interactive' }); } catch { return null; }
   if (ac.state === 'suspended') ac.resume();
   return ac;
 }
@@ -25,7 +21,7 @@ function voice(c, { type = 'sine', f0, f1 = f0, gain, dur, at = 0, lp = 0, bp = 
   g.gain.exponentialRampToValueAtTime(gain, t + 0.004);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   let src;
-  if (type === 'noise') { src = c.createBufferSource(); src.buffer = noise; }
+  if (type === 'noise') { src = c.createBufferSource(); src.buffer = noiseBuf(); }
   else { src = c.createOscillator(); src.type = type; src.frequency.setValueAtTime(f0, t); src.frequency.exponentialRampToValueAtTime(f1, t + dur); }
   let n = src;
   if (lp || bp) { const f = c.createBiquadFilter(); f.type = lp ? 'lowpass' : 'bandpass'; f.frequency.value = lp || bp; f.Q.value = lp ? 0.7 : 4; n.connect(f); n = f; }

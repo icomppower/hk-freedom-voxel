@@ -1,29 +1,28 @@
 // Story director (sim): scripts a battle through the crowd's story API and the story:* events. Runs inside step()
 // (after the musou), deterministic: timed off its own frame counter, no randomness of its own (the crowd draws from rng).
 //   game.story = createStory(game)
-//   story.reset({ mode, chapter, char })   battle start (after hero / crowd / combat / musou resets)
+//   story.reset({ mode, char })            battle start (after hero / crowd / combat / musou resets)
 //   story.step()                           once per sim step while the battle runs
-//   story.stats()                          → { kos, time (s), hp, hpMax, maxChain, dmg, rank?, char } (story:end / result)
+//   story.stats()                          → { kos, time (s), hpMax, maxChain, dmg, rank? } (story:end / result)
 //   story.morale                           蜀 share of the HUD morale bar 0-1 (undefined in free mode: HUD falls back)
 //   story.target                           {x, z} the HUD objective arrow points at, or null
 // Map gates (world/map.js GATES: 'pass' barricade, 'weiCamp' castle gate, 'summit' barricade) are sim state: story mode
 // closes all three at reset, a beat's `gate: id` opens one (clampWalk lets everyone through, world.js burns / swings it).
-// Emits story:say / story:banner / story:objective / story:gate / story:end (payloads: core/events.js). The flow
+// Emits story:say / story:banner / story:objective / story:end (payloads: core/events.js). The flow
 // (main.js) leaves the battle for the result screen on story:end; the HUD shows the rest.
 // Also owns game.timeScale (wall-clock pace of the fixed-step loop, main.js): 1, except the victory slow-mo.
 // Free mode = the endless field: the army, reinforcement waves, the hero's intro line, and no end.
 // Both modes field live Shu allies (crowd.spawnAllies; columns via crowd.setAllies): story — the van drawn up either side
 // of the road inside the 本陣 gate, holding rank until the hero marches past; free — a block behind him.
 // Morale also moves with the duels (Wei grunts the allies KO'd minus allies lost).
-// Story mode: CHAPTERS[chapter] = a beat list (format: header of ./ch1.js), run strictly in order — beat k fires once
+// Story mode: ch1.js BEATS = a beat list (format: header of ./ch1.js), run strictly in order — beat k fires once
 // its trigger holds and beat k-1 has fired; a `limit` keeps the hero from running past the stage he is on (DW8's
 // barred gates), so the script can't be skipped or soft-locked by running ahead, and going back is always free.
 import { emit, on } from '../core/events.js';
 import { zone, setGate, GATES, WALL_Z, GATE_X } from '../world/map.js';
 import { CHARS } from '../chars/index.js';
-import { BEATS as CH1, OFFICERS as CH1_OFF, SPK } from './ch1.js';
+import { BEATS, OFF, SPK } from './ch1.js';
 
-const CHAPTERS = { ch1: { beats: CH1, officers: CH1_OFF } };
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
 /** Script position P = [zone id, fx, fz] (fractions of the zone's half extents) or ['gate', dx, dz] (metres). */
@@ -35,13 +34,13 @@ function pos([id, a, b]) {
 const nearZ = (id) => { const q = zone(id); return q.z - (q.r ?? q.d / 2); };
 
 export function createStory(game) {
-  const S = { mode: 'free', chapter: null, char: 'zhaoyun', t: 0, done: false, maxChain: 0, downT: -1 };
+  const S = { mode: 'free', char: 'zhaoyun', t: 0, done: false, maxChain: 0, downT: -1 };
   const st = { morale: undefined, target: null };
   const DLG_GAP = 12;                            // sim frames between two queued lines
 
   st.stats = () => {
     const h = game.hero, time = Math.round(S.t / 60);
-    const s = { kos: h.kos, time, hp: h.hp, hpMax: h.hpMax, maxChain: S.maxChain, dmg: S.dmg, char: S.char };
+    const s = { kos: h.kos, time, hpMax: h.hpMax, maxChain: S.maxChain, dmg: S.dmg };
     if (S.won >= 0) s.rank = rank(s);
     return s;
   };
@@ -58,7 +57,7 @@ export function createStory(game) {
     const dur = Math.max(160, Math.min(270, 100 + zh.length * 8));   // ≈ 2.7-4.5 s: DW8 pace, taunts don't queue behind a briefing
     const e = { zh, en, dur };
     if (line.who === 'ally') { const a = CHARS[S.ally]; Object.assign(e, { speaker: a.name, portrait: a.id, side: 'shu' }); }
-    else if (line.who !== 'hero') { const p = SPK[line.who]; Object.assign(e, { speaker: p.name, portrait: { seal: p.seal, side: p.side }, side: p.side }); }
+    else if (line.who !== 'hero') { const p = SPK[line.who]; Object.assign(e, { speaker: p.name, portrait: { seal: p.seal }, side: p.side }); }
     S.q.push(e);
   };
 
@@ -78,12 +77,12 @@ export function createStory(game) {
   };
 
   function fire(b) {
-    const c = game.crowd, h = game.hero, ch = CHAPTERS[S.chapter];
+    const c = game.crowd, h = game.hero;
     if (b.win) { S.won = S.t; S.q.length = 0; S.sayUntil = 0; }       // victory: drop pending chatter, its line goes out first
     if (b.retire) c.retire(h.z - 45);                                  // stage change: idle blocks far behind give their slots back
     for (const q of b.squads || []) { const [x, z] = pos(q.at); c.spawnSquad({ x, z, n: q.n, cols: q.cols, charge: !!q.charge }); }
     for (const k in b.officers || {}) {                                // spawned on the next steps (retried while slots are full)
-      const o = b.officers[k], d = ch.officers[o.like || k];
+      const o = b.officers[k], d = OFF[o.like || k];
       const [x, z] = pos(o.at);
       S.want[k] = { x, z, name: d.name, hp: d.hp, boss: !!d.boss, engaged: !!o.engaged };
       S.off[k] = -1; S.dead[k] = false;
@@ -92,15 +91,15 @@ export function createStory(game) {
     if (b.limit) { S.limit = c.zMax = b.limit.z ? pos(b.limit.z)[1] : Infinity; S.nag = b.limit.nag || null; }   // crowd: waves spawn inside it
     if (b.heal && !h.dead) h.hp = Math.min(h.hpMax, h.hp + b.heal * h.hpMax);
     if (b.morale != null) S.mBase = b.morale === 1 ? 1 : S.mBase + b.morale;
-    if (b.gate) { setGate(b.gate, true); emit('story:gate', { id: b.gate, open: true }); }
+    if (b.gate) setGate(b.gate, true);
     if (b.banner) emit('story:banner', { dur: 150, ...b.banner });
     if (b.hush) S.q.length = 0;                                        // stage cleared: queued taunts are stale now
     if (b.obj) { emit('story:objective', { zh: b.obj.zh, en: b.obj.en }); S.go = b.obj.go; }
     for (const l of b.say || []) say(l);
   }
 
-  st.reset = ({ mode = 'free', chapter = 'ch1', char = 'zhaoyun' } = {}) => {
-    Object.assign(S, { mode, chapter, char, ally: char === 'huangzhong' ? 'zhaoyun' : 'huangzhong', t: 0, done: false, maxChain: 0,
+  st.reset = ({ mode = 'free', char = 'zhaoyun' } = {}) => {
+    Object.assign(S, { mode, char, ally: char === 'huangzhong' ? 'zhaoyun' : 'huangzhong', t: 0, done: false, maxChain: 0,
       downT: -1, dmg: 0, beat: 0, beatT: 0, koBase: 0, off: {}, want: {}, dead: {}, q: [], sayUntil: 0, limit: Infinity, nag: null,
       nagT: -999, mBase: 0.4, won: -1, go: null });
     game.timeScale = 1;
@@ -129,9 +128,8 @@ export function createStory(game) {
       if (k >= 300) S.end(true);
     } else if (S.downT >= 0) { if (S.t - S.downT >= 120) S.end(false); return; }     // 2 s on the ground, then defeat
 
-    const beats = CHAPTERS[S.chapter].beats;
-    while (S.beat < beats.length) {
-      const b = beats[S.beat];
+    while (S.beat < BEATS.length) {
+      const b = BEATS[S.beat];
       if (b.skip && holds(b.skip)) { S.beat++; continue; }
       if (!holds(b.when)) break;
       S.beat++; S.beatT = S.t; S.koBase = h.kos;

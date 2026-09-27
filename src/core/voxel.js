@@ -4,7 +4,7 @@ import { hash01 } from './rng.js';
 
 const _c = new THREE.Color();
 // face: normal, 4 corner offsets (unit cube, CCW seen from outside)
-const FACES = [
+export const FACES = [
   { n: [1, 0, 0], v: [[1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]] },
   { n: [-1, 0, 0], v: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]] },
   { n: [0, 1, 0], v: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]] },
@@ -13,13 +13,16 @@ const FACES = [
   { n: [0, 0, -1], v: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]] },
 ];
 
-function makeBuilder() {
+const ONE = [1, 1, 1, 1];
+/** Indexed quad soup → geometry. quad: k = per-corner brightness (baked AO), flip = split along the 1-3 diagonal. */
+export function makeBuilder() {
   const pos = [], nor = [], col = [], idx = [];
   return {
-    quad(corners, n, r, g, b) {
+    quad(corners, n, r, g, b, k = ONE, flip = false) {
       const base = pos.length / 3;
-      for (const c of corners) { pos.push(c[0], c[1], c[2]); nor.push(n[0], n[1], n[2]); col.push(r, g, b); }
-      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      corners.forEach((c, q) => { pos.push(c[0], c[1], c[2]); nor.push(n[0], n[1], n[2]); col.push(r * k[q], g * k[q], b * k[q]); });
+      if (flip) idx.push(base, base + 1, base + 3, base + 1, base + 2, base + 3);
+      else idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     },
     build() {
       const g = new THREE.BufferGeometry();
@@ -78,26 +81,6 @@ function voxelGeometry(nx, ny, nz, size, grid, origin) {
     }
   }
   return b.build();
-}
-
-/** Merge several geometries built by the helpers above (same attribute set). */
-export function mergeVoxel(geos) {
-  const out = new THREE.BufferGeometry();
-  let n = 0;
-  for (const g of geos) n += g.attributes.position.count;
-  const P = new Float32Array(n * 3), N = new Float32Array(n * 3), C = new Float32Array(n * 3), I = [];
-  let o = 0;
-  for (const g of geos) {
-    P.set(g.attributes.position.array, o * 3); N.set(g.attributes.normal.array, o * 3); C.set(g.attributes.color.array, o * 3);
-    for (const ix of g.index.array) I.push(ix + o);
-    o += g.attributes.position.count;
-  }
-  out.setAttribute('position', new THREE.BufferAttribute(P, 3));
-  out.setAttribute('normal', new THREE.BufferAttribute(N, 3));
-  out.setAttribute('color', new THREE.BufferAttribute(C, 3));
-  out.setIndex(I);
-  out.computeBoundingSphere();
-  return out;
 }
 
 /** Tint a hex colour by factor f (1 = unchanged) — handy for per-voxel shading jitter. */

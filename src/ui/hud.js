@@ -10,12 +10,51 @@
 import { Vector3 } from 'three';
 import { on } from '../core/events.js';
 import { ST } from '../crowd/crowd.js';
-import { ground, zoneAt, GATES, MAP } from '../world/map.js';
-import { minimapLayer } from '../world/minimap.js';
+import { ground, zoneAt, GATES, MAP, TERRAIN as G, ROUTE, riverZ, walkIn, WALL_Z, GATE_X, FORDS } from '../world/map.js';
 import { CHARS, paintPortrait } from '../chars/index.js';
 
 // render-only seam: crowd view skips its 3D officer ▼ where the floating tags below take over
 export const HUD_TAG_R = 44.7;
+
+// Minimap layer: the whole 定軍山 field drawn once, in the minimap's orientation (map up = +Z, up the valley; +X is
+// map-left, as the camera sees it at yaw 0), blitted around the hero every frame. Walkable ground pale with a bright rim
+// where the cliffs / palisades stop you, the Han River, the castle wall with its gate passage, the road dotted in gold.
+// Gates, units and labels are drawn live over it.
+const PPM = 2;                        // px per metre
+let layer = null;
+/** { canvas, x1, z1, ppm }: canvas pixel (u, v) ↔ world (x1 - u / ppm, z1 - v / ppm). Built on first use. */
+function minimapLayer() {
+  if (layer) return layer;
+  const W = (G.x1 - G.x0) * PPM, H = (G.z1 - G.z0) * PPM;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d'), img = g.createImageData(W, H), d = img.data;
+  for (let v = 0; v < H; v++) for (let u = 0; u < W; u++) {
+    const x = G.x1 - (u + 0.5) / PPM, z = G.z1 - (v + 0.5) / PPM, s = walkIn(x, z), o = (u + v * W) * 4;
+    const wet = Math.abs(z - riverZ(x)) < 6.5;
+    if (s > 0) {                                                         // field: pale, bright rim at the edge
+      const rim = s < 1.2;
+      d[o] = 214; d[o + 1] = 184; d[o + 2] = 130; d[o + 3] = rim ? 190 : 96;
+      if (wet) { d[o] = 120; d[o + 1] = 160; d[o + 2] = 170; d[o + 3] = 130; }   // the fords
+    } else if (wet) { d[o] = 70; d[o + 1] = 120; d[o + 2] = 150; d[o + 3] = 120; }   // deep water
+    else { d[o] = 8; d[o + 1] = 5; d[o + 2] = 4; d[o + 3] = Math.min(120, 40 - s * 4); }   // rock: darker the further out
+  }
+  g.putImageData(img, 0, 0);
+  const X = (x) => (G.x1 - x) * PPM, Y = (z) => (G.z1 - z) * PPM;
+  // castle wall (-64 … corner tower) + flank wall, gate passage left open
+  g.fillStyle = 'rgba(236,214,172,0.8)';
+  g.fillRect(X(16.5), Y(WALL_Z + 9), (16.5 + 64) * PPM, 9 * PPM);
+  g.fillRect(X(16.5), Y(150), 9 * PPM, 40 * PPM);
+  g.clearRect(X(GATE_X + 3.6), Y(WALL_Z + 9), 7.2 * PPM, 9 * PPM);
+  g.fillStyle = 'rgba(214,184,130,0.2)'; g.fillRect(X(GATE_X + 3.6), Y(WALL_Z + 9), 7.2 * PPM, 9 * PPM);
+  // the road, dotted gold; the ford crossings marked
+  g.strokeStyle = 'rgba(208,160,64,0.55)'; g.lineWidth = 1.5; g.setLineDash([4, 5]);
+  g.beginPath(); ROUTE.forEach(([x, z], i) => (i ? g.lineTo(X(x), Y(z)) : g.moveTo(X(x), Y(z)))); g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = 'rgba(236,214,172,0.5)';
+  for (const [a, b] of FORDS) for (let x = a + 1; x < b; x += 2.5) g.fillRect(X(x) - 1, Y(riverZ(x)) - 1, 2, 2);
+  layer = { canvas: cv, x1: G.x1, z1: G.z1, ppm: PPM };
+  return layer;
+}
 
 export function createHud(root, game, camera) {
   const nOff = game.crowd.N - game.crowd.grunts;                     // officer slots (crowd CROWD.officerSlots)
@@ -65,8 +104,8 @@ export function createHud(root, game, camera) {
     text($('.h-intro .zh'), ch.name.zh); text($('.h-intro .seal'), ch.seal); text($('.h-intro .en'), ch.name.en.toUpperCase());
     text($('.h-intro .sub'), ch.motto); text($('.h-player .name'), ch.name.zh);
     $('.h-copy').innerHTML = ch.lines.copy.join('<br>');
-    // keys row from the kit: an aim mode (kit.aimShot, 黃忠) puts hold-K aim first, before the charge
-    $('.h-intro .keys').innerHTML = `<kbd>WASD</kbd> 移動 move · <kbd>J</kbd> 攻擊 attack · ${ch.kit.aimShot
+    // keys row from the kit: an aim mode (kit.moves.aim, 黃忠) puts hold-K aim first, before the charge
+    $('.h-intro .keys').innerHTML = `<kbd>WASD</kbd> 移動 move · <kbd>J</kbd> 攻擊 attack · ${ch.kit.moves.aim
       ? '<kbd>K</kbd> 長按瞄準 hold to aim · 連擊中 蓄力 mid-combo charge' : '<kbd>K</kbd> 蓄力 charge'}<br>
       <kbd>Space</kbd> 跳躍 jump · <kbd>L</kbd> 閃避 dodge · <kbd>I</kbd> 無雙 musou · <kbd>R</kbd> 鎖定 recenter · <kbd>H</kbd> 說明`;
     paintPortrait($('.h-player canvas'), ch);
@@ -90,20 +129,18 @@ export function createHud(root, game, camera) {
     q.splice(k, 0, { html, en, dur, big, pri });
     if (q.length > 3) q.splice(q.reduce((m, e, j) => (e.pri <= q[m].pri ? j : m), 0), 1);
   };
-  // dialogue: speaker {zh, en} (default: the hero); portrait = CHARS id or a {face, pal} 20×20 portrait (chars/index.js),
-  // or {seal: glyph} (story NPCs: a carved name seal instead of a face), null = no badge; default: the hero's when the
-  // hero speaks, none for anyone else. side 'wei' turns the panel's rule and name vermilion (enemy speaking).
+  // dialogue: speaker {zh, en} (default: the hero); portrait = CHARS id (default: the hero's) or {seal: glyph} (story
+  // NPCs: a carved name seal instead of a face). side 'wei' turns the panel's rule and name vermilion (enemy speaking).
   const say = (zh, en, dur = 300, speaker = game.hero.char.name, portrait = game.hero.char.id, side = 'shu') => {
     S.dlg = { zh, en, f: game.frame, dur };
     text(dlgN, speaker.zh); text(dlgE, speaker.en.toUpperCase());
-    const seal = portrait && portrait.seal;
-    const ch = seal ? null : typeof portrait === 'string' ? CHARS[portrait] : portrait ? { portrait } : null;
-    if (ch) paintPortrait(dlgCv, ch); else dlgCv.getContext('2d').clearRect(0, 0, 20, 20);
-    set(dlgCv, 'display', seal ? 'none' : ''); set(dlgCv, 'visibility', ch ? 'visible' : 'hidden');
+    const seal = portrait.seal;
+    if (!seal) paintPortrait(dlgCv, CHARS[portrait]);
+    set(dlgCv, 'display', seal ? 'none' : '');
     set(dlgSeal, 'display', seal ? 'block' : 'none'); if (seal) text(dlgSeal, seal);
     dlg.classList.toggle('wei', side === 'wei');
   };
-  on('story:say', (e) => say(e.zh, e.en, e.dur ?? 300, e.speaker || undefined, e.portrait !== undefined ? e.portrait : e.speaker ? null : undefined, e.side));
+  on('story:say', (e) => say(e.zh, e.en, e.dur ?? 300, e.speaker, e.portrait, e.side));
   on('story:banner', (e) => banner(e.html, e.en, e.dur ?? 150, !!e.big, e.big ? 2 : 1));
   on('story:objective', (e) => { S.obj = e.zh ? { zh: e.zh, en: e.en || '', f: game.frame } : null; if (S.obj) { text(objB, e.zh); text(objS, e.en || ''); } });
   on('crowd:wave', (e) => {
@@ -370,7 +407,7 @@ export function createHud(root, game, camera) {
       set(moraleI, 'transform', `scaleX(${(game.story.morale ?? 0.3 + 0.65 * h.kos / (h.kos + alive + 1)).toFixed(4)})`);
 
       // minimap: 30 m around the hero, north = up the valley (camera yaw 0; map right = -X), the whole 定軍山 field
-      // (world/minimap.js layer: walkable ground, cliffs, river, castle wall, road), 10 m grid, closed gates in red, the
+      // (minimapLayer above: walkable ground, cliffs, river, castle wall, road), 10 m grid, closed gates in red, the
       // enemy HQ on the summit pinned to the rim while it is off the map, the current zone's name along the bottom;
       // units, view cone, reinforcement pings; officers off the map are pinned to its edge
       const R = 30, s = 100 / R, X = (x) => 100 - (x - h.x) * s, Y = (z) => 100 - (z - h.z) * s;
@@ -418,20 +455,16 @@ export function createHud(root, game, camera) {
       cone.addColorStop(0, 'rgba(200,240,255,0.3)'); cone.addColorStop(1, 'rgba(200,240,255,0)');
       map.fillStyle = cone;
       map.beginPath(); map.moveTo(100, 100); map.arc(100, 100, 70, -Math.PI / 2 - cy - 0.5, -Math.PI / 2 - cy + 0.5); map.fill();
-      map.fillStyle = '#e0412c';
-      for (let i = 0; i < c.grunts; i++) {
-        const st = c.st[i];
-        if (st === ST.OFF || st === ST.DEAD) continue;
-        const x = X(c.x[i]), y = Y(c.z[i]);
-        if (x > -2 && x < 202 && y > -2 && y < 202) map.fillRect(x - 1.5, y - 1.5, 3, 3);
-      }
-      map.fillStyle = '#6ee06e';                                     // Shu allies
-      for (let i = c.N; i < c.T; i++) {
-        const st = c.st[i];
-        if (st === ST.OFF || st === ST.DEAD) continue;
-        const x = X(c.x[i]), y = Y(c.z[i]);
-        if (x > -2 && x < 202 && y > -2 && y < 202) map.fillRect(x - 1.5, y - 1.5, 3, 3);
-      }
+      const dots = (from, to, color) => {                            // soldiers [from, to) as 3 px dots
+        map.fillStyle = color;
+        for (let i = from; i < to; i++) {
+          const st = c.st[i];
+          if (st === ST.OFF || st === ST.DEAD) continue;
+          const x = X(c.x[i]), y = Y(c.z[i]);
+          if (x > -2 && x < 202 && y > -2 && y < 202) map.fillRect(x - 1.5, y - 1.5, 3, 3);
+        }
+      };
+      dots(0, c.grunts, '#e0412c'); dots(c.N, c.T, '#6ee06e');       // Wei grunts, Shu allies
       for (let i = c.grunts; i < c.N; i++) {
         if (c.st[i] === ST.OFF || c.st[i] === ST.DEAD) continue;
         const x = Math.max(5, Math.min(195, X(c.x[i]))), y = Math.max(5, Math.min(195, Y(c.z[i])));

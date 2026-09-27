@@ -3,12 +3,12 @@
 // arrows onto the map (蜀 teal ink, 魏 vermilion) while the view drifts to the card's focus. Then the chapter title
 // stamps in (「第一章 定軍山」 + the red 漢中之戰 seal) and the battle starts.
 // Controls: tap Enter / Space / click = next card · hold (0.8 s, ring fills) = skip to the title · Esc = skip.
-// ctx in: { mode: 'story', char, chapter }. Done → flow.go('battle', ctx). Cards / branching: ./ch1.js PROLOGUE.
+// ctx in: { mode: 'story', char }. Done → flow.go('battle', ctx). Cards / branching: ./ch1.js PROLOGUE.
 // Render-side DOM only (wall-clock timers); nothing here touches the sim.
 import { PROLOGUE } from './ch1.js';
 
 const NUM = ['壹', '貳', '參', '肆', '伍', '陸'];
-const HOLD = 0.8;                                  // s held to skip
+const HOLD = 0.8;                                  // s held to skip (index.html: the ring's .on transition)
 
 // ---- the map (viewBox 1600×900): ranges, 漢水, places, troop arrows. Arrow = [id, side, cubic path M x y C ...]
 const peaks = (list, h, w) => list.map(([x, y, k = 1]) =>
@@ -77,7 +77,7 @@ export function createPrologue(el, flow) {
       <span><kbd>Esc</kbd>跳過<small>Skip</small></span></div>`;
   const $ = (s) => el.querySelector(s);
   const map = $('.pl-map'), card = $('.pl-card'), cols = $('.pl-cols'), en = $('.pl-en'), pips = $('.pl-pips'), ring = $('.pl-skip .p');
-  let ctx = {}, k = -1, timer = 0, swapT = 0, holdTimer = 0, holdT0 = 0, raf = 0, phase = 'off', stampAt = 0;
+  let ctx = {}, k = -1, timer = 0, swapT = 0, holdTimer = 0, holdT0 = 0, phase = 'off', stampAt = 0;
 
   const later = (fn, s) => { clearTimeout(timer); timer = setTimeout(fn, s * 1000); };
   function show(i) {
@@ -130,23 +130,19 @@ export function createPrologue(el, flow) {
   }
 
   // tap = next card (on the title: start now); hold = skip to the title. Keys and pointer share one hold clock.
-  // (the skip itself is a timer, the ring only paints: a throttled rAF can't swallow the hold)
+  // (the skip itself is a timer, the ring only paints: a CSS transition while .on)
   const down = () => {
     if (holdT0 || phase !== 'cards') return;
-    holdT0 = performance.now(); raf = requestAnimationFrame(tick);
-    holdTimer = setTimeout(() => { holdT0 = 0; cancelAnimationFrame(raf); ring.style.strokeDashoffset = 1; stamp(); }, HOLD * 1000);
+    holdT0 = performance.now(); ring.classList.add('on');
+    holdTimer = setTimeout(() => { holdT0 = 0; ring.classList.remove('on'); stamp(); }, HOLD * 1000);
   };
   const up = () => {
     if (phase === 'stamp') { if (performance.now() - stampAt > 900) go(); return; }
     if (!holdT0) return;
     const held = (performance.now() - holdT0) / 1000;
-    holdT0 = 0; cancelAnimationFrame(raf); clearTimeout(holdTimer); ring.style.strokeDashoffset = 1;
+    holdT0 = 0; clearTimeout(holdTimer); ring.classList.remove('on');
     if (held < HOLD && phase === 'cards') show(k + 1);
   };
-  function tick() {
-    ring.style.strokeDashoffset = Math.max(0, 1 - (performance.now() - holdT0) / 1000 / HOLD);
-    raf = requestAnimationFrame(tick);
-  }
   const key = (e) => {
     if (e.code === 'Escape') { if (phase === 'cards') stamp(); else if (phase === 'stamp') go(); return; }
     if (e.code !== 'Enter' && e.code !== 'NumpadEnter' && e.code !== 'Space') return;
@@ -162,14 +158,14 @@ export function createPrologue(el, flow) {
       el.classList.remove('stamped', 'out', 'open'); card.classList.remove('on');
       for (const m of el.querySelectorAll('[data-id]')) m.classList.remove('on', 'hot');
       map.style.transform = 'translate(0, 0) scale(1.1)';
-      ring.style.strokeDashoffset = 1;
+      ring.classList.remove('on');
       void el.offsetWidth;
       el.classList.add('open');                             // the scroll unrolls (CSS), the first card follows
       addEventListener('keydown', key); addEventListener('keyup', key);
       later(() => show(0), 1.1);
     },
     exit() {
-      phase = 'off'; clearTimeout(timer); clearTimeout(swapT); clearTimeout(holdTimer); cancelAnimationFrame(raf);
+      phase = 'off'; clearTimeout(timer); clearTimeout(swapT); clearTimeout(holdTimer);
       removeEventListener('keydown', key); removeEventListener('keyup', key);
     },
   };

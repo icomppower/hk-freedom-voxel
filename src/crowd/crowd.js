@@ -16,7 +16,7 @@
 //  · Reinforcements: while the ring is under strength and no block waits nearer, a column of 8-15 (with its bearer)
 //    spawns 16-26 m out in front of the camera and runs in; `crowd:wave` announces it. Waves only run once a scenario
 //    spawned an army or a ring (setWaves).
-//  · Story API (src/story drives it): spawnSquad, spawnOfficer, clearAll, setWaves, retire, spawnAllies, setAllies — see
+//  · Story API (src/story drives it): spawnSquad, spawnOfficer, setWaves, retire, spawnAllies, setAllies — see
 //    below. Officers carry a name (c.offName[i - grunts] = {zh, en}, shown by the HUD tags) and a boss flag (c.boss[i]).
 //  · Shu allies: the same arrays past the Wei army, indices N … T-1 (N = Wei grunts + officer slots). Everything that
 //    loops i < N (hero hits, arrows, Musou, lock-on, HUD tags, the director, rings, tokens) never sees them; the AI loop,
@@ -74,12 +74,12 @@ export function createCrowd(game, grunts) {
     N, T, grunts,
     x: F(), z: F(), y: F(), vx: F(), vz: F(), vy: F(), yaw: F(), hp: F(), hpMax: F(),
     st: I(), stT: I(), type: I(), kind: I(), token: I(), cd: I(), hs: I(), flash: I(),
-    rx: F(), rxV: F(), spinV: F(), pref: F(), band: I(), phase: F(), hurtDur: I(), bounce: I(),
+    rx: F(), rxV: F(), spinV: F(), pref: F(), band: I(), phase: F(), bounce: I(),
     lastHit: I(), strafe: F(), kod: I(), tokT: I(), ang: F(), seated: I(),
     squad: I(), slotX: F(), slotZ: F(), form: I(),
     sq: { x: F(MAXSQ), z: F(MAXSQ), face: F(MAXSQ), st: I(MAXSQ), t: I(MAXSQ), n: 0 },
     raiseF: I(), feint: I(), wind: I(),                         // raiseF: rallying until (render + ring surge); feint strike; winding up
-    hitHeavy: I(),                                              // last hit was heavy (set by combat, read by hitfx.js)
+    hitHeavy: I(),                                              // last hit was heavy (set by combat, read by view.js hitGlow)
     foe: I(),                                                   // duel partner (ally ↔ Wei grunt), -1 = none
     via: I(),                                                   // ally: sf left on the road (the straight line was blocked)
     boss: I(), offName: new Array(CROWD.officerSlots).fill(null),   // story: boss flag; officer display names {zh, en}
@@ -195,8 +195,6 @@ export function createCrowd(game, grunts) {
     c.offName[i - grunts] = name;
     return i;
   };
-  /** Remove every soldier and squad at once (scene change); waves stop. */
-  c.clearAll = () => c.reset();
   /** Reinforcement columns on/off (they run while the ring is under strength, see waves()). */
   c.setWaves = (on) => { c.wavesOn = !!on; };
   /** Stage change: grunts still standing idle (holding blocks never sent) south of z are removed, freeing their slots

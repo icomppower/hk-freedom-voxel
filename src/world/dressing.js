@@ -9,14 +9,13 @@
 import * as THREE from 'three';
 import { boxesGeometry, shade } from '../core/voxel.js';
 import { makeRng } from '../core/rng.js';
-import { figureGeometry, watchtower, pagoda } from './castle.js';
-import { TERRAIN as G, ROUTE, ground, riverZ, routeDist, FORDS, WALL_Z, GATE_X, SUMMIT_H, CAMP_H } from './map.js';
+import { figureGeometry, watchtower, pagoda, paperLantern, lit } from './castle.js';
+import { TERRAIN as G, ROUTE, GATES, ground, riverZ, routeDist, routeNear, node, FORDS, WALL_Z, GATE_X, CAMP_H } from './map.js';
 import { topAt, GRASS_TIME } from './terrain.js';
-import { SUN_DIR } from './sky.js';
+import { SUN_DIR, NOISE_GLSL } from './sky.js';
 import { lensClear } from '../camera/occlusion.js';
 
 const WIND = new THREE.Vector3(0.75, 0, 0.55).normalize();   // blows up the valley, toward the castle's end
-const lit = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, flatShading: true });
 const frac = (x) => x - Math.floor(x);
 const FOCUS = { value: new THREE.Vector3() };   // the camera's focus (hero), for the reeds' sight line
 
@@ -123,17 +122,6 @@ function smokeMaterial() {
   return mat;
 }
 
-/** Instanced camera-facing quads: instance matrix = position + rotation/scale in the view plane. */
-function billboard(mat) {
-  mat.onBeforeCompile = (sh) => {
-    sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', `
-      vec4 mvPosition = modelViewMatrix * vec4( instanceMatrix[3].xyz, 1.0 );
-      mvPosition.xy += mat2( instanceMatrix[0].xy, instanceMatrix[1].xy ) * transformed.xy;
-      gl_Position = projectionMatrix * mvPosition;`);
-  };
-  return mat;
-}
-
 /** Soft radial glow (white, alpha 0 at the rim) for additive fire halos and ground light pools. */
 function glowTexture() {
   const cv = document.createElement('canvas'); cv.width = cv.height = 64;
@@ -169,16 +157,12 @@ const FLAME_VS = /* glsl */`
 const FLAME_FS = /* glsl */`
   uniform float uTime;
   varying vec2 vUv; varying vec3 vP; varying float vNear; flat varying float vGrid;
-  float fHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float fNoise(vec2 p) {
-    vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(fHash(i), fHash(i + vec2(1.0, 0.0)), f.x), mix(fHash(i + vec2(0.0, 1.0)), fHash(i + vec2(1.0, 1.0)), f.x), f.y);
-  }
+  ${NOISE_GLSL}
   void main() {
     vec2 px = vec2(12.0, 20.0) * vGrid, uv = (floor(vUv * px) + 0.5) / px;  // chunky flame pixels (voxel style)
     float sd = vP.x * 23.0, sp = 2.1 + vP.x * 0.8;
-    float n = fNoise(vec2(uv.x * 3.2 + sd, uv.y * 2.6 - uTime * sp)) * 0.55 + fNoise(vec2(uv.x * 6.5 - sd, uv.y * 5.0 - uTime * sp * 1.7)) * 0.3
-            + fNoise(vec2(uv.x * 13.0 + sd, uv.y * 10.0 - uTime * sp * 2.6)) * 0.15;
+    float n = dwNoise(vec2(uv.x * 3.2 + sd, uv.y * 2.6 - uTime * sp)) * 0.55 + dwNoise(vec2(uv.x * 6.5 - sd, uv.y * 5.0 - uTime * sp * 1.7)) * 0.3
+            + dwNoise(vec2(uv.x * 13.0 + sd, uv.y * 10.0 - uTime * sp * 2.6)) * 0.15;
     float x = abs(uv.x - 0.5) * 2.0;
     // a narrow teardrop eroded hard by the noise: separate tongues licking up, a hot root, dark torn tips
     float heat = (1.0 - x / mix(0.9, 0.2, uv.y)) * (1.0 - 0.85 * uv.y) + (n - 0.5) * (0.6 + uv.y * 1.3) - 0.05;
@@ -196,7 +180,7 @@ const FLAME_FS = /* glsl */`
   }`;
 
 /** list: [x, y, z, scale, smoke = scale ≥ 1.3, gate id]: a gate-linked fire only burns once that gate is open (the
- *  barricade was fired). update(t, lit(gateId) → bool). Per fire: 2-3 flame cards + 2 detaching licks (flame shader),
+ *  barricade was fired: map.js GATES). update(t). Per fire: 2-3 flame cards + 2 detaching licks (flame shader),
  *  a stream of ember cubes, dark smoke puffs lit from below (big fires), a dim halo and a firelight pool. */
 function fireSystem(scene, list) {
   const r = makeRng(77);
@@ -265,10 +249,10 @@ function fireSystem(scene, list) {
   hm.name = 'fire-halo'; pm.name = 'fire-pool';
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
   const SMOKE_LO = new THREE.Color(0x3a2e2a), SMOKE_HI = new THREE.Color(0x6e6470), GLOW = new THREE.Color(0.4, 0.14, 0.03);
-  return (t, lit) => {
+  return (t) => {
     uTime.value = t;
     for (let i = 0; i < cards.length; i++) {
-      const f = cards[i], s = f.g && !lit(f.g) ? 0 : f.s;
+      const f = cards[i], s = f.g && !GATES[f.g].open ? 0 : f.s;
       if (f.lick) {                                                              // a tongue tearing off and rising
         const k = frac(t * f.sp + f.ph), sz = s * (1 - k * 0.8);
         p.set(f.x + (f.ox + WIND.x * k * 0.9) * s, f.y + (0.7 + k * 2.1) * s, f.z + (f.oz + WIND.z * k * 0.9) * s);
@@ -283,7 +267,7 @@ function fireSystem(scene, list) {
     }
     cm.instanceMatrix.needsUpdate = true; cm.instanceColor.needsUpdate = true;
     for (let i = 0; i < embers.length; i++) {
-      const f = embers[i], k = frac(t * f.sp + f.ph), s = f.g && !lit(f.g) ? 0 : f.s;
+      const f = embers[i], k = frac(t * f.sp + f.ph), s = f.g && !GATES[f.g].open ? 0 : f.s;
       p.set(f.x + f.ox * s + WIND.x * k * 10 * s + Math.sin(k * 19 + f.w) * 0.5, f.y + 0.8 + k * 13 * s, f.z + f.oz * s + WIND.z * k * 10 * s + Math.cos(k * 15 + f.w) * 0.5);
       const size = s && 0.08 * (1 - k * 0.6) * (Math.sin(t * 23 + f.w * 5) > -0.3 ? 1 : 0.25);
       fm.setMatrixAt(i, m.compose(p, q.identity(), sc.set(size, size, size)));
@@ -291,7 +275,7 @@ function fireSystem(scene, list) {
     }
     fm.instanceMatrix.needsUpdate = true; fm.instanceColor.needsUpdate = true;
     for (let j = 0; j < puffs.length; j++) {
-      const f = puffs[j], k = frac(t * f.sp + f.ph), s = f.g && !lit(f.g) ? 0 : f.s;
+      const f = puffs[j], k = frac(t * f.sp + f.ph), s = f.g && !GATES[f.g].open ? 0 : f.s;
       const drift = k * k * 15 * s;
       p.set(f.x + f.ox * s + WIND.x * drift, f.y + 1.6 * s + k * 17 * s, f.z + f.oz * s + WIND.z * drift);
       const size = s * f.v * (0.7 + 3.6 * k) * Math.min(1, k / 0.06) * (1 - Math.max(0, (k - 0.78) / 0.22));
@@ -304,7 +288,7 @@ function fireSystem(scene, list) {
     }
     sm.instanceMatrix.needsUpdate = true; sm.instanceColor.needsUpdate = true;
     for (let j = 0; j < sites.length; j++) {
-      const f = sites[j], s = f.g && !lit(f.g) ? 0 : f.s, fl = 0.8 + 0.12 * Math.sin(t * 11 + f.ph) + 0.08 * Math.sin(t * 23.7 + f.ph * 3);
+      const f = sites[j], s = f.g && !GATES[f.g].open ? 0 : f.s, fl = 0.8 + 0.12 * Math.sin(t * 11 + f.ph) + 0.08 * Math.sin(t * 23.7 + f.ph * 3);
       hm.setMatrixAt(j, m.compose(p.set(f.x, f.y + 1.1 * s, f.z), q.identity(), sc.set(3.8 * s * fl, 4.6 * s * fl, 1)));
       hm.setColorAt(j, c.setRGB(0.42, 0.13, 0.03).multiplyScalar(fl));
       pm.setMatrixAt(j, m.compose(p.set(f.x, f.py + 0.07, f.z), q.identity(), sc.set(5.2 * s * fl, 1, 5.2 * s * fl).multiplyScalar(f.wall ? 0 : 1)));
@@ -316,17 +300,7 @@ function fireSystem(scene, list) {
 
 
 // ---------------------------------------------------------------- set pieces (merged boxes on the ground under them)
-const inAt = (x, z) => G.in[Math.round((x - G.x0) / G.step) + Math.round((z - G.z0) / G.step) * G.nx];   // walk inside value (m)
-/** Nearest point on the main road: standards turn their cloth toward it (the player's line of travel). */
-function nearRoute(x, z) {
-  let best = 1e9, bx = x, bz = z;
-  for (let i = 0; i < ROUTE.length - 1; i++) {
-    const [ax, az] = ROUTE[i], [cx, cz] = ROUTE[i + 1], ex = cx - ax, ez = cz - az;
-    const t = Math.min(1, Math.max(0, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez))), px = ax + ex * t, pz = az + ez * t, d = Math.hypot(x - px, z - pz);
-    if (d < best) { best = d; bx = px; bz = pz; }
-  }
-  return [bx, bz];
-}
+const inAt = (x, z) => G.in[node(x, z)];   // walk inside value (m)
 
 /** Palisade of sharpened stakes with two rails along a ground-following polyline [[x, z], …]. */
 function palisade(b, r, pts) {
@@ -517,8 +491,9 @@ export function buildDressing(scene, { castle, fieldFires }) {
     scene.add(c); cloths.push(c);
     return c;
   };
-  /** Standard: pole + crossbar, cloth hangs from the bar and faces the road (or `face` [x, z]). */
-  const standard = (x, z, s = 1, mat = mats.wei, P = 8.5 * s, face = nearRoute(x, z)) => {
+  /** Standard: pole + crossbar, cloth hangs from the bar and faces the nearest road point (the player's line of travel)
+   *  or `face` [x, z]. */
+  const standard = (x, z, s = 1, mat = mats.wei, P = 8.5 * s, face = routeNear(x, z).p) => {
     const W = 2.3 * s, Hc = 4.3 * s, gy = topAt(x, z);
     const yaw = Math.atan2(face[0] - x, face[1] - z) + r.range(-0.35, 0.35);
     const cx = Math.cos(yaw), cz = -Math.sin(yaw);
@@ -540,10 +515,6 @@ export function buildDressing(scene, { castle, fieldFires }) {
     flag(x + 1.4 * s, gy + h + 1, z - 1.4 * s, 3, mat);
   };
   const glowBoxes = [];                              // self-lit paper lanterns (one basic-material mesh)
-  const paperLantern = (x, y, z, s = 1) => glowBoxes.push({ s: [0.04, 0.7 * s, 0.04], p: [x, y + 0.75 * s, z], c: 0x1a120c },
-    { s: [0.62 * s, 0.8 * s, 0.62 * s], p: [x, y, z], c: 0xff7a3a }, { s: [0.5 * s, 0.9 * s, 0.5 * s], p: [x, y, z], c: 0xff9a4a },
-    { s: [0.44 * s, 0.1 * s, 0.44 * s], p: [x, y + 0.45 * s, z], c: 0x2a1a0e }, { s: [0.44 * s, 0.1 * s, 0.44 * s], p: [x, y - 0.45 * s, z], c: 0x2a1a0e },
-    { s: [0.08, 0.35 * s, 0.08], p: [x, y - 0.65 * s, z], c: 0x7c2b1d });
   const fires = [];                                  // [x, y, z, scale, smoke?, gate?]
   const embers = [];                                 // ground-level fires near the fight: the vfx embers rise from them
   const burn = (x, z, s, gate) => { fires.push([x, ground(x, z), z, s, s >= 1.3, gate]); if (!gate) embers.push([x, z]); };
@@ -656,8 +627,8 @@ export function buildDressing(scene, { castle, fieldFires }) {
     pagoda(P, 4, gy + 1.2, 209, 13, 8, 2, 1);
     props.push(...P);
     // paper lanterns under both eaves: self-lit, they carry the backlit facade (the sun sits straight behind it)
-    for (const lx of [-4.6, -1.6, 1.6, 4.6]) paperLantern(4 + lx, gy + 4.05, 205.3, 1.15);
-    for (const lx of [-2.6, 0, 2.6]) paperLantern(4 + lx, gy + 7.2, 206.4, 0.95);
+    for (const lx of [-4.6, -1.6, 1.6, 4.6]) paperLantern(glowBoxes, 4 + lx, gy + 4.05, 205.3, 1.15);
+    for (const lx of [-2.6, 0, 2.6]) paperLantern(glowBoxes, 4 + lx, gy + 7.2, 206.4, 0.95);
     // war drums on the terrace either side of the stair, lit by the step braziers (on the stone: nobody walks there)
     drum(props, -2.5, 205.4, -Math.PI / 2 + 0.35, gy + 1.2); drum(props, 10.5, 205.4, Math.PI / 2 - 0.35, gy + 1.2); }   // side-on: frame to the lens
   { const x = -6, z = 213, gy = ground(x, z), P = 20;
@@ -897,10 +868,10 @@ export function buildDressing(scene, { castle, fieldFires }) {
     fires: emberSpots,
     /** Barricade meshes by gate id: { m, mat, y } (world.js collapses + chars them as the gate opens). */
     gates: { pass, summit: summitGate },
-    update(t, litGate, focus) {
+    update(t, focus) {
       FOCUS.value.copy(focus);
       for (const c of cloths) animateCloth(c, t);
-      updateFire(t, litGate);
+      updateFire(t);
       poseArmy(t);
       for (const d of dusts) d.position.x = d.userData.x + Math.sin(t * 0.05 * d.userData.sp + d.userData.ph) * 4 + WIND.x * 3.2 * Math.sin(t * 0.021 * d.userData.sp + d.userData.ph * 1.7);
     },

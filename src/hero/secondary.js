@@ -170,27 +170,16 @@ function tasselSeg(i, n) {
 }
 
 // ---------------------------------------------------------------- assembly
-export function createSecondary(scene, rig, mat) {
+/** Shared by every character: cape + front apron chains (from its segment builders), the pauldron half-swing, the body
+ *  colliders and the wind. → { add(joint, chainOpts) for its other chains, reset(), update(dt) → t (s) } */
+export function bodyChains(scene, rig, mat, capeSeg, apronSeg) {
   const j = rig.joints;
   const chains = [];
   const add = (joint, o) => chains.push(chain(scene, mat, joint, o));
-  // heaviest → lightest
   add(j.chest, { anchor: [0, 0.255, -0.16], rest: [0, -1, 0.15], n: 6, len: 0.17, stiff: 0.16, drag: 0.22, wind: 1.1, cone: 80, sway: 0.2,
     seg: capeSeg, hit: ['chest', 'hips', 'thighL', 'thighR', 'kneeL', 'kneeR'] });
   add(j.hips, { anchor: [0, -0.02, 0.19], rest: [0, -1, 0.12], n: 3, len: 0.12, stiff: 0.12, drag: 0.14, wind: 0.4, face: [0, 0, 1], cone: 70, sway: 0.08,
     seg: apronSeg, hit: [['thighL', 0.02], ['thighR', 0.02], ['kneeL', 0.02], ['kneeR', 0.02]] });
-  add(j.head, { anchor: [0, 14 * HV, -5 * HV], rest: [0, -0.92, -0.4], n: 8, len: 0.07, stiff: 0.09, drag: 0.13, wind: 1.6, cone: 115, sway: 0.4,
-    seg: hairSeg, hit: ['head', ['chest', 0.035], ['hips', 0.03]] });
-  for (const sx of [-1, 1]) {
-    add(j.head, { anchor: [sx * 2.5 * HV, 10.5 * HV, -6.8 * HV], rest: [sx * 0.35, -0.5, -1], n: 5, len: 0.09, stiff: 0.03, drag: 0.06, wind: 2.4, cone: 105, sway: 0.6,
-      seg: ribbonSeg, hit: ['head', ['chest', 0.02]] });
-  }
-  // blue tassel: three bushy strands hanging from under the dragon collar
-  for (let k = 0; k < 5; k++) {
-    const a = k * 1.2566, ox = Math.cos(a) * 0.016, oy = Math.sin(a) * 0.016;
-    add(j.weapon, { anchor: [ox, oy, 1.43], rest: [ox * 12, oy * 4 - 1, -0.35], n: 3, len: 0.064, stiff: 0.05 + k * 0.004, drag: 0.12, wind: 0.8, cone: 130, sway: 0.15,
-      face: [1, 0, 0], seg: tasselSeg });
-  }
 
   const cols = {};
   for (const k of ['head', 'chest', 'hips', 'thighL', 'thighR', 'kneeL', 'kneeR']) cols[k] = { c: new THREE.Vector3(), r: 0 };
@@ -198,6 +187,7 @@ export function createSecondary(scene, rig, mat) {
   const back = new THREE.Vector3(), _bq = new THREE.Quaternion(), DOWN = new THREE.Vector3(0, -1, 0);
   let t = 0;
   return {
+    add,
     reset() { for (const c of chains) c.reset(); },
     update(dt) {
       t += dt;
@@ -217,6 +207,26 @@ export function createSecondary(scene, rig, mat) {
       }
       back.set(0, 0.15, -1).applyQuaternion(j.root.getWorldQuaternion(_bq));
       for (const c of chains) c.update(dt, t, cols, back);
+      return t;
     },
   };
+}
+
+export function createSecondary(scene, rig, mat) {
+  const j = rig.joints;
+  // heaviest → lightest
+  const body = bodyChains(scene, rig, mat, capeSeg, apronSeg), { add } = body;
+  add(j.head, { anchor: [0, 14 * HV, -5 * HV], rest: [0, -0.92, -0.4], n: 8, len: 0.07, stiff: 0.09, drag: 0.13, wind: 1.6, cone: 115, sway: 0.4,
+    seg: hairSeg, hit: ['head', ['chest', 0.035], ['hips', 0.03]] });
+  for (const sx of [-1, 1]) {
+    add(j.head, { anchor: [sx * 2.5 * HV, 10.5 * HV, -6.8 * HV], rest: [sx * 0.35, -0.5, -1], n: 5, len: 0.09, stiff: 0.03, drag: 0.06, wind: 2.4, cone: 105, sway: 0.6,
+      seg: ribbonSeg, hit: ['head', ['chest', 0.02]] });
+  }
+  // blue tassel: three bushy strands hanging from under the dragon collar
+  for (let k = 0; k < 5; k++) {
+    const a = k * 1.2566, ox = Math.cos(a) * 0.016, oy = Math.sin(a) * 0.016;
+    add(j.weapon, { anchor: [ox, oy, 1.43], rest: [ox * 12, oy * 4 - 1, -0.35], n: 3, len: 0.064, stiff: 0.05 + k * 0.004, drag: 0.12, wind: 0.8, cone: 130, sway: 0.15,
+      face: [1, 0, 0], seg: tasselSeg });
+  }
+  return body;
 }
