@@ -89,7 +89,7 @@ export function createStory(game) {
     }
     if (b.waves != null) c.setWaves(b.waves);
     if (b.limit) { S.limit = c.zMax = b.limit.z ? pos(b.limit.z)[1] : Infinity; S.nag = b.limit.nag || null; }   // crowd: waves spawn inside it
-    if (b.heal && !h.dead) h.hp = Math.min(h.hpMax, h.hp + b.heal * h.hpMax);
+    if (b.heal && !h.dead) h.hp = Math.min(h.hpMax, h.hp + b.heal * game.diff.heal * h.hpMax);
     if (b.morale != null) S.mBase = b.morale === 1 ? 1 : S.mBase + b.morale;
     if (b.gate) setGate(b.gate, true);
     if (b.banner) emit('story:banner', { dur: 150, ...b.banner });
@@ -161,11 +161,13 @@ export function createStory(game) {
     st.morale += (Math.min(0.95, Math.max(0.08, m)) - st.morale) * 0.03;
   };
 
-  /** DW-style rank from KOs, clear time and damage taken: 3 points each, S ≥ 8, A ≥ 6, B ≥ 4, else C. */
+  /** DW-style rank from KOs, clear time and damage taken: 3 points each (+ game.diff.rankBonus), S ≥ 8, A ≥ 6, B ≥ 4,
+   *  else C; never above game.diff.rankMax (初級 tops out at A). */
   function rank({ kos, time, dmg, hpMax }) {
     const p = (kos >= 2000 ? 3 : kos >= 1200 ? 2 : kos >= 600 ? 1 : 0) + (time <= 540 ? 3 : time <= 720 ? 2 : time <= 900 ? 1 : 0) +
       (dmg <= hpMax * 0.35 ? 3 : dmg <= hpMax * 0.7 ? 2 : dmg <= hpMax * 1.1 ? 1 : 0);
-    return p >= 8 ? 'S' : p >= 6 ? 'A' : p >= 4 ? 'B' : 'C';
+    const d = game.diff, q = p + d.rankBonus, r = q >= 8 ? 'S' : q >= 6 ? 'A' : q >= 4 ? 'B' : 'C';
+    return r === 'S' && d.rankMax === 'A' ? 'A' : r;
   }
   return st;
 }

@@ -36,6 +36,7 @@ import { createLoading } from './ui/loading.js';
 import { inkWipe, inkBoot, wiping, createNav, sfx, replay } from './ui/menu.js';
 import { createPrologue } from './story/prologue.js';
 import { createResult } from './story/result.js';
+import { difficulty, recordClear } from './core/difficulty.js';
 
 const params = new URLSearchParams(location.search);
 const ENEMIES = Math.max(0, Math.min(2000, params.get('enemies') ? Number(params.get('enemies')) | 0 : 300));
@@ -49,7 +50,7 @@ const world = createWorld(scene);
 
 // ---- sim
 // mode: 'free' | 'story' (set by startBattle); the hero's character / kit: game.hero.char / game.hero.kit
-const game = { frame: 0, hitstop: 0, freeze: 0, mode: 'free' };
+const game = { frame: 0, hitstop: 0, freeze: 0, mode: 'free', diff: difficulty() };   // diff: core/difficulty.js, fixed per battle
 game.cam = createCamSim();
 game.hero = createHero(game);
 game.crowd = createCrowd(game, ENEMIES);
@@ -106,7 +107,7 @@ function render(real) {
  *  here: both RNGs reseeded, frame 0), rebuilds the kit views on a character change, lets the story spawn the field. */
 function startBattle({ char = 'zhaoyun', mode = 'free' } = {}) {
   const ch = CHARS[char] || CHARS.zhaoyun, p = spawnPoint(mode), newKit = ch.kit !== game.hero.kit;
-  Object.assign(game, { mode, frame: 0, hitstop: 0, freeze: 0 });
+  Object.assign(game, { mode, frame: 0, hitstop: 0, freeze: 0, diff: difficulty() });
   lastRenderFrame = 0;
   vrng.seed(7936); rng.seed(1);
   game.hero.reset({ ...p, char: ch });
@@ -116,6 +117,7 @@ function startBattle({ char = 'zhaoyun', mode = 'free' } = {}) {
   heroView.reset();
   game.story.reset({ mode, char: ch.id });
   menu.querySelector('.t').innerHTML = `${ch.name.zh}<i>${ch.seal}</i>`;
+  menu.querySelector('.sub').innerHTML = `戰局暫停・${game.diff.zh}<small>Battle paused · ${game.diff.en}</small>`;
   document.title = `${ch.name.zh} — Voxel Musou`;
   emit('scenario', { mode, char: ch.id });
 }
@@ -220,7 +222,11 @@ const screens = {
   title: createTitle($('title'), flow), select: createSelect($('select'), flow), loading: createLoading($('loading')),
   prologue: createPrologue($('prologue'), flow), result: createResult($('result'), flow),
 };
-on('story:end', (e) => inkWipe(() => flow.go('result', { ...ctx, win: e.win, stats: e.stats })));
+// a win records the clear (上級 / 修羅 opens 修羅: unlock = the result screen announces it)
+on('story:end', (e) => {
+  const unlock = e.win && recordClear(game.diff);
+  inkWipe(() => flow.go('result', { ...ctx, win: e.win, stats: e.stats, diff: game.diff, unlock }));
+});
 addEventListener('keydown', (e) => {
   // opens; the menu's own nav (registered first) closes it and marks the key handled
   if (state === 'battle' && !paused && e.code === 'Escape' && !e.defaultPrevented) setPaused(true);

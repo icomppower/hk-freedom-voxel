@@ -521,7 +521,7 @@ export function createCrowdView(scene, game) {
     if (s <= ST.ATTACK) {
       stance(i, g, s, v, crowd.form[i]);
       if (s !== ST.ATTACK) return 12;
-      const w = CROWD.windup;
+      const w = crowd.foe[i] < 0 ? game.diff.windup : CROWD.windup;              // duels keep the base timing
       if (t < w - 3) {                                                                // wind-up: coil and hold (telegraph)
         // big overhead coil read at gameplay distance: weapon high over the head, body arched back on a wide stance;
         // the last 14 sf he trembles at full stretch
@@ -628,7 +628,7 @@ export function createCrowdView(scene, game) {
     _ch.setRGB(f, f * 0.98, f * 0.95);
     hitGlow(i, _g);
     // telegraph: the last 14 sf of a blow that will really come (feints don't flare)
-    const hotStrike = s === ST.ATTACK && !crowd.feint[i] && crowd.foe[i] < 0 && t >= CROWD.windup - 14 && t < CROWD.windup;
+    const hotStrike = s === ST.ATTACK && !crowd.feint[i] && crowd.foe[i] < 0 && t >= game.diff.windup - 14 && t < game.diff.windup;
     if (cap) _c.setRGB(_ch.r * 1.45, _ch.g * 1.1, _ch.b * 0.7); else _c.copy(_ch);                  // captains: bronze armour
     const ally = i >= NW, far = farNow && !officer;
     const P = officer ? PO : ally ? (far ? PSF : midNow ? PSM : PS) : far ? PF : midNow ? PM : PG;
@@ -651,7 +651,7 @@ export function createCrowdView(scene, game) {
     if (g === 1) push(far ? M.far_shield : midNow ? M.mid_shield : M.shield, local(mOut, mArmL, 0, -J.hand, 0, C[WL], C[WL + 1], C[WL + 2]), _c);
     // telegraph: pixel-star glint on the weapon tip through the wind-up (drawn over the crowd); a real blow flares it
     // into a big solid red pixel star (white core) for the last 14 sf
-    if (s === ST.ATTACK && t >= 3 && t < CROWD.windup && M.glint.count < 32 && crowd.foe[i] < 0) {
+    if (s === ST.ATTACK && t >= 3 && t < game.diff.windup && M.glint.count < 32 && crowd.foe[i] < 0) {
       const pulse = hotStrike ? 0.46 + 0.16 * Math.abs(Math.sin(t * 0.9)) : 0.2 + 0.12 * Math.abs(Math.sin(t * 0.33)) + (t < 10 ? (10 - t) * 0.025 : 0);
       _tmp.makeRotationFromEuler(_e.set(t * 0.07, t * 0.11, 0.6)).scale(_v.set(pulse, pulse, pulse));
       _tmp.setPosition(_v.set(0, 0, TIP[g]).applyMatrix4(mW));

@@ -8,7 +8,7 @@
 //    sees it. Every 0.1 s a ring manager refills each row's whole deficit at once (an empty inner slot takes the
 //    soldier nearest to it), so the ring re-closes within ~1-2 s of a sweep. CROWD.tokens soldiers step in to
 //    attack (tokens favour soldiers the camera can see, off the line the hero swings along). Up to
-//    CROWD.maxStrikers of them wind up at once; starts are jittered (CROWD.strikeGap, officers at half the gap), each
+//    game.diff.strikers of them (core/difficulty.js) wind up at once; starts are jittered (CROWD.strikeGap, officers at half the gap), each
 //    telegraphed by a 0.67 s wind-up, and every start makes the 3-5 guards nearest the striker raise their weapons,
 //    shout and surge half a step in with him (c.raiseF). Posture over pressure: once a blow lands, the next
 //    2.5-4 s of strikes are feints (c.feint: full wind-up, the blow stops short of him), so the ring keeps
@@ -50,10 +50,11 @@ export const CROWD = {
   radius: 0.48, heroR: 0.8,
   bands: [[1.9, 2.8], [3.4, 5.6], [6.5, 10]], share: [0.4, 0.85], bandMin: [14, 20], bandMax: [18, 30],   // inner ring, second row, outer
   aggro: 9, officerAggro: 16,
-  tokens: 3, attackRange: 1.7, maxStrikers: 2,               // ≤ 3 committed step in, ≤ 2 of them winding up at once
+  tokens: 3, attackRange: 1.7,                               // ≤ 3 committed step in (how many wind up at once: game.diff.strikers)
   strikeGap: [[40, 90], [30, 80]],                            // next start after 40-90 sf (hero calm) / 30-80 (he attacks)
   grace: [150, 240], rally: [3, 5], rallyTime: 44,             // feints for 2.5-4 s after a blow lands; guards raising
-  windup: 40, strike: 40, recover: 24, cooldown: [110, 260], officerCd: [40, 90],  // strike lands 0.67 s after wind-up starts
+  windup: 40, strike: 40, recover: 24, cooldown: [110, 260], officerCd: [40, 90],  // duel blow lands 0.67 s after wind-up
+                                                              // starts; blows on the hero: game.diff.windup
   hp: 30, captainHp: 80, officerHp: 520,
   deadTime: 210,
   engaged: 84, transit: 72,                                   // director target: soldiers on the hero; cap on blocks en route
@@ -97,7 +98,7 @@ export function createCrowd(game, grunts) {
     c.x[i] = x; c.z[i] = z; c.y[i] = 0; c.vx[i] = c.vz[i] = c.vy[i] = 0;
     c.yaw[i] = Math.atan2(game.hero.x - x, game.hero.z - z);
     c.type[i] = off ? 1 : 0; c.kind[i] = kind;
-    c.hpMax[i] = c.hp[i] = off ? CROWD.officerHp : i >= N ? CROWD.allyHp : kind === KIND.CAPTAIN ? CROWD.captainHp : CROWD.hp;
+    c.hpMax[i] = c.hp[i] = i >= N ? CROWD.allyHp : off ? CROWD.officerHp * game.diff.officerHp : (kind === KIND.CAPTAIN ? CROWD.captainHp : CROWD.hp) * game.diff.gruntHp;
     c.st[i] = engaged ? ST.ADVANCE : ST.IDLE; c.stT[i] = rng.int(0, 60);
     c.token[i] = 0; c.cd[i] = rng.int(0, 120); c.hs[i] = 0; c.flash[i] = 0; c.raiseF[i] = 0; c.feint[i] = 0; c.wind[i] = 0;
     c.rx[i] = c.rxV[i] = c.spinV[i] = 0; c.bounce[i] = 0; c.lastHit[i] = -1; c.kod[i] = 0; c.boss[i] = 0;
@@ -191,7 +192,7 @@ export function createCrowd(game, grunts) {
     const i = freeSlots(true)[0];
     if (i === undefined) return -1;
     place(i, x, z, engaged);
-    c.hp[i] = c.hpMax[i] = hp; c.boss[i] = boss ? 1 : 0;
+    c.hp[i] = c.hpMax[i] = hp * game.diff.officerHp; c.boss[i] = boss ? 1 : 0;
     c.offName[i - grunts] = name;
     return i;
   };
@@ -238,10 +239,10 @@ export function createCrowd(game, grunts) {
     if (game.freeze > 0) game.freeze--;
     if (!frozen) squads(h);
     // a blow landed: the next strikes are feints for a while (the ring threatens, the hero keeps fighting)
-    if (h.hp < c.heroHp) c.graceF = game.frame + rng.int(CROWD.grace[0], CROWD.grace[1]);
+    if (h.hp < c.heroHp) c.graceF = game.frame + Math.round(rng.int(CROWD.grace[0], CROWD.grace[1]) * game.diff.grace);
     c.heroHp = h.hp;
     let strikers = 0;
-    for (let i = 0; i < N; i++) if (c.st[i] === ST.ATTACK && c.stT[i] < CROWD.strike && c.foe[i] < 0) strikers++;
+    for (let i = 0; i < N; i++) if (c.st[i] === ST.ATTACK && c.stT[i] < game.diff.windup && c.foe[i] < 0) strikers++;
     const busy = h.state === 'attack';
     c.front += wrap(game.cam.yaw - c.front) * 0.01;                 // allies' front: the view direction, eased (≈ 1.7 s)
     // ---- AI (Wei army, then the Shu allies)
@@ -279,18 +280,18 @@ export function createCrowd(game, grunts) {
         if (d < (c.type[i] ? CROWD.officerAggro : CROWD.aggro)) setSt(i, ST.ADVANCE);
         turn(i, face, 1.5);
       } else if (s === ST.ATTACK) {
-        const t = c.stT[i];
-        turn(i, face, t < CROWD.windup - 8 ? CROWD.turn : 0);
-        if (t === CROWD.strike) {
+        const t = c.stT[i], W = game.diff.windup;                      // the telegraph: blow lands W sf after wind-up start
+        turn(i, face, t < W - 8 ? CROWD.turn : 0);
+        if (t === W) {
           c.wind[i] = 0;
           emit('enemy:attack', { x: c.x[i], z: c.z[i], officer: c.type[i] === 1 });
           if (!c.feint[i]) game.combat.enemyStrike(i);                 // a feint swings at the air
         }
         // creep into reach (a feint stops a pace short: the blow cuts the air in front of him)
         const reach = c.feint[i] ? 2.45 : CROWD.attackRange - 0.2;
-        if (t < CROWD.windup - 6 && d > reach) { vx = dx / d * CROWD.walk; vz = dz / d * CROWD.walk; }
-        else if (c.feint[i] && t < CROWD.windup + 8 && d < reach - 0.3) { vx = -dx / d * 1.2; vz = -dz / d * 1.2; }
-        if (t >= CROWD.windup + CROWD.recover) {
+        if (t < W - 6 && d > reach) { vx = dx / d * CROWD.walk; vz = dz / d * CROWD.walk; }
+        else if (c.feint[i] && t < W + 8 && d < reach - 0.3) { vx = -dx / d * 1.2; vz = -dz / d * 1.2; }
+        if (t >= W + CROWD.recover) {
           const cd = c.type[i] ? CROWD.officerCd : CROWD.cooldown;
           setSt(i, ST.GUARD); releaseToken(i); c.cd[i] = rng.int(cd[0], cd[1]);
         }
@@ -348,11 +349,11 @@ export function createCrowd(game, grunts) {
         }
         // token holder within a step of reach swings when the strike clock allows (officers at half the gap); the
         // wind-up closes the last metre
-        if (c.token[i] && d <= CROWD.attackRange + 0.9 && c.cd[i] === 0 && !h.y && strikers < CROWD.maxStrikers &&
+        if (c.token[i] && d <= CROWD.attackRange + 0.9 && c.cd[i] === 0 && !h.y && strikers < game.diff.strikers &&
             h.state !== 'hurt' && game.frame - c.strikeF >= (c.type[i] ? c.gap >> 1 : c.gap)) {
           setSt(i, ST.ATTACK); c.wind[i] = 1; c.feint[i] = game.frame < c.graceF ? 1 : 0; strikers++;
           const g = CROWD.strikeGap[busy ? 1 : 0];
-          c.strikeF = game.frame; c.gap = rng.int(g[0], g[1]);
+          c.strikeF = game.frame; c.gap = Math.round(rng.int(g[0], g[1]) * game.diff.gap);
           rally(i);
         }
         turn(i, faceTo, CROWD.turn);

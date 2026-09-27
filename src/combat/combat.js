@@ -183,6 +183,8 @@ export function createCombat(game) {
     const killed = c.hp[i] <= 0 && !c.kod[i];
     const s0 = c.st[i], air = s0 === ST.AIR, downed = s0 === ST.DOWN || s0 === ST.GETUP;
     if (officer && !hit.heavy && !killed) { if (kb === 'launch' || kb === 'blow' || kb === 'spin') kb = 'push'; force *= 0.4; }
+    // 修羅 (game.diff.armor): officers standing take a light kit hit without a reaction and keep swinging (heavies / Musou still stagger)
+    if (officer && game.diff.armor && !hit.heavy && !killed && heroMove(moveId) && s0 <= ST.ATTACK) kb = 'armor';
     let koThrow = false;
     if (killed) {
       c.kod[i] = 1;
@@ -206,6 +208,7 @@ export function createCombat(game) {
       airborne(i, vy, Math.max(1.2, force * 0.5), dx, dz, floaty[i] || kb === 'launch', 0.6, c.spinV[i] * 0.6 + sgn * 1.5);
     } else if (downed && (kb === 'flinch' || kb === 'push')) { // hit on the ground: bounce the body, it stays lying
       airborne(i, COMBAT.otgLift, force * 0.4, dx, dz, false, 0, sgn * 2);
+    } else if (kb === 'armor') {                             // no reaction (the tint and hitstop still land)
     } else if (kb === 'flinch') {
       c.st[i] = ST.HURT; c.stT[i] = 0;
       c.yaw[i] = Math.atan2(-dx, -dz);                         // face the blow: the recoil reads along the hit
@@ -368,7 +371,7 @@ export function createCombat(game) {
     const dx = h.x - c.x[i], dz = h.z - c.z[i], d = Math.hypot(dx, dz);
     if (d > (officer ? 2.3 : 1.9) || h.y > 1.2) return;
     if (Math.abs(wrap(Math.atan2(dx, dz) - c.yaw[i])) > 1.1) return;
-    h.hurt(officer ? 22 : 10, c.x[i], c.z[i], officer);
+    h.hurt(Math.round((officer ? 22 : 10) * game.diff.dmg), c.x[i], c.z[i], officer);
   };
 
   cb.step = () => {
