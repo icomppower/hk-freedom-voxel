@@ -58,7 +58,7 @@ export function createHud(root, game, camera) {
   const reset = () => {
     Object.assign(S, {
       lastCombo: 0, shownChain: 0, chainF: -99, chainQ: [], ghostN: 0, shownKo: 0, koF: -99, mile: 0, mileQ: 0, mileF: -99, busyF: -99,
-      lagHp: 1, lastF: 0, hurtF: -99, actF: 0, band: null, bandQ: [], dlg: null, waveF: -999, tgt: -1, tgtF: -999, tgtKoF: -999,
+      lagHp: 1, lastF: 0, hurtF: -99, actF: 0, band: null, bandQ: [], dlg: null, waveF: -999, allyF: -999, tgt: -1, tgtF: -999, tgtKoF: -999,
       musouF: -999, musouEnd: -999, waves: [], introCut: 0, obj: null,
     });
     const ch = game.hero.char;                                        // character text + portraits
@@ -109,6 +109,10 @@ export function createHud(root, game, camera) {
   on('crowd:wave', (e) => {
     if (game.frame - S.waveF > 600) { S.waveF = game.frame; banner('<em>魏軍</em>援兵 抵達', 'Wei reinforcements have arrived!', 130); }
     S.waves.push({ x: e.x, z: e.z, f: game.frame });
+  });
+  on('crowd:allies', (e) => {
+    if (game.frame - S.allyF > 900) { S.allyF = game.frame; banner('<em>蜀軍</em>援兵 趕到', 'Shu reinforcements have joined the fight', 120); }
+    S.waves.push({ x: e.x, z: e.z, f: game.frame, ally: true });
   });
   on('hit', (e) => { S.actF = game.frame; if (e.officer) { S.tgt = e.i; S.tgtF = game.frame; } });
   on('attack:start', () => { S.actF = game.frame; });
@@ -406,7 +410,7 @@ export function createHud(root, game, camera) {
       S.waves = S.waves.filter((w) => f - w.f < 120);
       for (const w of S.waves) {
         const t = (f - w.f) / 120;
-        map.strokeStyle = `rgba(255,80,55,${(1 - t).toFixed(2)})`; map.lineWidth = 2;
+        map.strokeStyle = w.ally ? `rgba(110,220,110,${(1 - t).toFixed(2)})` : `rgba(255,80,55,${(1 - t).toFixed(2)})`; map.lineWidth = 2;
         map.beginPath(); map.arc(X(w.x), Y(w.z), 5 + t * 22, 0, 7); map.stroke();
       }
       const cy = game.cam.yaw;
@@ -416,6 +420,13 @@ export function createHud(root, game, camera) {
       map.beginPath(); map.moveTo(100, 100); map.arc(100, 100, 70, -Math.PI / 2 - cy - 0.5, -Math.PI / 2 - cy + 0.5); map.fill();
       map.fillStyle = '#e0412c';
       for (let i = 0; i < c.grunts; i++) {
+        const st = c.st[i];
+        if (st === ST.OFF || st === ST.DEAD) continue;
+        const x = X(c.x[i]), y = Y(c.z[i]);
+        if (x > -2 && x < 202 && y > -2 && y < 202) map.fillRect(x - 1.5, y - 1.5, 3, 3);
+      }
+      map.fillStyle = '#6ee06e';                                     // Shu allies
+      for (let i = c.N; i < c.T; i++) {
         const st = c.st[i];
         if (st === ST.OFF || st === ST.DEAD) continue;
         const x = X(c.x[i]), y = Y(c.z[i]);

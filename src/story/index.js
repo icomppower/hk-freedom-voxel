@@ -12,6 +12,9 @@
 // (main.js) leaves the battle for the result screen on story:end; the HUD shows the rest.
 // Also owns game.timeScale (wall-clock pace of the fixed-step loop, main.js): 1, except the victory slow-mo.
 // Free mode = the endless field: the army, reinforcement waves, the hero's intro line, and no end.
+// Both modes field live Shu allies (crowd.spawnAllies; columns via crowd.setAllies): story — the van drawn up either side
+// of the road inside the 本陣 gate, holding rank until the hero marches past; free — a block behind him.
+// Morale also moves with the duels (Wei grunts the allies KO'd minus allies lost).
 // Story mode: CHAPTERS[chapter] = a beat list (format: header of ./ch1.js), run strictly in order — beat k fires once
 // its trigger holds and beat k-1 has fired; a `limit` keeps the hero from running past the stage he is on (DW8's
 // barred gates), so the script can't be skipped or soft-locked by running ahead, and going back is always free.
@@ -104,7 +107,10 @@ export function createStory(game) {
     st.target = null;
     if (mode === 'story') for (const id in GATES) setGate(id, false);   // spawnPoint() opened them all; the script opens each
     st.morale = mode === 'story' ? 0.4 : undefined;
-    if (mode === 'free') game.crowd.spawnArmy();
+    const c = game.crowd;
+    if (mode === 'free') { c.spawnArmy(); c.spawnAllies({ x: 0, z: -9, n: 24, cols: 6 }); }
+    else for (const sx of [-1, 1]) c.spawnAllies({ x: sx * 5.575, z: -121.6, n: 12, cols: 4, hold: true });
+    c.setAllies(true);
     // story: the first beat spawns the field on step 1 — after main.js's 'scenario' reset of the HUD, so its objective sticks
   };
 
@@ -153,7 +159,7 @@ export function createStory(game) {
     if (typeof g === 'string') { const i = S.off[g]; st.target = i >= 0 ? { x: c.x[i], z: c.z[i] } : S.want[g] ? { x: S.want[g].x, z: S.want[g].z } : null; }
     else if (g) { const [x, z] = pos(g); st.target = { x, z }; }
     else st.target = null;
-    const m = S.mBase >= 1 ? 1 : clamp01(S.mBase + h.kos * 0.0004);
+    const m = S.mBase >= 1 ? 1 : clamp01(S.mBase + h.kos * 0.0004 + (c.allyKos - c.allyLost) * 0.0006);
     st.morale += (Math.min(0.95, Math.max(0.08, m)) - st.morale) * 0.03;
   };
 

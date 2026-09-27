@@ -53,7 +53,7 @@ let popN = new Uint8Array(0);
 /** Tint of soldier i this frame (colour × strength, or HOT on the contact frame), written into out[0..2]. */
 export function hitGlow(crowd, i, out) {
   const fl = crowd.flash[i], ember = crowd.kod[i] && crowd.st[i] === ST.AIR ? EMBER : 0;
-  if (popN.length !== crowd.N) popN = new Uint8Array(crowd.N);
+  if (popN.length !== crowd.T) popN = new Uint8Array(crowd.T);
   if (fl <= 0 && !ember) { popN[i] = 0; out[0] = out[1] = out[2] = 0; return; }
   const heavy = crowd.hitHeavy[i];
   const D = COMBAT.tintFrames - 1 + (heavy ? 3 : 0);               // flash value on the frame a fresh hit shows

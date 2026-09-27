@@ -257,6 +257,12 @@ export function createAudio(game) {
     if (Math.random() > 0.55 || !gate('cry', 130)) return;
     play(pick(B.cry), { gain: rnd(0.3, 0.42) * att, rate: rnd(0.9, 1.1), pan, delay: rnd(0.03, 0.09), send: 0.22, bus: vox });
   });
+  on('clash', (e) => {                        // duel blows off the hero's fight: a distant clank, a cry on a KO
+    if (!ok() || !gate('clash', 220)) return;
+    const { pan, att } = place(e.x, e.z);
+    play(pick(B.clank), { gain: 0.2 * att, rate: rnd(0.85, 1.15), pan, send: 0.25 });
+    if (e.killed && gate('cry', 130)) play(pick(B.cry), { gain: 0.22 * att, rate: rnd(0.9, 1.1), pan, delay: 0.05, send: 0.3, bus: vox });
+  });
   on('enemy:land', (e) => {
     if (!ok() || !gate('fall', e.bounce ? 110 : 80)) return;
     const { pan, att } = place(e.x, e.z);

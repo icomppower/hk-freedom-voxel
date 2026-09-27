@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { boxesGeometry, shade } from '../core/voxel.js';
 import { makeRng } from '../core/rng.js';
-import { figureGeometry, figureGeometryNear, watchtower, pagoda } from './castle.js';
+import { figureGeometry, watchtower, pagoda } from './castle.js';
 import { TERRAIN as G, ROUTE, ground, riverZ, routeDist, FORDS, WALL_Z, GATE_X, SUMMIT_H, CAMP_H } from './map.js';
 import { topAt, GRASS_TIME } from './terrain.js';
 import { SUN_DIR } from './sky.js';
@@ -770,17 +770,7 @@ export function buildDressing(scene, { castle, fieldFires }) {
     if (inAt(ax, z) > -3) continue;
     rims[x < 0 ? 0 : 1].push({ x: ax, y: topAt(ax, z), z, yaw: (x < 0 ? Math.PI / 2 : -Math.PI / 2) + r.range(-0.3, 0.3), ph: r.range(0, 6.28) });
   }
-  // story opening: the Shu van drawn up either side of the road just inside the 本陣 gate, facing the ford with their
-  // flags (render-only; the hero starts at its head, map.js spawnPoint, and marches out between the ranks)
-  for (const sx of [-1, 1]) {
-    const list = []; troops.push(['van', list]);
-    for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) {
-      const x = sx * (3.7 + i * 1.25) + r.range(-0.15, 0.15), z = -121.6 - j * 1.45 + r.range(-0.15, 0.15);
-      list.push({ x, y: ground(x, z), z, yaw: r.range(-0.12, 0.12), ph: r.range(0, 6.28) });
-    }
-    flag(sx * 5.6, ground(sx * 5.6, -123.1), -123.1, 3.4, mats.shuFlag);
-  }
-  const figGeo = { shu: figureGeometry(0x3c7a3a, 0x3a3428), van: figureGeometryNear(0x3c8a3a, 0x4e6e3e, 0x5e5846), wei: figureGeometry() }, armyMat = lit();
+  const figGeo = { shu: figureGeometry(0x3c7a3a, 0x3a3428), wei: figureGeometry() }, armyMat = lit();
   // the fallen: bodies sprawled in the courtyard, the plaza, on the summit and around the field wrecks (one instanced
   // mesh; laid flat, never an obstacle to the eye)
   { const spots = [], zones = [[-40, 3, 112, 138, 16], [-27, 3, 78, 95, 8], [-20, 24, 180, 210, 14], [-40, 40, -110, 60, 22]];
