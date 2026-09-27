@@ -456,6 +456,7 @@ export function createMusouView(parent, game, camera) {
     }
   }
 
+  let warm = 2;
   return {
     update(dt) {
       time += dt;
@@ -463,6 +464,12 @@ export function createMusouView(parent, game, camera) {
       if (mu.active) tv = mu.t;
       else if (tv >= 0) { tv += dt * 60; if (tv > MUSOU.end + 50) tv = -1; }
       shards.update();
+      // first renders draw everything as a no-op: post.compile() links the programs, but buffer uploads and the driver's
+      // pipeline state (ANGLE/Metal) only happen on a real draw — without this the first Musou pays for them
+      if (warm > 0 && tv < 0) {
+        warm--; addU.uRays.value = 0; add.visible = fx.visible = dragon.visible = shell.visible = ink.visible = bolts.visible = true;
+        shard(0, -50, 0, 0, 0, 0, 0.05, 0.01, 0, 0, 0); return;
+      }
       if (tv < 0) { hideAll(); return; }
       const M = MUSOU;
       updateGrade(tv);

@@ -508,6 +508,14 @@ export function createFx(parent, camera) {
     camera.updateMatrixWorld();
   };
 
+  /** Draw every pool once at boot: post.compile() links the programs, but buffer uploads and the driver's pipeline
+   *  state (ANGLE/Metal) only happen on a real draw — without this the first Musou pays for them. */
+  fx.warm = () => {
+    fx.glow(0, -50, 0, 0.1, 0.1, 0.05, 0, 0, 0); fx.spark(0, -50, 0, 0, 1, 0, 0.1, 0.01, 0.05, 0, 0, 0);
+    fx.smoke(0, -50, 0, 0.1, 0.1, 0.05, 0, 0, 0, 0); fx.ring(0, -50, 0, 0, 1, 0, 0.1, 0.1, 0.1, 0.05, 0, 0, 0);
+    fx.scorch(0, 0, 0.01, 0.05, 0, 0); fx.debris(0, -50, 0, 0, 0, 0, 0.01, 0.05, 0, 0, 0);
+  };
+
   fx.dispose = () => {
     parent.remove(root);
     root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
