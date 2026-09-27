@@ -3,7 +3,6 @@
 // Targets (bench/notes/locomotion-dodge.md): run 4.3-4.9 H/s with no ramp, 180° turn ≤ 6 sf, 5.3 steps/s,
 // jump apex 1.3-1.6 H at ≈0.45 s (v0 ≈ 12 m/s, g ≈ 28), dodge back to running ≤ 0.40 s.
 import { emit } from '../core/events.js';
-import { MOVES } from './moves.js';
 
 export const LOCO = {
   runSpeed: 8.5,        // m/s = 4.6 H/s (DW8 ≈ 4.6 H/s)
@@ -20,8 +19,6 @@ export const LOCO = {
 };
 const DT = 1 / 60, TAU = Math.PI * 2;
 const ROLL_PLANT = 13;                  // dodge frame where the roll comes round onto the feet (pose: anims/locomotion.js)
-// dash attack: the front foot lands out of the lunge leap 8 sf into the lunge (anims/attacks.js MOVE_FEET.dash)
-const DASH_PLANT = MOVES.dash.lunge[1][0] + 8;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -149,11 +146,11 @@ export function startJump(h) {
 /** Gravity + integration + landing. Returns true on the frame the hero touches down. */
 export function stepPhysics(h) {
   if (h.state !== 'dodge') { h.x += h.vx * DT; h.z += h.vz * DT; }
-  if (h.move === 'dash' && h.moveT === DASH_PLANT && h.grounded) {       // DW8: the lunge thrust lands in a dust cloud
+  if (h.move === 'dash' && h.moveT === h.kit.dashPlant && h.grounded) {   // kit.dashPlant: the dash lunge lands       // DW8: the lunge thrust lands in a dust cloud
     emit('footstep', { x: h.x + Math.sin(h.yaw) * 0.4, y: 0, z: h.z + Math.cos(h.yaw) * 0.4, foot: 'L', speed: LOCO.runSpeed, kick: 1 });
   }
   if (h.grounded) return false;
-  const m = h.state === 'attack' && h.move && MOVES[h.move];
+  const m = h.state === 'attack' && h.move && h.kit.moves[h.move];
   if (m && m.air && !m.landFrame) {
     // air string (benchmark: DW8 A→X×n hangs at about apex height for ~2.4 s, then a ≈0.4 s spread-arm fall): the jump
     // finishes its rise on the normal arc, then holds altitude with a slow sink. Each swing's re-lift (combo startMove)

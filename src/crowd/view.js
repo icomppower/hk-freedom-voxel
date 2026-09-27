@@ -6,13 +6,16 @@
 // pops. Instances are packed each frame (count = visible soldiers of that kind). Committed attackers coil into a big
 // overhead wind-up (0.67 s) with a pixel-star glint on the weapon tip; a blow that will really come flares a big red
 // pixel star for its last 14 sf (a feint keeps the white star). Guards next to a striker
-// (crowd.raiseF) brandish their weapons and shout with him. Officers carry a spinning ▼ marker. Never writes sim state.
+// (crowd.raiseF) brandish their weapons and shout with him. Officers carry a spinning ▼ marker. Shu allies (crowd
+// indices N … T-1) are the same rig in Shu green (their own part meshes at all three LODs, a 蜀 standard); duels show no
+// wind-up glint / flare (those telegraph blows on the hero). Never writes sim state.
 import * as THREE from 'three';
 import { sculpt, shade, boxesGeometry } from '../core/voxel.js';
 import { ST, KIND, CROWD } from './crowd.js';
 import { patchHitMaterial, hitGlow } from '../combat/hitfx.js';   // hit-impact: victim flash/tint
 import { hash01 } from '../core/rng.js';
 import { HUD_TAG_R } from '../ui/hud.js';
+import { ground } from '../world/map.js';
 
 const V = 0.042;
 const b = (a, bb, c, paint) => ({ a, b: bb, c, paint });
@@ -24,6 +27,11 @@ const GRUNT = {
   cloth: 0x5e3026, pants: 0x3a302b, wrap: 0x9a8566, wrapD: 0x5c4c3c, boot: 0x2a1d16,
   skin: 0xd6a07a, skinD: 0xb07e5e, eye: 0x1a1210, brow: 0x2b1b14,
   helm: 0x4a4341, helmHi: 0x8a7d74, band: 0xd0321f, belt: 0x4d3322, buckle: 0xb89040, bracer: 0x3b2a20,
+};
+// Shu allies: green-lacquered lamellar, green coat and headband, a gold tassel
+const SHU = {
+  ...GRUNT, armor: 0x2e3a30, hi: 0x5c7a58, lace: 0x121a14, plate: 0x3e5242, rivet: 0xc0a050, cloth: 0x2a6a30,
+  pants: 0x2e3a2c, helm: 0x3a463c, helmHi: 0x8a9a80, band: 0x2b7a36, tassel: 0xd8b040, bracer: 0x2c3a28,
 };
 const OFFICER = {
   ...GRUNT, armor: 0x2b3350, hi: 0x6a7aa0, lace: 0x141a2c, plate: 0x3e4a70, rivet: 0xe0b450, cloth: 0x4a1a2a,
@@ -79,7 +87,7 @@ function bodyParts(C, officer) {
       b([-0.25, 0.24, -0.02], [-0.13, 0.4, 0.03], C.helmHi), b([0.13, 0.24, -0.02], [0.25, 0.4, 0.03], C.helmHi),   // wings
       b([-0.035, 0.34, -0.035], [0.035, 0.62, 0.035], RED), b([-0.035, 0.52, -0.2], [0.035, 0.62, -0.03], RED));      // plume
   } else {
-    p.head.push(b([-0.035, 0.34, -0.035], [0.035, 0.42, 0.035], RED));                 // red top tassel (reads from above)
+    p.head.push(b([-0.035, 0.34, -0.035], [0.035, 0.42, 0.035], C.tassel ?? RED));     // red top tassel (reads from above)
   }
   // captain: gilded helmet band + tall horsehair crest (its own small mesh on the head; the body gets a bronze tint)
   p.crest = [
@@ -123,7 +131,7 @@ function weaponGeos() {
   ]);
   // round shield strapped to the forearm: centred in front of it, facing +Z of the hand frame
   const R = 0.29;
-  const shield = sculpt([b([-R, 0.12 - R, 0.07], [R, 0.12 + R, 0.13], (x, y, z) => {
+  const shieldBoxes = [b([-R, 0.12 - R, 0.07], [R, 0.12 + R, 0.13], (x, y, z) => {
     const r = Math.hypot(x, y - 0.12);
     if (r > R) return null;
     if (z < 0.1 && r > R - 0.06) return null;                                         // bevel the back
@@ -131,8 +139,12 @@ function weaponGeos() {
     if (r < 0.06) return z > 0.1 ? 0xe0b860 : BRONZE;
     if (Math.abs(r - 0.16) < 0.025) return 0xc8a050;
     return (Math.floor(Math.atan2(x, y - 0.12) / (Math.PI / 4)) & 1) ? 0x7a2418 : 0x5e1a12;
-  }), b([-0.07, 0.1, 0.13], [0.07, 0.15, 0.17], 0xe0b860)], V, 0.1);
-  return { spear, sword, glaive, pole, shield };
+  }), b([-0.07, 0.1, 0.13], [0.07, 0.15, 0.17], 0xe0b860)];
+  const shield = sculpt(shieldBoxes, V, 0.1), mid_shield = sculpt(shieldBoxes, V * 2, 0.1);
+  // far LOD shield (≈ 36 tris vs ≈ 736): a stepped cross of solid boxes, the painted face's red + the bronze boss
+  const far_shield = boxesGeometry([box([0.58, 0.34, 0.06], [0, 0.12, 0.1], 0x6a1f15), box([0.34, 0.58, 0.06], [0, 0.12, 0.1], 0x6a1f15),
+    box([0.12, 0.12, 0.05], [0, 0.12, 0.14], 0xc8a050)]);
+  return { spear, sword, glaive, pole, shield, mid_shield, far_shield };
 }
 
 /** All crowd geometries. */
@@ -141,12 +153,25 @@ function buildCrowdGeometries() {
   const grunt = bodyParts(GRUNT, false), off = bodyParts(OFFICER, true);
   for (const k of ['hips', 'torso', 'head', 'crest', 'arm', 'thigh', 'shin']) g[k] = sculpt(grunt[k], V, 0.12);
   for (const k of ['hips', 'torso', 'head', 'arm', 'thigh', 'shin']) g['o_' + k] = sculpt(off[k], V, 0.1);
+  // mid LOD (8-28 m from the lens): the same parts re-voxelised at twice the voxel size — ≈ a quarter of the faces, same silhouette,
+  // lamellar rows and headband still read at that range
+  for (const k of ['hips', 'torso', 'head', 'arm', 'thigh', 'shin']) g['mid_' + k] = sculpt(grunt[k], V * 2, 0.12);
+  const shu = bodyParts(SHU, false);                                                  // Shu allies: same parts, all three LODs
+  for (const k of ['hips', 'torso', 'head', 'arm', 'thigh', 'shin']) { g['s_' + k] = sculpt(shu[k], V, 0.12); g['smid_' + k] = sculpt(shu[k], V * 2, 0.12); }
   // grunt shadow proxies: the same solid boxes, un-voxelised (~12 tris each) — the shadow pass never sees the voxel
   // detail. Hips + torso + head share one proxy on the torso matrix.
   const proxy = (boxes, dy = 0) => boxes.filter((q) => !q.paint).map((q) => ({
     s: q.b.map((v, k) => Math.max(0.01, v - q.a[k] - 0.016)), p: q.a.map((v, k) => (v + q.b[k]) / 2 + (k === 1 ? dy : 0)), c: 0 }));
   g.shadow_trunk = boxesGeometry([...proxy(grunt.hips, -J.waist), ...proxy(grunt.torso), ...proxy(grunt.head, J.neck)]);
   for (const k of ['arm', 'thigh', 'shin']) g['shadow_' + k] = boxesGeometry(proxy(grunt[k]));
+  // distance LOD (scene lane): the same solid boxes, coloured (a painter's base colour, no voxel detail), ≈ 450 tris
+  // per soldier instead of ≈ 4,900. Same rig as the near parts; hips + torso + head ride the torso matrix.
+  const far = (boxes, dy = 0) => boxes.filter((q) => !q.paint).map((q) => ({
+    s: q.b.map((v, k) => v - q.a[k]), p: q.a.map((v, k) => (v + q.b[k]) / 2 + (k === 1 ? dy : 0)), c: typeof q.c === 'function' ? q.c(0, 0, 0, 0, 1) : q.c }));
+  g.far_trunk = boxesGeometry([...far(grunt.hips, -J.waist), ...far(grunt.torso), ...far(grunt.head, J.neck)]);
+  for (const k of ['arm', 'thigh', 'shin']) g['far_' + k] = boxesGeometry(far(grunt[k]));
+  g.sfar_trunk = boxesGeometry([...far(shu.hips, -J.waist), ...far(shu.torso), ...far(shu.head, J.neck)]);
+  for (const k of ['arm', 'thigh', 'shin']) g['sfar_' + k] = boxesGeometry(far(shu[k]));
   Object.assign(g, weaponGeos());
   // officer marker ▼ (voxel rows 7-5-3-1, gold rim around red)
   const tri = [];
@@ -160,16 +185,16 @@ function buildCrowdGeometries() {
   return g;
 }
 
-function flagTexture() {
+function flagTexture(glyph = '魏', bg = '#b8301e') {
   const c = document.createElement('canvas'); c.width = 64; c.height = 112;
   const g = c.getContext('2d');
-  g.fillStyle = '#b8301e'; g.fillRect(0, 0, 64, 112);
+  g.fillStyle = bg; g.fillRect(0, 0, 64, 112);
   g.fillStyle = '#e0b058'; g.fillRect(0, 0, 64, 5); g.fillRect(0, 0, 4, 112); g.fillRect(60, 0, 4, 112);
   g.fillStyle = 'rgba(255,225,180,0.28)'; g.fillRect(10, 16, 44, 60);                  // lighter panel behind the character
   g.fillStyle = '#1a0f0c';
   g.font = 'bold 44px "Xingkai SC","STXingkai","Kaiti SC","STKaiti","KaiTi","Songti SC",serif';
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText('魏', 32, 46);
+  g.fillText(glyph, 32, 46);
   g.globalCompositeOperation = 'destination-out';                                    // swallow-tail bottom
   g.beginPath(); g.moveTo(14, 112); g.lineTo(32, 88); g.lineTo(50, 112); g.fill();
   const t = new THREE.CanvasTexture(c);
@@ -227,27 +252,48 @@ function recoilPose(T, i, s, t, sd) {
   return t < 2 ? 55 + 45 * hash01(i, 99) : 16;
 }
 
-/** Dithered dissolve for fragments closer than `near` metres to the camera (DW-style: nothing blocks the lens). */
-function nearFade(material, near, extra) {
-  material.customProgramCacheKey = () => `crowd-fade-${near}-${!!extra}`;
+// Sight cone (camera r4): the hero's chest, written each render by update(). Fragments inside the cone from the lens to
+// him (radius sightR m at his body, narrowing to the lens) and more than sightGap m in front of him are cut, so the
+// front rank of a mob no longer hides him (DW8 fades the soldiers between camera and player). The ring beside and
+// beyond him stays drawn.
+const uSight = { value: new THREE.Vector3() }, sightR = 1.1, sightGap = 0.8;
+/** fx r5: a second sight cone to the Musou dragon's head (xyz world, w = radius at the head, 0 = off; musou/view.js writes it),
+ *  so the fan it tears through doesn't hide its face on the contact frames. */
+export const dragonSight = new THREE.Vector4();
+const uSight2 = { value: dragonSight };
+
+/** Dithered dissolve for fragments closer than `near` metres to the camera or inside the sight cone (DW-style: nothing
+ *  blocks the lens or the hero). */
+function nearFade(material, near, extra, key = '') {   // key: tells materials with the same shader apart (own uniforms)
+  material.customProgramCacheKey = () => `crowd-fade-${near}-${!!extra}${key}`;
   material.onBeforeCompile = (sh) => {
     if (extra) extra(sh);
+    sh.uniforms.uSight = uSight; sh.uniforms.uSight2 = uSight2;
     sh.vertexShader = 'varying vec3 vCrowdWP;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
       vec4 cwp = vec4(transformed, 1.0);
       #ifdef USE_INSTANCING
         cwp = instanceMatrix * cwp;
       #endif
       vCrowdWP = (modelMatrix * cwp).xyz;`);
-    sh.fragmentShader = 'varying vec3 vCrowdWP;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+    sh.fragmentShader = `varying vec3 vCrowdWP;
+uniform vec3 uSight; uniform vec4 uSight2;
+float crowdSight(vec3 sP, vec3 tgt, float r, float gap) {   // 0 inside the cone lens → tgt (radius r at tgt), up to gap m short of it
+  vec3 ax = tgt - cameraPosition; float l = length(ax), t = dot(sP, ax) / (l * l);
+  return t > 0.0 && t < 1.0 - gap / l ? smoothstep(r * t * 0.9, r * t * 1.05, length(sP - ax * t)) : 1.0;
+}
+` + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
       // camera part (r3): a clean cut at ≈1.3 × near with a thin dithered rim, not a wide screen-door band (under the
       // DoF a wide per-pixel dissolve turned near soldiers and banners into a coarse mosaic)
       float cfade = smoothstep(${(near * 1.27).toFixed(2)}, ${(near * 1.33).toFixed(2)}, distance(vCrowdWP, cameraPosition));
+      vec3 sP = vCrowdWP - cameraPosition;
+      cfade = min(cfade, crowdSight(sP, uSight, ${sightR.toFixed(2)}, ${sightGap.toFixed(2)}));
+      if (uSight2.w > 0.0) cfade = min(cfade, crowdSight(sP, uSight2.xyz, uSight2.w, 0.9));
       if (cfade < 1.0 && cfade < fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715))))) discard;`);
   };
 }
 
 export function createCrowdView(scene, game) {
-  const crowd = game.crowd, N = crowd.N;
+  const crowd = game.crowd, N = crowd.T, NW = crowd.N;          // N: every soldier (Wei army + Shu allies ≥ NW)
   const geos = buildCrowdGeometries();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.06, flatShading: true });
   nearFade(mat, 2.4, (sh) => {
@@ -256,7 +302,8 @@ export function createCrowdView(scene, game) {
     sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       #ifdef USE_COLOR
         float cRed = smoothstep(0.3, 0.5, vColor.r - max(vColor.g, vColor.b));
-        totalEmissiveRadiance += vColor.rgb * (0.08 + cRed * 0.32);
+        float cGreen = smoothstep(0.15, 0.35, vColor.g - max(vColor.r, vColor.b));   // Shu headbands / coats
+        totalEmissiveRadiance += vColor.rgb * (0.08 + cRed * 0.32 + cGreen * 0.1);
       #endif`);
   });
   patchHitMaterial(mat);                                     // hit-impact: victim flash/tint (src/combat/hitfx.js)
@@ -276,34 +323,56 @@ export function createCrowdView(scene, game) {
     if (shadow && shadow !== true) {
       const p = new THREE.InstancedMesh(shadow, proxyMat, n);
       p.instanceMatrix = m.instanceMatrix; p.castShadow = true; p.frustumCulled = false; p.count = 0;
+      // perf r5: shadow pass only — the main pass calls onBeforeRender (the shadow pass doesn't), so the invisible proxy
+      // draws 0 indices there (it used to cost as many main-pass tris as its shadow: ≈ 110k at C6)
+      p.onBeforeRender = () => { shadow.drawRange.count = 0; };
+      p.onAfterRender = () => { shadow.drawRange.count = Infinity; };
       scene.add(p); proxies.push([p, m]);
     }
     return m;
   };
-  const G = crowd.grunts, O = CROWD.officers;
+  const G = crowd.grunts, O = CROWD.officers, A = CROWD.allySlots, GA = G + A;
   const M = {
     hips: mk(geos.hips, G, mat, false), torso: mk(geos.torso, G, mat, geos.shadow_trunk), head: mk(geos.head, G, mat, false),
     crest: mk(geos.crest, G), arm: mk(geos.arm, G * 2, mat, geos.shadow_arm), thigh: mk(geos.thigh, G * 2, mat, geos.shadow_thigh),
     shin: mk(geos.shin, G * 2, mat, geos.shadow_shin),
-    spear: mk(geos.spear, G), sword: mk(geos.sword, G), shield: mk(geos.shield, G), glaive: mk(geos.glaive, G + O), pole: mk(geos.pole, G),
+    spear: mk(geos.spear, GA), sword: mk(geos.sword, GA), shield: mk(geos.shield, GA), mid_shield: mk(geos.mid_shield, GA), far_shield: mk(geos.far_shield, GA), glaive: mk(geos.glaive, G + O), pole: mk(geos.pole, GA),
     o_hips: mk(geos.o_hips, O), o_torso: mk(geos.o_torso, O), o_head: mk(geos.o_head, O),
     o_arm: mk(geos.o_arm, O * 2), o_thigh: mk(geos.o_thigh, O * 2), o_shin: mk(geos.o_shin, O * 2),
   };
   const PG = { hips: M.hips, torso: M.torso, head: M.head, arm: M.arm, thigh: M.thigh, shin: M.shin };
   const PO = { hips: M.o_hips, torso: M.o_torso, head: M.o_head, arm: M.o_arm, thigh: M.o_thigh, shin: M.o_shin };
+  // LOD by distance from the camera, same pose and matrices: full voxel set inside MID_LOD m, the half-resolution set
+  // (≈ 1.2k tris instead of ≈ 4.9k) to FAR_LOD, then the low-poly box set (one trunk + limbs)
+  const MID_LOD = 8, FAR_LOD = 28;
+  const PM = { hips: mk(geos.mid_hips, G, mat, false), torso: mk(geos.mid_torso, G, mat, geos.shadow_trunk), head: mk(geos.mid_head, G, mat, false),
+    arm: mk(geos.mid_arm, G * 2, mat, geos.shadow_arm), thigh: mk(geos.mid_thigh, G * 2, mat, geos.shadow_thigh), shin: mk(geos.mid_shin, G * 2, mat, geos.shadow_shin) };
+  const PF = { torso: mk(geos.far_trunk, G), arm: mk(geos.far_arm, G * 2), thigh: mk(geos.far_thigh, G * 2), shin: mk(geos.far_shin, G * 2) };
+  // Shu allies: near / mid / far sets
+  const PS = { hips: mk(geos.s_hips, A, mat, false), torso: mk(geos.s_torso, A, mat, geos.shadow_trunk), head: mk(geos.s_head, A, mat, false),
+    arm: mk(geos.s_arm, A * 2, mat, geos.shadow_arm), thigh: mk(geos.s_thigh, A * 2, mat, geos.shadow_thigh), shin: mk(geos.s_shin, A * 2, mat, geos.shadow_shin) };
+  const PSM = { hips: mk(geos.smid_hips, A, mat, false), torso: mk(geos.smid_torso, A, mat, geos.shadow_trunk), head: mk(geos.smid_head, A, mat, false),
+    arm: mk(geos.smid_arm, A * 2, mat, geos.shadow_arm), thigh: mk(geos.smid_thigh, A * 2, mat, geos.shadow_thigh), shin: mk(geos.smid_shin, A * 2, mat, geos.shadow_shin) };
+  const PSF = { torso: mk(geos.sfar_trunk, A), arm: mk(geos.sfar_arm, A * 2), thigh: mk(geos.sfar_thigh, A * 2), shin: mk(geos.sfar_shin, A * 2) };
+  let farNow = false, midNow = false;
   const uTime = { value: 0 };
   const flagGeo = new THREE.PlaneGeometry(0.9, 1.5, 4, 6).rotateX(Math.PI / 2).translate(0.5, 0, 1.78);
   const flagMat = new THREE.MeshStandardMaterial({ map: flagTexture(), side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.9 });
-  // camera part (r3): flags dissolve only near the lens (was 7 m, which screen-doored every banner around the hero
-  // into a chain-mail pattern)
-  nearFade(flagMat, 3.2, (sh) => {
+  const flagWave = (sh) => {
     sh.uniforms.uTime = uTime;
     sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       float fph = instanceMatrix[3].x * 1.3 + instanceMatrix[3].z * 0.7;
       float fu = clamp((position.x - 0.05) / 0.9, 0.0, 1.0);
       transformed.y += (sin(uTime * 3.6 + position.x * 3.2 - position.z * 1.4 + fph) * 0.1 + sin(uTime * 6.1 + position.z * 2.3 + fph) * 0.03) * fu;`);
-  });
+  };
+  // camera part (r3): flags dissolve only near the lens (was 7 m, which screen-doored every banner around the hero
+  // into a chain-mail pattern)
+  nearFade(flagMat, 3.2, flagWave);
   M.flag = mk(flagGeo, G, flagMat, false);
+  const shuFlagMat = flagMat.clone();
+  shuFlagMat.map = flagTexture('蜀', '#2f7a36');
+  nearFade(shuFlagMat, 3.2, flagWave, 'shu');
+  M.shuFlag = mk(flagGeo, A, shuFlagMat, false);
   const markerMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(0.85, 0.8, 0.75), fog: false });
   nearFade(markerMat, 5);
   M.marker = mk(geos.marker, O, markerMat, false);
@@ -494,6 +563,7 @@ export function createCrowdView(scene, game) {
       if (s === ST.DEAD && t > CROWD.deadTime - 50) y -= (t - (CROWD.deadTime - 50)) / 50 * 0.5;
     }
     const shake = crowd.hs[i] > 0 ? Math.sin(crowd.hs[i] * 2.7) * 0.05 : 0;
+    y += ground(crowd.x[i], crowd.z[i]);                          // sim y is height above ground (world/map.js)
     _root.makeRotationFromEuler(_e.set(rx, crowd.yaw[i], 0)).setPosition(crowd.x[i] + shake, y, crowd.z[i]);
     _root.multiply(_s.makeScale(sc, sc, sc));
     // colour: per-soldier tint; the hit flash is an emissive glow (hit-impact, src/combat/hitfx.js)
@@ -501,12 +571,13 @@ export function createCrowdView(scene, game) {
     _ch.setRGB(f, f * 0.98, f * 0.95);
     hitGlow(crowd, i, _g);
     // telegraph: the last 14 sf of a blow that will really come (feints don't flare)
-    const hotStrike = s === ST.ATTACK && !crowd.feint[i] && t >= CROWD.windup - 14 && t < CROWD.windup;
+    const hotStrike = s === ST.ATTACK && !crowd.feint[i] && crowd.foe[i] < 0 && t >= CROWD.windup - 14 && t < CROWD.windup;
     if (cap) _c.setRGB(_ch.r * 1.45, _ch.g * 1.1, _ch.b * 0.7); else _c.copy(_ch);                  // captains: bronze armour
-    const P = officer ? PO : PG;
-    push(P.hips, mHips.copy(_root), _c);
+    const ally = i >= NW, far = farNow && !officer;
+    const P = officer ? PO : ally ? (far ? PSF : midNow ? PSM : PS) : far ? PF : midNow ? PM : PG;
+    mHips.copy(_root); if (!far) push(P.hips, mHips, _c);
     local(mTorso, mHips, 0, J.waist, 0, C[TO], C[TO + 1], C[TO + 2]); push(P.torso, mTorso, _c);
-    push(P.head, local(mOut, mTorso, 0, J.neck, 0, C[HE], C[HE + 1], C[HE + 2]), _ch);
+    local(mOut, mTorso, 0, J.neck, 0, C[HE], C[HE + 1], C[HE + 2]); if (!far) push(P.head, mOut, _ch);
     if (cap) push(M.crest, mOut, _ch);
     local(mArmR, mTorso, -J.shX, J.shY, 0, C[AR], C[AR + 1], C[AR + 2]); push(P.arm, mArmR, _c);
     local(mArmL, mTorso, J.shX, J.shY, 0, C[AL], C[AL + 1], C[AL + 2]); push(P.arm, mArmL, _c);
@@ -519,11 +590,11 @@ export function createCrowdView(scene, game) {
     local(mW, mArmR, 0, -J.hand, 0, C[WR], C[WR + 1], C[WR + 2]);
     const wm = g === 0 ? M.spear : g === 1 ? M.sword : g === 2 ? M.glaive : M.pole;
     push(wm, mW, _c);
-    if (g === 3) push(M.flag, mW, null);
-    if (g === 1) push(M.shield, local(mOut, mArmL, 0, -J.hand, 0, C[WL], C[WL + 1], C[WL + 2]), _c);
+    if (g === 3) push(ally ? M.shuFlag : M.flag, mW, null);
+    if (g === 1) push(far ? M.far_shield : midNow ? M.mid_shield : M.shield, local(mOut, mArmL, 0, -J.hand, 0, C[WL], C[WL + 1], C[WL + 2]), _c);
     // telegraph: pixel-star glint on the weapon tip through the wind-up (drawn over the crowd); a real blow flares it
     // into a big solid red pixel star (white core) for the last 14 sf
-    if (s === ST.ATTACK && t >= 3 && t < CROWD.windup && M.glint.count < 32) {
+    if (s === ST.ATTACK && t >= 3 && t < CROWD.windup && M.glint.count < 32 && crowd.foe[i] < 0) {
       const pulse = hotStrike ? 0.46 + 0.16 * Math.abs(Math.sin(t * 0.9)) : 0.2 + 0.12 * Math.abs(Math.sin(t * 0.33)) + (t < 10 ? (10 - t) * 0.025 : 0);
       _tmp.makeRotationFromEuler(_e.set(t * 0.07, t * 0.11, 0.6)).scale(_v.set(pulse, pulse, pulse));
       _tmp.setPosition(_v.set(0, 0, TIP[g]).applyMatrix4(mW));
@@ -537,13 +608,23 @@ export function createCrowdView(scene, game) {
     }
   }
 
+  // camera cull (scene lane): soldiers outside last frame's view frustum (+ 2.5 m slack) aren't packed at all, so they
+  // cost neither the main nor the shadow pass; they snap to their pose on re-entry (seen = 0)
+  const frustum = new THREE.Frustum(), vp = new THREE.Matrix4(), sph = new THREE.Sphere(new THREE.Vector3(), 2.5);
   return {
-    update(dt) {
+    /** camera (optional): cull to its frustum. */
+    update(dt, camera) {
       time += dt; uTime.value = time; frameNo++;
+      if (camera) frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+      const h = game.hero;
+      uSight.value.set(h.x, ground(h.x, h.z) + h.y + 0.95, h.z);
       for (const m of meshes) m.count = 0;
       for (let i = 0; i < N; i++) {
         const s = crowd.st[i];
         if (s === ST.OFF) { seen[i] = 0; continue; }
+        if (camera && !frustum.intersectsSphere(sph.set(sph.center.set(crowd.x[i], crowd.y[i] + 1, crowd.z[i]), 2.5))) { seen[i] = 0; continue; }
+        const d2 = camera ? (crowd.x[i] - camera.position.x) ** 2 + (crowd.z[i] - camera.position.z) ** 2 : 0;
+        farNow = d2 > FAR_LOD * FAR_LOD; midNow = d2 > MID_LOD * MID_LOD;
         // standing soldiers (idle ranks) are recomputed every 4th frame and replayed in between
         if (s === ST.IDLE && seen[i] && crowd.type[i] === 0 && !crowd.flash[i] && ((frameNo + i) & 3)) replay(i);
         else write(i, s, (s === ST.IDLE ? 4 : 1) * dt);

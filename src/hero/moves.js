@@ -49,6 +49,8 @@
 // every: ONCE → the window resolves in a single tick on its first frame (each enemy once, one hitstop); the rest of the
 // window only keeps the spear trail open. Without it every frame that catches a newcomer re-triggers the full hitstop,
 // which stretched finishers by up to 4× their hitstop and knocked the string off the beat.
+import { prepMoves } from './moveset.js';
+
 const ONCE = 99;
 export const MOVES = {
   // N1 overhead diagonal chop: chamber 5, hold 1, strike 4, follow-through held → next hit on the beat
@@ -141,37 +143,4 @@ export const MOVES = {
 export const NEUTRAL = { attack: 'n1', charge: 'c1', dash: 'dash', air: 'jatk', airCharge: 'jc' };
 export const AIR_CHAIN_MAX = 10;  // swipes per jump (the rapid DW8 jump attack shows ~10 over 2.9 s; locomotion-dodge r2: 8 → 10)
 
-for (const [id, m] of Object.entries(MOVES)) {
-  m.id = id; m.lunge = m.lunge || [];
-  m.tell = m.hits[0].f[0];                                  // start → first active frame (charge tell length)
-  if (m.anim) {                                             // fill carried-over clip ids and cut-segment indices
-    let clip = id, seg = 0;
-    m.anim.forEach((k, i) => {
-      if (i && k[0] === m.anim[i - 1][0]) seg++;
-      else if (i && k[2] && k[2] !== clip) seg++;
-      clip = k[2] = k[2] || clip; k[3] = seg;
-    });
-  }
-}
-
-/** Forward displacement (m) the lunge has applied by move frame f: each segment eased out (or linear), clamped to it. */
-export function lungeAt(m, f) {
-  let d = 0;
-  for (const [a, b, dist, e] of m.lunge) {
-    const u = Math.min(1, Math.max(0, (f - a) / (b - a)));
-    d += dist * (e === 'lin' ? u : 1 - (1 - u) * (1 - u));
-  }
-  return d;
-}
-
-/** Clip sample for move frame t → [clipId, normalised clip time, segment]. Pure, used by the hero's anim bookkeeping. */
-export function moveClip(m, t) {
-  const a = m.anim;
-  if (!a) return [m.id, t / m.frames, 0];
-  let i = 0;
-  while (i < a.length - 1 && a[i + 1][0] <= t) i++;
-  const k = a[i], n = a[i + 1];
-  if (!n || n[3] !== k[3] || t <= k[0]) return [k[2], k[1], k[3]];
-  return [k[2], k[1] + (n[1] - k[1]) * (t - k[0]) / (n[0] - k[0]), k[3]];
-}
-
+prepMoves(MOVES);

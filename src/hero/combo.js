@@ -1,5 +1,6 @@
 // Combo state machine: input buffer, move start/advance, cancel windows, lunge, steering, air moves.
-import { MOVES, NEUTRAL, AIR_CHAIN_MAX, lungeAt } from './moves.js';
+// Character-agnostic: the move table, neutral entries and air-chain cap come from the hero's kit (h.kit).
+import { lungeAt } from './moveset.js';
 import { stickDir, turnToward, startDodge, startJump, setState, LOCO } from './locomotion.js';
 import { ST, CROWD } from '../crowd/crowd.js';
 import { emit } from '../core/events.js';
@@ -14,7 +15,7 @@ const ABSORB = 8;         // hitstop frames a light move's beat absorbs (two win
 export function bufferInput(h, inp) {
   // A charge finisher (C1–C6) is a commitment: □/△ pressed before its last BUF frames to the cancel are dropped (DW8),
   // so X X Y typed into the hold doesn't come out as a stale C1 after it; presses in the recovery start the next string.
-  const m = h.move && MOVES[h.move];
+  const m = h.move && h.kit.moves[h.move];
   if (m && h.move[0] === 'c' && h.moveT < m.cancel - BUF) return bufferOther(h, inp);
   if (inp.pressed.attack) { h.buf = 'attack'; h.bufT = 0; h.bufW = 0; }
   else if (inp.pressed.charge) { h.buf = 'charge'; h.bufT = 0; h.bufW = 0; }
@@ -47,7 +48,7 @@ const dodgeOk = (h, m) => h.moveT < m.tell || h.moveT >= m.dodgeCancel
 // beat), a jump pressed during a dodge comes out when the dodge may be cancelled, and a press made while staggered comes
 // out as soon as the hero recovers. Before that a press waits at most WAIT frames.
 function ageBuffer(h, game) {
-  const m = h.move && MOVES[h.move];
+  const m = h.move && h.kit.moves[h.move];
   if (h.state === 'hurt') return;
   const dodging = h.state === 'dodge';
   const atkOk = m ? beatOk(h, m, game) : !dodging || h.stateT >= LOCO.dodgeAttackCancel;
@@ -60,7 +61,7 @@ function ageBuffer(h, game) {
 }
 
 function startMove(h, id, inp, game) {
-  const m = MOVES[id];
+  const m = h.kit.moves[id];
   h.move = id; h.moveT = 0; h.moveSeq++; h.moveF0 = game.frame;
   h.moveAir = !h.grounded;
   setState(h, 'attack');
@@ -137,7 +138,7 @@ function advance(h, m) {
 export function stepCombo(h, inp, game) {
   ageBuffer(h, game);
   if (h.grounded && !h.move) h.airN = 0;
-  const m = h.move && MOVES[h.move];
+  const m = h.move && h.kit.moves[h.move];
   if (m) {
     // steer early frames
     if (h.moveT < m.steer) {
@@ -149,7 +150,7 @@ export function stepCombo(h, inp, game) {
     h.x += Math.sin(h.yaw) * d; h.z += Math.cos(h.yaw) * d;
     advance(h, m);
     // cancels (air strings chain only while airborne and up to AIR_CHAIN_MAX swipes)
-    if (h.buf && bufOk(h, m, game) && (m.air ? !h.grounded && h.airN < AIR_CHAIN_MAX : h.grounded)) {
+    if (h.buf && bufOk(h, m, game) && (m.air ? !h.grounded && h.airN < h.kit.airChainMax : h.grounded)) {
       const next = h.buf === 'attack' ? m.next : m.charge;
       if (next) { startMove(h, next, inp, game); return true; }
     }
@@ -167,7 +168,7 @@ export function stepCombo(h, inp, game) {
 
 /** Free state: start attacks, dodges and jumps when allowed. */
 function neutral(h, inp, game) {
-  const s = h.state;
+  const s = h.state, NEUTRAL = h.kit.neutral;
   if (s === 'hurt') return false;
   const dodgeOk = h.grounded && (s !== 'dodge' || h.stateT >= LOCO.dodgeRedodge);
   if (h.dodgeBuf && dodgeOk && s !== 'land') { h.dodgeBuf = 0; startDodge(h, inp, game.cam.yaw); return false; }
@@ -178,7 +179,7 @@ function neutral(h, inp, game) {
       // per-jump cap — was once per jump, so only a mash inside the cancel window kept the hero up. A press in the last
       // metre of a fall stays buffered and comes out as the ground attack on touchdown (dash when running) instead of
       // a knee-high hover.
-      if (h.airN < AIR_CHAIN_MAX && (h.vy >= 0 || h.y > 1)) { startMove(h, h.buf === 'attack' ? NEUTRAL.air : NEUTRAL.airCharge, inp, game); return true; }
+      if (h.airN < h.kit.airChainMax && (h.vy >= 0 || h.y > 1)) { startMove(h, h.buf === 'attack' ? NEUTRAL.air : NEUTRAL.airCharge, inp, game); return true; }
     } else {
       // dash attack from a run, or out of the landing of a running jump with the stick still held (runT survives the jump)
       const dash = h.runT >= LOCO.dashAfter && (s === 'run' || (s === 'land' && stickDir(inp, game.cam.yaw)[2] > 0));

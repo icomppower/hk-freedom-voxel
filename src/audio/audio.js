@@ -16,7 +16,6 @@
 // Positional: pan + distance attenuation from the hero, relative to the sim camera yaw. Read-only on the sim; audio
 // randomness is Math.random, never the sim RNG. Starts on the first user gesture.
 import { on } from '../core/events.js';
-import { MOVES } from '../hero/moves.js';
 import { buildBank, makeIR, noiseBuf } from './bank.js';
 
 const rnd = (a, b) => a + (b - a) * Math.random();
@@ -180,7 +179,7 @@ export function createAudio(game) {
     lastT = now;
     if (!ok()) return;
     musouFrame();
-    const h = game.hero, m = h.state === 'attack' && h.move && MOVES[h.move];
+    const h = game.hero, m = h.state === 'attack' && h.move && h.kit.moves[h.move];
     if (m) {
       if (h.moveSeq !== seq) { seq = h.moveSeq; seenT = -1; }   // missed attack:start (should not happen)
       for (let t = seenT + 1; t <= h.moveT; t++) cue(m, t);
@@ -201,7 +200,7 @@ export function createAudio(game) {
   }
   requestAnimationFrame(frame);
   on('attack:start', (e) => {                 // fires inside the sim step: frame-0 cues play without the rAF poll's lag
-    const h = game.hero, m = MOVES[e.move];
+    const h = game.hero, m = h.kit.moves[e.move];
     seq = h.moveSeq; seenT = 0;
     if (ok() && m) cue(m, 0);
   });
@@ -226,7 +225,7 @@ export function createAudio(game) {
     }
     // multi-tick window (C2-C4, C6 flurries): where this tick sits in its train. The next tick comes every + hitstop
     // frames later; the last one of a train lands hardest (a crescendo, so the spin / flurry ends on its blow)
-    const h = game.hero, mv = e.move === h.move && MOVES[h.move];
+    const h = game.hero, mv = e.move === h.move && h.kit.moves[h.move];
     const w = mv && mv.hits.find((q) => q.every && q.every < 99 && h.moveT >= q.f[0] && h.moveT <= q.f[1]);
     const more = !!w && h.moveT + w.every <= w.f[1], fin = !!w && !more && h.moveT > w.f[0];
     // a spin train opens light (its big whoosh + kiai carry the first tick) and builds to the last blow
@@ -257,6 +256,12 @@ export function createAudio(game) {
     if (e.officer) { play(pick(B.officerCry), { gain: 0.6, pan, delay: 0.04, send: 0.25, bus: vox, prio: 1 }); return; }
     if (Math.random() > 0.55 || !gate('cry', 130)) return;
     play(pick(B.cry), { gain: rnd(0.3, 0.42) * att, rate: rnd(0.9, 1.1), pan, delay: rnd(0.03, 0.09), send: 0.22, bus: vox });
+  });
+  on('clash', (e) => {                        // duel blows off the hero's fight: a distant clank, a cry on a KO
+    if (!ok() || !gate('clash', 220)) return;
+    const { pan, att } = place(e.x, e.z);
+    play(pick(B.clank), { gain: 0.2 * att, rate: rnd(0.85, 1.15), pan, send: 0.25 });
+    if (e.killed && gate('cry', 130)) play(pick(B.cry), { gain: 0.22 * att, rate: rnd(0.9, 1.1), pan, delay: 0.05, send: 0.3, bus: vox });
   });
   on('enemy:land', (e) => {
     if (!ok() || !gate('fall', e.bounce ? 110 : 80)) return;
@@ -383,4 +388,42 @@ export function createAudio(game) {
     play(B.roar, { gain: 0.4, pan: pan * 0.5, delay: 0.6, bus: vox, send: 0.4 });
   });
   on('scenario', () => { if (ctx) { stopDrone(); undip(); } intensity = 0; seq = -1; mu = null; muFrame = -1; });
+
+  // ---- bow (Huang Zhong; events from src/combat/projectiles.js): every shot = a procedural bowstring twang (plucked
+  // saw with a fast pitch drop through a closing lowpass + a string-slap click) under a thin, bright thrust whoosh (the
+  // arrow leaving); heavy shots twang lower with a sub thump, fire arrows add a crackle, the Musou giant a heavy whoosh.
+  // Bursts reuse the heavy impact (+ blow-away tail on big ones); a headshot rings a bright clank.
+  function twang(heavy, pan) {
+    const t = ctx.currentTime, f0 = heavy ? rnd(92, 104) : rnd(128, 150);
+    const o = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain(), p = ctx.createStereoPanner();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(f0 * 1.5, t); o.frequency.exponentialRampToValueAtTime(f0, t + 0.02);
+    lp.type = 'lowpass'; lp.Q.value = 6; lp.frequency.setValueAtTime(4200, t); lp.frequency.exponentialRampToValueAtTime(420, t + 0.16);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(heavy ? 0.5 : 0.34, t + 0.003); g.gain.exponentialRampToValueAtTime(0.001, t + (heavy ? 0.3 : 0.2));
+    p.pan.value = pan;
+    o.connect(lp).connect(g).connect(p).connect(sfx);
+    const r = ctx.createGain(); r.gain.value = 0.12; p.connect(r).connect(revIn);
+    o.start(t); o.stop(t + 0.32);
+    play(pick(B.clank), { gain: heavy ? 0.22 : 0.14, rate: rnd(1.6, 1.9), pan, send: 0.04 });
+  }
+  on('arrow:fire', (e) => {
+    if (!ok() || !gate('bow', e.move === 'musou' && !e.big ? 45 : 30)) return;
+    const { pan } = place(e.x, e.z), heavy = e.heavy || e.big > 0;
+    twang(heavy, pan * 0.5);
+    play(pick(e.big > 1 ? B.heavy : B.thrust), { gain: e.big > 1 ? 0.9 : heavy ? 0.5 : 0.3, rate: e.big > 1 ? rnd(0.7, 0.8) : rnd(1.3, 1.55), pan: pan * 0.5, send: 0.1, bus: underBus, prio: 1 });
+    if (e.fire) play(pick(B.crunch), { gain: 0.3, rate: rnd(1.4, 1.8), pan: pan * 0.5, delay: 0.02, send: 0.1 });
+    if (e.heavy && e.move !== 'musou' && B.kiai && gate('bowKiai', 400)) play(pick(B.kiai[Math.random() < 0.5 ? 'haa' : 'hyah']), { gain: 0.7, rate: rnd(0.84, 0.9), bus: vox, send: 0.2, prio: 1 });
+  });
+  on('arrow:burst', (e) => {
+    if (!ok() || !gate('burst', 60)) return;
+    const { pan, att } = place(e.x, e.z), big = e.r > 3;
+    play(pick(B.hitHeavy), { gain: (big ? 1.0 : 0.45) * (0.5 + 0.5 * att), rate: big ? rnd(0.7, 0.8) : rnd(1.1, 1.3), pan: pan * 0.7, send: big ? 0.35 : 0.12, prio: big ? 1 : 0 });
+    if (big) play(pick(B.blow), { gain: 0.6, delay: 0.05, pan: pan * 0.6, send: 0.3 });
+    if (e.fire) play(pick(B.mass), { gain: big ? 0.5 : 0.2, rate: rnd(1.2, 1.5), pan: pan * 0.7, delay: 0.03, send: 0.15 });
+  });
+  on('arrow:headshot', (e) => {
+    if (!ok()) return;
+    const { pan } = place(e.x, e.z);
+    play(pick(B.clank), { gain: 0.8, rate: rnd(1.25, 1.4), pan, send: 0.3, prio: 1 });
+    if (B.ready) play(B.ready, { gain: 0.35, rate: 1.5, pan, send: 0.3 });
+  });
 }

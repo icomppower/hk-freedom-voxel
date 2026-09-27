@@ -12,9 +12,12 @@ import * as THREE from 'three';
 import { on } from '../core/events.js';
 import { vrng, hash01 } from '../core/rng.js';
 import { MUSOU, dragonAt, dragonArc } from './musou.js';
+import { ground } from '../world/map.js';
+import { dragonSight } from '../crowd/view.js';
 
 const _m = new THREE.Matrix4(), _l = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _v = new THREE.Vector3(), _c = new THREE.Color();
+const _cam = new THREE.Vector3();                           // camera in the view's sim space (y above the ground under him)
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0), UP = new THREE.Vector3(0, 1, 0), FWD = new THREE.Vector3(0, 0, 1);
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const ramp = (t, a, b) => clamp01((t - a) / (b - a));
@@ -45,8 +48,9 @@ const NS = 46, SP = 0.3, NECK = 1.1, GIRTH = 1.4;        // body segments, spaci
 const COL = {
   // azure 青龍: saturated enough that ACES keeps the hue; only fins/belly/whiskers/eyes run hot enough to bloom
   // (r2: fins/belly/white a notch lower — the post's cool-biased bloom turned the finisher coil into a white column)
-  body: [0.03, 0.2, 0.75], scale: [0.06, 0.38, 1.05], belly: [0.4, 0.72, 0.92], fin: [0.42, 0.95, 1.3], eye: [3.0, 2.2, 0.5],
-  horn: [1.4, 1.15, 0.6], white: [1.0, 1.12, 1.2], whisker: [0.6, 1.15, 1.55],
+  body: [0.02, 0.12, 0.52], scale: [0.04, 0.27, 0.82],   // (r3 acc: deeper azure — bright fins / belly / eyes + ink outline carry the form)
+  belly: [0.4, 0.72, 0.92], fin: [0.42, 0.95, 1.3], eye: [3.0, 2.2, 0.5],
+  horn: [1.4, 1.15, 0.6], white: [1.0, 1.12, 1.2], whisker: [0.6, 1.15, 1.55], mouth: [0.32, 0.01, 0.03],
 };
 function dragonParts() {
   const parts = [];            // { seg (-1 head), off, size, dir?, col, dyn? }
@@ -64,17 +68,19 @@ function dragonParts() {
   for (const [x, dy] of [[0, 0.3], [0.12, 0.12], [-0.12, 0.12]]) add(NS - 1, [x, dy, -0.25], [0.05, 0.42, 0.34], COL.fin, [x * 3, 1, -1.2]);
   const H = -1;
   add(H, [0, 0.05, 0], [0.64, 0.52, 0.64], COL.scale);
-  add(H, [0, 0.31, 0.12], [0.68, 0.12, 0.32], COL.fin);
+  add(H, [0, 0.31, 0.12], [0.68, 0.12, 0.32], COL.body);        // brow (fx r5: dark, was fin — a bright cyan slab that bloomed over the face)
   add(H, [0, -0.02, 0.56], [0.46, 0.3, 0.62], COL.body);
   add(H, [0, 0.09, 0.88], [0.3, 0.14, 0.12], COL.white);
   add(H, [0, -0.2, 0.62], [0.4, 0.06, 0.46], COL.white);
-  add(H, [0, -0.36, 0.44], [0.4, 0.12, 0.64], COL.body, null, 'jaw');
+  add(H, [0, -0.36, 0.44], [0.4, 0.12, 0.64], COL.belly, null, 'jaw');   // (fx r5: pale jaw, was body blue — the open jaws read as one blue block)
   add(H, [0, -0.28, 0.48], [0.34, 0.05, 0.42], COL.white, null, 'jaw');
+  add(H, [0, -0.26, 0.42], [0.36, 0.14, 0.5], COL.mouth);        // fx r5: dark-red maw between the jaws (the open mouth read as a gap)
   for (const sx of [1, -1]) {
-    add(H, [sx * 0.27, 0.19, 0.22], [0.09, 0.11, 0.15], COL.eye);
+    add(H, [sx * 0.31, 0.19, 0.22], [0.12, 0.15, 0.2], COL.eye);   // (fx r5: x 0.27 → 0.31, bigger — the eyes sat buried inside the skull box)
+    add(H, [sx * 0.375, 0.19, 0.25], [0.02, 0.13, 0.06], COL.mouth.map((v) => v * 0.1));   // fx r5: slit pupil
     add(H, [sx * 0.2, 0.52, -0.46], [0.09, 0.09, 0.8], COL.horn, [sx * 0.25, 0.6, -1]);
     add(H, [sx * 0.27, 0.72, -0.62], [0.07, 0.07, 0.3], COL.horn, [sx * 0.2, 1, -0.1]);
-    add(H, [sx * 0.62, -0.08, 0.58], [0.035, 0.035, 1.1], COL.whisker, [sx * 0.9, -0.1, -0.5], 'whisker');
+    add(H, [sx * 0.4, -0.5, 0.82], [0.035, 0.035, 0.95], COL.whisker, [sx * 0.35, -1, 0.15], 'whisker');   // (fx r5: hang off the snout, framing the maw — swept back they cut across the ¾ face)
   }
   for (let j = 0; j < 5; j++) { const x = (j - 2) * 0.14; add(H, [x, 0.12 + (2 - Math.abs(j - 2)) * 0.06, -0.52], [0.07, 0.2, 0.6], COL.fin, [x * 2, 0.35, -1]); }   // mane
   add(H, [0, -0.52, 0.2], [0.2, 0.05, 0.42], COL.white, [0, -0.5, -1]);
@@ -82,8 +88,10 @@ function dragonParts() {
 }
 const HEAD_SCALE = 2.3;
 
-export function createMusouView(scene, game, camera) {
+export function createMusouView(parent, game, camera) {
   const mu = game.musou, hero = game.hero;
+  const scene = new THREE.Group();                           // everything 3D lives here, so dispose() removes it all
+  parent.add(scene);
   const addMat = () => new THREE.MeshBasicMaterial({ color: 0xffffff, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false });
 
   // ---- grade quads
@@ -142,6 +150,33 @@ export function createMusouView(scene, game, camera) {
   const dragon = instanced(scene, shadedBox(), new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }), parts.length);
   const local = parts.map((p) => new THREE.Matrix4().compose(_p.set(...p.off), _q.setFromUnitVectors(FWD, p.dir ? _v.set(...p.dir).normalize() : FWD), _s.set(...p.size)));
   parts.forEach((p, i) => dragon.setColorAt(i, _c.setRGB(...p.col)));
+  // glow shell: every dragon voxel again, 1.3× larger, additive rim light (view-facing faces faint, grazing faces hot), so
+  // the azure body carries a living halo and reads as a spirit of light against the crowd instead of flat blue boxes
+  const shell = instanced(scene, new THREE.BoxGeometry(1, 1, 1), new THREE.ShaderMaterial({
+    uniforms: { uCol: { value: new THREE.Color(0.2, 0.75, 1.2) }, uK: { value: 1 } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    vertexShader: `varying float vRim, vNear;
+      void main() {
+        vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        vec3 n = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal);
+        vRim = 1.0 - abs(dot(n, normalize(cameraPosition - wp.xyz)));
+        vec4 mv = viewMatrix * wp; vNear = smoothstep(2.5, 6.0, -mv.z);   // coils at the finisher lens stay plain voxels
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `uniform vec3 uCol; uniform float uK; varying float vRim, vNear;
+      void main() { gl_FragColor = vec4(uCol * (0.04 + 0.7 * vRim * vRim * vRim) * uK * vNear, 1.0); }` }), parts.length);
+  const SHELL = new THREE.Matrix4().makeScale(1.14, 1.14, 1.08);   // (r3 acc: inside the ink outline, was 1.3)
+  // fx r3 acc: an ink outline (the voxels again, 1.24× larger — outside the glow shell, back faces only, near-black navy) so at contact the head
+  // (jaw, eyes, horns) and the scaled body read as a solid silhouette against the launched fan and the sky, not as cyan
+  // translucent blobs inside their own glow
+  const ink = instanced(scene, new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0x03081a, side: THREE.BackSide, fog: false }), parts.length);
+  const INK = new THREE.Matrix4().makeScale(1.24, 1.24, 1.12);
+  // fx r5: drawn after the contact rays quad (transparent list, higher renderOrder), so the rays erupt behind the dragon
+  // instead of washing its face pale teal (the quad sits 3.5 m past the contact point, the head rears 5–8 m out)
+  for (const [m, o] of [[ink, 2], [dragon, 3], [shell, 4]]) { m.renderOrder = 1e6 + o; m.material.transparent = true; }
+  // finisher lightning: jagged bolts striking down onto the ring wave (stretched light voxels, re-rolled every 3 frames)
+  const NB = 5, BSEG = 9;
+  const bolts = instanced(scene, new THREE.BoxGeometry(1, 1, 1), addMat(), NB * BSEG);
   const bases = Array.from({ length: NS + 1 }, () => new THREE.Matrix4());
   const vis = new Uint8Array(NS + 1), born = new Uint8Array(NS + 1);
   const P3 = [0, 0, 0], Q3 = [0, 0, 0], W3 = [0, 0, 0], V3 = [0, 0, 0];
@@ -176,13 +211,16 @@ export function createMusouView(scene, game, camera) {
   let tv = -1, time = 0, startX = 0, startZ = 0;            // tv: musou frame (continues past the end for fades)
   let contactF = -99, burstF = -99;                          // game frames of the payoff events (flashes ignore hitstop)
   on('musou:start', (e) => { tv = 0; startX = e.x; startZ = e.z; });
-  on('musou:hit', (e) => { if (e.stage === 'contact') { contactF = game.frame; burst(e.x, e.y, e.z, 45, 11, 7, 0.12, 0.5); } });
-  on('musou:burst', (e) => { burstF = game.frame; burst(e.x, 0.6, e.z, 30, 18, 9, 0.12, 0.35); });
-  on('ko', (e) => { if (mu.active) for (let i = 0; i < 2; i++) shard(e.x, e.y, e.z, e.dx * 5 + vrng.range(-2, 2), vrng.range(2, 7), e.dz * 5 + vrng.range(-2, 2), vrng.range(0.3, 0.55), vrng.range(0.08, 0.14), 0.4, 1.0, 1.5); });
+  // fx r1: fewer, dimmer light shards at the payoffs (45 + 30 HDR shards bloomed into a cyan cloud over the launch fan)
+  on('musou:hit', (e) => { if (e.stage === 'contact') { contactF = game.frame; burst(e.x, e.y, e.z, 26, 11, 7, 0.11, 0.35); } });
+  on('musou:burst', (e) => { burstF = game.frame; burst(e.x, 0.6, e.z, 18, 18, 9, 0.11, 0.26); });
+  // fx r4: one sub-bloom shard per KO (two HDR ones per KO bloomed + DOF'd into the big cyan balls over the contact fan)
+  on('ko', (e) => { if (mu.active) shard(e.x, e.y, e.z, e.dx * 5 + vrng.range(-2, 2), vrng.range(2, 7), e.dz * 5 + vrng.range(-2, 2), vrng.range(0.3, 0.55), vrng.range(0.05, 0.09), 0.3, 0.75, 1.05); });
   on('scenario', () => { tv = -1; sh.life.fill(0); for (let i = 0; i < NSH; i++) sh.m.setMatrixAt(i, ZERO); sh.m.instanceMatrix.needsUpdate = true; });
 
   function hideAll() {
-    add.visible = fx.visible = dragon.visible = false;
+    add.visible = fx.visible = dragon.visible = shell.visible = ink.visible = bolts.visible = false;
+    glow.intensity = 0; dragonSight.w = 0;
     for (const el of [cut, dimEl, washEl]) show(el, 0);
   }
 
@@ -197,7 +235,8 @@ export function createMusouView(scene, game, camera) {
       sh.v[o + 1] -= 6 * dt; sh.v[o] *= dr; sh.v[o + 2] *= dr;
       sh.x[o] += sh.v[o] * dt; sh.x[o + 1] = Math.max(0.05, sh.x[o + 1] + sh.v[o + 1] * dt); sh.x[o + 2] += sh.v[o + 2] * dt;
       sh.rot[i] += dt * 9;
-      const w = sh.size[i] * Math.min(1, sh.life[i] / sh.max[i] * 2.5);
+      const cd = Math.hypot(sh.x[o] - camera.position.x, sh.x[o + 1] - camera.position.y, sh.x[o + 2] - camera.position.z);
+      const w = sh.size[i] * Math.min(1, sh.life[i] / sh.max[i] * 2.5) * Math.min(1, Math.max(0, (cd - 4) / 4));   // (r3 acc: none at the lens — DoF made them cyan blobs; fx r4: 4–8 m fade)
       _q.setFromAxisAngle(_v.set(0.5, 1, 0.3).normalize(), sh.rot[i]);
       sh.m.setMatrixAt(i, _m.compose(_p.set(sh.x[o], sh.x[o + 1], sh.x[o + 2]), _q, _s.set(w, w, w)));
     }
@@ -222,21 +261,37 @@ export function createMusouView(scene, game, camera) {
 
   function updateDragon(t, dt) {
     const s = (t - MUSOU.contact) / 60;
-    if (s < 0 || s > 1.2) { dragon.visible = false; return; }
-    dragon.visible = true;
+    if (s < 0 || s > 1.2) { dragon.visible = shell.visible = ink.visible = false; dragonSight.w = 0; return; }
+    dragon.visible = shell.visible = ink.visible = true;
     const A = dragonArc(s);
     const dissolve = ramp(s, 1.0, (MUSOU.end - MUSOU.contact) / 60);           // tail → head, done at control return
     const alive = Math.round((NS + 1) * (1 - dissolve));                          // j = 0 head, 1..NS body
+    // fx r5: over the contact the head rears 1.2 m above the launched fan (neck tapering over 6 segments) and turns a ¾ face
+    // to the lens: it surged straight away from the flank camera at chest height, so the contact frames only showed the
+    // back of its skull, a blue cube behind the flying bodies. View only (the sim's hit gate reads the path height).
+    const rear = ramp(s, 0.02, 0.1) * (1 - ramp(s, 0.3, 0.45));
+    _cam.copy(camera.position).setY(camera.position.y - scene.position.y);
     for (let j = 0; j <= NS; j++) {
       const a = j ? A - NECK - (j - 1) * SP : A;
       born[j] = a >= 0; vis[j] = born[j] && j < alive;
       if (!born[j]) continue;
       frameAt(a, j ? Math.sin(j * 0.45 - time * 9) * 0.35 : 0, bases[j]);
+      if (j < 6) bases[j].elements[13] += 1.2 * rear * (1 - j / 6);
+      if (!j && rear > 0) {
+        const e = bases[0].elements;
+        _p.set(e[12], e[13], e[14]); _y.subVectors(_cam, _p).normalize();                  // to the lens, swung 35° off it (¾ face)
+        _y.applyAxisAngle(UP, 0.6 * (Math.sign(_y.z * e[8] - _y.x * e[10]) || 1));
+        _z.set(e[8], e[9], e[10]).lerp(_y, rear).normalize();
+        _x.crossVectors(UP, _z).normalize(); _y.crossVectors(_z, _x);
+        bases[0].makeBasis(_x, _y, _z).setPosition(_p);
+      }
+      if (!j) dragonSight.set(bases[0].elements[12], bases[0].elements[13] + scene.position.y, bases[0].elements[14], 2.1 * rear);   // crowd cuts the fan between lens and head
       // the head grows to full size as it surges off the spear tip (full size right at the chase lens was a white blob)
-      if (!j) { const k = HEAD_SCALE * (0.5 + 0.5 * ramp(s, 0.04, 0.22)); bases[j].multiply(_l.makeScale(k, k, k)); }
+      // (fx r4: 0.7 → full by s 0.15 — at 0.5 the head was a blue speck through the contact frames)
+      if (!j) { const k = HEAD_SCALE * (0.7 + 0.3 * ramp(s, 0.02, 0.15)); bases[j].multiply(_l.makeScale(k, k, k)); }
     }
     // shards: trail off the body, burst where segments dissolve
-    const n = Math.round(dt * 60 * 7);
+    const n = Math.round(dt * 60 * (s < 0.4 ? 1.5 : 4));                        // (r3 acc: fewer at contact — the head must read)
     for (let i = 0; i < n; i++) {
       const j = vrng.int(0, NS);
       if (!vis[j]) continue;
@@ -249,16 +304,37 @@ export function createMusouView(scene, game, camera) {
       _p.setFromMatrixPosition(bases[j]);
       for (let i = 0; i < 2; i++) shard(_p.x, _p.y, _p.z, vrng.range(-4, 4), vrng.range(0, 5), vrng.range(-4, 4), vrng.range(0.3, 0.55), vrng.range(0.08, 0.16), 0.4, 1.1, 1.7);
     }
-    const jaw = 0.18 + 0.22 * Math.max(0, Math.sin(time * 7)), wave = Math.sin(time * 11);
+    // head wake + spiral streamers: bright shards stream off the head and wind round the body (DW8 dragon musou)
+    if (vis[0]) {
+      _p.setFromMatrixPosition(bases[0]);
+      // once the contact fill has faded the burst light rides the head: the crowd it surges through lights up teal
+      // (one light for both, so the lit materials keep their light count)
+      if (glow.intensity < 1) { glow.position.copy(_p); glow.intensity = 12 * (1 - dissolve) * ramp(s, 0.2, 0.3); }
+      const nh = Math.round(dt * 60 * (s < 0.4 ? 0 : 3));                        // (fx r4: no wake over the contact — the head reads first)
+      for (let i = 0; i < nh; i++) shard(_p.x + vrng.range(-0.4, 0.4), _p.y + vrng.range(-0.4, 0.4), _p.z + vrng.range(-0.4, 0.4),
+        vrng.range(-1.5, 1.5), vrng.range(-0.5, 2), vrng.range(-1.5, 1.5), vrng.range(0.2, 0.4), vrng.range(0.1, 0.2), 0.7, 1.6, 2.2);
+    }
+    const nsp = Math.round(dt * 60 * 4);
+    for (let i = 0; i < nsp; i++) {
+      const j = 1 + ((time * 40 + i * 7) | 0) % NS;
+      if (!vis[j]) continue;
+      const th = time * 14 + j * 0.8 + i * 3.1, rr = 0.9 * GIRTH;
+      _v.set(Math.cos(th) * rr, Math.sin(th) * rr, 0).applyMatrix4(bases[j]);
+      shard(_v.x, _v.y, _v.z, vrng.range(-0.3, 0.3), vrng.range(0, 0.6), vrng.range(-0.3, 0.3), vrng.range(0.25, 0.45), vrng.range(0.05, 0.09), 0.5, 1.4, 2.0);
+    }
+    shell.material.uniforms.uK.value = (0.14 + 0.26 * ramp(s, 0.35, 0.6)) * (1 - 0.7 * dissolve) * (0.85 + 0.15 * Math.sin(time * 17));   // (fx r1: 0.7× — a halo, not a fog; r3 acc: half while it surges through the fan)
+    const jaw = 0.18 + 0.22 * Math.max(0, Math.sin(time * 7)) + 0.3 * rear, wave = Math.sin(time * 11);
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i], j = p.seg + 1;
-      if (!vis[j]) { dragon.setMatrixAt(i, ZERO); continue; }
+      if (!vis[j]) { dragon.setMatrixAt(i, ZERO); shell.setMatrixAt(i, ZERO); ink.setMatrixAt(i, ZERO); continue; }
       let L = local[i];
       if (p.dyn === 'jaw') { _q.setFromAxisAngle(_x.set(1, 0, 0), jaw); L = _l.compose(_p.set(p.off[0], p.off[1] - jaw * 0.15, p.off[2]), _q, _s.set(...p.size)); }
       else if (p.dyn === 'whisker') { _q.setFromUnitVectors(FWD, _v.set(p.dir[0], p.dir[1] + wave * 0.4 * Math.sign(p.dir[0]), p.dir[2]).normalize()); L = _l.compose(_p.set(...p.off), _q, _s.set(...p.size)); }
       dragon.setMatrixAt(i, _m.multiplyMatrices(bases[j], L));
+      ink.setMatrixAt(i, _l.multiplyMatrices(_m, INK));
+      shell.setMatrixAt(i, _m.multiply(SHELL));
     }
-    dragon.instanceMatrix.needsUpdate = true;
+    dragon.instanceMatrix.needsUpdate = true; shell.instanceMatrix.needsUpdate = true; ink.instanceMatrix.needsUpdate = true;
   }
 
   function updateFx(t) {
@@ -269,7 +345,7 @@ export function createMusouView(scene, game, camera) {
     // max-size DOF disc; they switch off/on exactly on the hard cuts)
     const moteK = t >= M.closeup && t < M.chase ? 0 : ramp(t, 1, 5) * (1 - ramp(t, M.chase + 4, M.chase + 20));
     const streak = ramp(t, M.chase, M.chase + 6) * 7;
-    const cam = camera.position, dist = (x, y, z) => Math.hypot(x - cam.x, y - cam.y, z - cam.z);
+    const cam = _cam.copy(camera.position).setY(camera.position.y - scene.position.y), dist = (x, y, z) => Math.hypot(x - cam.x, y - cam.y, z - cam.z);
     const near = (x, y, z) => ramp(dist(x, y, z), 0.9, 2.2);                                       // no blocks in the lens
     const hy = hero.yaw, still = t < M.chase;
     for (let i = 0; i < NM; i++) {
@@ -335,6 +411,34 @@ export function createMusouView(scene, game, camera) {
     fx.visible = any;
     fx.instanceMatrix.needsUpdate = true;
     fx.instanceColor.needsUpdate = true;
+    // lightning bolts striking the wave front from the sky (the finisher's first ≈ 0.6 s)
+    const boltK = w0 >= 0 ? 1 - ramp(w0, 22, 40) : 0, fb = Math.floor(t / 3);
+    bolts.visible = boltK > 0;
+    if (bolts.visible) {
+      for (let b = 0; b < NB; b++) {
+        const on = hash01(b, fb, 37) < 0.75;
+        const a = hash01(b, fb, 31) * 6.283, gx = hero.x + Math.cos(a) * R, gz = hero.z + Math.sin(a) * R;
+        const tx = gx + (hash01(b, fb, 32) - 0.5) * 3, ty = 9 + 3 * hash01(b, fb, 33), tz = gz + (hash01(b, fb, 34) - 0.5) * 3;
+        const nk = ramp(Math.hypot(gx - cam.x, gz - cam.z), 3, 7);
+        let px = tx, py = ty, pz = tz;
+        for (let k = 1; k <= BSEG; k++) {
+          const f = k / BSEG, jit = k < BSEG ? 0.7 * Math.sin(f * Math.PI) : 0;
+          const qx = tx + (gx - tx) * f + (hash01(b, fb, 40 + k) - 0.5) * 2 * jit, qy = ty * (1 - f), qz = tz + (gz - tz) * f + (hash01(b, fb, 60 + k) - 0.5) * 2 * jit;
+          const i = b * BSEG + k - 1;
+          if (!on || nk <= 0) bolts.setMatrixAt(i, ZERO);
+          else {
+            _v.set(qx - px, qy - py, qz - pz); const len = _v.length();
+            _q.setFromUnitVectors(FWD, _v.multiplyScalar(1 / len));
+            const w = 0.07 * nk * (1.3 - 0.5 * f);
+            bolts.setMatrixAt(i, _m.compose(_p.set((px + qx) / 2, (py + qy) / 2, (pz + qz) / 2), _q, _s.set(w, w, len * 1.05)));
+            const e = boltK * (0.8 + 0.4 * hash01(b, fb, 38));
+            bolts.setColorAt(i, _c.setRGB(1.2 * e, 2.0 * e, 2.6 * e));
+          }
+          px = qx; py = qy; pz = qz;
+        }
+      }
+      bolts.instanceMatrix.needsUpdate = true; bolts.instanceColor.needsUpdate = true;
+    }
   }
 
   function updateGrade(t) {
@@ -345,14 +449,16 @@ export function createMusouView(scene, game, camera) {
     // r3: the dim is a teal-night vignette (display-space multiply) centred on Zhao Yun — ≈0.7× on him, ≈0.27× at the
     // frame edge — so the intro sits at ≈0.6× gameplay luma (DW8 0.52–0.77×) while his ivory lamellar stays readable
     // (the pose shot is ≈1.7× the pre-press gameplay frame undimmed, so the cut frame already carries part of the dim)
-    const dim = (t < 1 ? 0.45 : t < 2 ? 0.8 : 1) * (1 - ramp(t, M.chase + 4, M.contact));
+    // fx r5: the cut frame is dimmed 0.9 (was 0.45: under the 0.09 white kick the ≈1.7× undimmed pose shot
+    // read ≈1.6× gameplay luma — one blown-out frame); the white kick alone is the flash now, full dim from the next frame
+    const dim = (t < 1 ? 0.9 : 1) * (1 - ramp(t, M.chase + 4, M.contact));
     const cool = 0.45 * ramp(t, M.chase + 4, M.contact) * (1 - ramp(t, M.contact + 8, M.contact + 30));   // tint the dark-to-bright cut only, not the payoff
     const mul = (d, c) => Math.round(255 * (1 - dim * (1 - d / 255)) * (1 - cool * (1 - c / 255)));
     const C = [186, 222, 240];
     const rgb = (d) => `rgb(${mul(d[0], C[0])},${mul(d[1], C[1])},${mul(d[2], C[2])})`;
     show(dimEl, dim + cool > 0.003 ? 1 : 0);
     if (dim > 0.003) {
-      _p.set(hero.x, t < M.closeup ? 1.1 : 1.5, hero.z).project(camera);
+      _p.set(hero.x, (t < M.closeup ? 1.1 : 1.5) + scene.position.y, hero.z).project(camera);
       const hx = (clamp01(_p.x * 0.5 + 0.5) * 100).toFixed(1), hy = ((1 - clamp01(_p.y * 0.5 + 0.5)) * 100).toFixed(1);
       setStyle(dimEl, 'background', `radial-gradient(ellipse 30% 58% at ${hx}% ${hy}%, ${rgb([150, 182, 222])} 0%, ` +
         `${rgb([84, 118, 165])} 55%, ${rgb([48, 72, 112])} 100%)`);
@@ -367,7 +473,7 @@ export function createMusouView(scene, game, camera) {
     // ray centre: contact point, then the finisher (Zhao Yun)
     if (f >= 0) _p.set(hero.x, 1.4, hero.z);
     else { mu.toWorld([0, 1.3, 2.2], W3); _p.set(W3[0], W3[1], W3[2]); }
-    _p.project(camera);
+    _p.y += scene.position.y; _p.project(camera);
     const cx = clamp01(_p.x * 0.5 + 0.5), cy = clamp01(_p.y * 0.5 + 0.5);
     show(washEl, wash);
     if (wash > 0) setStyle(washEl, 'background', flash ? '#fff' :
@@ -381,12 +487,12 @@ export function createMusouView(scene, game, camera) {
     if (add.visible) {
       u.uC.value.set(cx, cy); u.uAspect.value = camera.aspect; u.uTime.value = time;
       camera.getWorldDirection(_v);
-      _p.set(W3[0], W3[1], W3[2]).addScaledVector(_v, 3.5).project(camera);
+      _p.set(W3[0], W3[1] + scene.position.y, W3[2]).addScaledVector(_v, 3.5).project(camera);
       u.uDepth.value = Math.min(0.99999, _p.z);
     }
     // burst light on the camera side of the action, so the launched bodies are front-lit teal, not silhouettes
     const gc = c >= 0 && f < 0 ? 1 - ramp(c, 2, 16) : 0;
-    glow.intensity = 5 * gc;
+    glow.intensity = 3 * gc;                                   // (fx r4: was 5 — washed Zhao Yun's ivory lamellar white at contact)
     if (glow.intensity > 0) {
       mu.toWorld([0, 1.2, 3.5], W3); _v.set(W3[0], W3[1], W3[2]);
       glow.position.lerpVectors(_v, camera.position, 0.3); glow.position.y = 3.2;
@@ -409,7 +515,8 @@ export function createMusouView(scene, game, camera) {
   return {
     update(dt) {
       time += dt;
-      if (warm > 0 && tv < 0) { warm--; addU.uRays.value = 0; add.visible = fx.visible = dragon.visible = sh.m.visible = true; return; }
+      scene.position.y = ground(hero.x, hero.z);                // sim space → the terrain under him (world/map.js)
+      if (warm > 0 && tv < 0) { warm--; addU.uRays.value = 0; add.visible = fx.visible = dragon.visible = shell.visible = ink.visible = bolts.visible = sh.m.visible = true; return; }
       if (mu.active) tv = mu.t;
       else if (tv >= 0) { tv += dt * 60; if (tv > MUSOU.end + 50) tv = -1; }
       if (sh.m.visible) updateShards(dt);
@@ -418,6 +525,12 @@ export function createMusouView(scene, game, camera) {
       updateFx(tv);
       updateDragon(tv, dt);
       updateCut(tv);
+    },
+    /** Rebuilt per character (main.js): drop the 3D group and the DOM layers (event subscriptions: events.js collect). */
+    dispose() {
+      parent.remove(scene);
+      scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+      for (const el of [dimEl, washEl, css, cut]) el.remove();
     },
   };
 }

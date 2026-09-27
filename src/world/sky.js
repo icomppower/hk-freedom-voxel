@@ -1,6 +1,6 @@
-// Atmosphere: golden-hour sky dome (sun, glow, blocky dusty-rose clouds) and a sun-aware aerial haze that replaces
+// Atmosphere: golden-hour sky dome (sun, glow, blocky rose-and-slate clouds, dusk-blue zenith) and a sun-aware aerial haze that replaces
 // three's fog chunk, so every fogged material (ground, castle, crowd, hero, debris) washes out toward the same
-// colour the sky has at the horizon in that direction: warm peach toward the low sun, cool mauve away from it.
+// colour the sky has at the horizon in that direction: golden amber toward the low sun, cool lavender-blue away from it.
 // The haze colour exists twice — GLSL (fog + sky) and JS (hazeColor, used to pre-bake the unfogged mountains) —
 // keep them in sync.
 import * as THREE from 'three';
@@ -14,24 +14,29 @@ export const SUN_DIR = new THREE.Vector3(Math.sin(SUN_AZ) * Math.cos(SUN_ELEV), 
 const lin = (hex) => new THREE.Color(hex);                          // sRGB hex → linear working colour
 const v3 = (c, k = 1) => `vec3(${(c.r * k).toFixed(4)}, ${(c.g * k).toFixed(4)}, ${(c.b * k).toFixed(4)})`;
 
-export const HAZE = lin(0x9e8c98);        // mauve haze away from the sun (fogColor)
-const HAZE_WARM = lin(0xbc9379);          // peach haze toward the sun (the post grade lifts it to the concept's #f3cdae glow)
+export const HAZE = lin(0x9495ae);        // cool lavender-blue haze away from the sun (fogColor)
+const HAZE_WARM = lin(0xcc9468);          // golden amber haze toward the sun
 const GLOW = lin(0xf6d2a8);               // forward-scatter glow around the sun
-const SKY_MID = lin(0xa98f9c), SKY_TOP = lin(0x5d5a78);
+const SKY_MID = lin(0x9c9cba), SKY_TOP = lin(0x3c5586);   // dusk blue overhead: the cool half of the frame
+export const SKY_UP = SKY_MID.clone().lerp(SKY_TOP, 0.3);   // what the river reflects looking up
 // golden horizon band (sky only, not the fog): the gameplay frame shows just the lowest ≈ 2-5° of sky, so the sunset
 // lives there — saturated gold toward the sun, amber-rose away from it — and distant silhouettes, fogged toward the
 // darker HAZE colours, read against it
-const HZN_SUN = lin(0xffc070), HZN_AWAY = lin(0xd89a80);
-const CLOUD_ROSE = lin(0xc6a3a2), CLOUD_SHADE = lin(0x7e6e80), CLOUD_LIT = lin(0xffe2c0);
+const HZN_SUN = lin(0xffae48), HZN_AWAY = lin(0xe0a080);
+const CLOUD_ROSE = lin(0xd89c86), CLOUD_SHADE = lin(0x646a8c), CLOUD_LIT = lin(0xffd49a);
 // ground dust: a pale layer hugging the plain (scale height DUST[2] m) that thickens from DUST[0] m out over DUST[1] m up
-// to DUST[3] — the backlit dust the concept's fight stands in: dark cobbles at the hero's feet, a glowing mid-ground,
+// to DUST[3] — the backlit dust the concept's fight stands in: dark paving at the hero's feet, a glowing mid-ground,
 // soldiers' legs fading into it with distance. Walls and towers rise out of it (it is gone by ≈ 3 m up).
-const DUST = [12.0, 40.0, 1.0, 0.16], DUST_LIT = lin(0xd8b08a), DUST_SHADE = lin(0x6f6a82);
+const DUST = [16.0, 50.0, 1.0, 0.055], DUST_LIT = lin(0xcc9a70), DUST_SHADE = lin(0x5e6688);
+// the terrain climbs 28 m: dust and the height thinning below are measured from the ground under the camera, taken as
+// DUST_CAM m below it (the gameplay rig's height over the hero's feet, src/camera/camera.js), so the plateaus get
+// the same knee-deep dust as the valley floor and the valley seen from the summit sinks into it
+const DUST_CAM = 2.9;
 // aerial perspective in chroma: from AP[0] m to AP[1] m colours lose up to AP[2] of their saturation toward the haze hue
-// (cool mauve away from the sun, peach toward it) before they lose value — distant troops, the camp and mountains
-// recede into the concept's mauve while their silhouettes stay. AP_COOL is bluer than the mauve it should land on:
-// post.js's split tone warms every highlight (B × 0.75), so the scene colour has to carry the cool
-const AP = [15.0, 110.0, 0.75], AP_COOL = lin(0x8a8cb0);
+// (cool blue away from the sun, amber toward it) before they lose value — distant troops, the camp and mountains
+// recede into a cool blue while their silhouettes stay (kept partial: colour must survive at range). AP_COOL is bluer:
+// post.js's split tone warms every highlight (B × 0.8), so the scene colour has to carry the cool
+const AP = [25.0, 160.0, 0.42], AP_COOL = lin(0x8490b8);
 // geometry fades toward the haze at FOG_K of the sky's own horizon brightness: distant walls, towers and troops stay
 // darker than the sunset behind them (the concept's backlit silhouettes) instead of dissolving into it
 const FOG_K = 0.62;
@@ -70,7 +75,7 @@ export function installHaze() {
     float fogDist = length( vFogDir );
     vec3 fogD = vFogDir / max( fogDist, 1e-3 );
     float fogFactor = 1.0 - exp( - pow( max( fogDist - fogNear, 0.0 ) / fogFar, 1.6 ) );
-    float fogY = cameraPosition.y + vFogDir.y;
+    float fogY = ${DUST_CAM.toFixed(2)} + vFogDir.y;   // height above the ground under the camera, not world y
     fogFactor *= 1.0 - 0.4 * smoothstep( 6.0, 45.0, fogY );
     vec3 fogC = dwHaze( fogD, fogColor ) * ${FOG_K.toFixed(2)};
     float fogSun = smoothstep( 0.0, 0.92, dot( fogD, vec3(${SUN_DIR.x.toFixed(4)}, ${SUN_DIR.y.toFixed(4)}, ${SUN_DIR.z.toFixed(4)}) ) );
