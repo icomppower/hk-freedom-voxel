@@ -3,7 +3,7 @@
 //
 // char = {
 //   id
-//   name {zh, en}, courtesy {zh, en}, seal (red HUD seal: 2 glyphs), title {zh, en} (epithet), motto (HUD intro subline)
+//   name {zh, en}, courtesy {zh, en, label? (select screen prefix, default 字)}, seal (red HUD seal: 2 glyphs), title {zh, en} (epithet), motto (HUD intro subline)
 //   weapon {zh, en}, bio {zh: [2 lines], en: [2 lines]}, stats {atk, def, speed, range} 1-5, musou {zh, en} (Musou name)
 //   accent             CSS colour of the character (select screen / HUD highlights)
 //   lines              voice lines the HUD / story show: intro (battle start), musouEnd (shout after the Musou) {zh, en};
@@ -36,6 +36,7 @@
 // }
 import { ZHAOYUN_KIT } from './zhaoyun/kit.js';
 import { HUANGZHONG_KIT } from './huangzhong/kit.js';
+import { GOK } from './gok/char.js';
 
 const ZY_FACE = [
   '....................',
@@ -122,7 +123,7 @@ const HUANGZHONG = {
   kit: HUANGZHONG_KIT,
 };
 
-const LIST = [ZHAOYUN, HUANGZHONG];
+const LIST = [ZHAOYUN, HUANGZHONG, GOK];
 export const CHARS = Object.fromEntries(LIST.map((c) => [c.id, c]));
 export const CHAR_ORDER = LIST.map((c) => c.id);
 

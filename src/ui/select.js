@@ -101,7 +101,7 @@ export function createSelect(el, flow) {
     el.style.setProperty('--acc', c.accent);
     $('.s-name h1').textContent = c.name.zh;
     $('.s-seal').textContent = c.seal;
-    $('.s-court').textContent = `字${c.courtesy.zh}`;
+    $('.s-court').textContent = `${c.courtesy.label ?? '字'}${c.courtesy.zh}`;
     $('.s-en').textContent = `${c.name.en} · ${c.courtesy.en}`;
     $('.s-epi b').textContent = c.title.zh; $('.s-epi small').textContent = c.title.en;
     $('.s-wpn b').textContent = c.weapon.zh; $('.s-wpn small').textContent = c.weapon.en;

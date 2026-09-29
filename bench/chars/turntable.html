@@ -1,0 +1,56 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Officer turntable</title>
+<script type="importmap">{ "imports": { "three": "../../vendor/three/three.module.js", "three/addons/": "../../vendor/three/addons/" } }</script>
+<style>html,body{margin:0;background:#2a2f36;color:#ddd;font:13px system-ui} canvas{display:block}
+#lab{position:fixed;inset:0;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);pointer-events:none}
+#lab div{padding:6px 10px;font-weight:600;letter-spacing:.08em;text-shadow:0 1px 2px #000}</style></head>
+<body><div id="lab"></div>
+<script type="module">
+// Officer turntable (critic bench): six views of ?char=<id> on the shared rig in its idle stance (or ?clip=<id>&t=<0..1>):
+// front, 3/4, side, back (Zhao Yun beside him for scale), head close-up, weapon close-up. window.__ready once drawn.
+import * as THREE from 'three';
+import { CHARS } from '../../src/chars/index.js';
+import { createRig, sampleClip, POSE_SIZE, HERO_SCALE } from '../../src/hero/rig.js';
+const q = new URLSearchParams(location.search), id = q.get('char') || 'gok', clipId = q.get('clip') || 'idle', ct = +(q.get('t') || 0.3);
+const W = innerWidth, H = innerHeight;
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setSize(W, H); r.shadowMap.enabled = true; r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.1;
+document.body.prepend(r.domElement); r.setScissorTest(true);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x3a4048);
+scene.add(new THREE.HemisphereLight(0xc8d4e8, 0x6a5a48, 1.6));
+const sun = new THREE.DirectionalLight(0xffe4c0, 2.4); sun.position.set(3, 6, 5); scene.add(sun);
+const rim = new THREE.DirectionalLight(0xffb070, 1.2); rim.position.set(-4, 3, -5); scene.add(rim);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(4, 48), new THREE.MeshStandardMaterial({ color: 0x5a5448, roughness: 1 }));
+floor.rotation.x = -Math.PI / 2; scene.add(floor);
+function stand(cid, x) {
+  const K = CHARS[cid].kit, root = new THREE.Group(), rig = createRig(); root.add(rig.root); scene.add(root);
+  const m = K.model(rig), sec = K.secondary(root, rig, m.material), pose = new Float32Array(POSE_SIZE);
+  sampleClip(K.clips[cid === id ? clipId : 'idle'] || K.clips.idle, cid === id ? ct : 0.3, pose);
+  rig.root.scale.set(1, 1, 1); rig.apply(pose, new THREE.Vector3(x, 0, 0), 0);
+  rig.root.scale.setScalar(HERO_SCALE); rig.root.updateMatrixWorld(true);
+  sec.reset(); for (let k = 0; k < 90; k++) sec.update(1 / 60);
+  return rig;
+}
+const rig = stand(id, 0);
+if (id !== 'zhaoyun') stand('zhaoyun', 1.6);
+const head = new THREE.Vector3(), wp = new THREE.Vector3();
+rig.joints.head.getWorldPosition(head);
+rig.joints.weapon.getWorldPosition(wp);
+const wq = new THREE.Quaternion(); rig.joints.weapon.getWorldQuaternion(wq);
+const wmid = wp.clone().add(new THREE.Vector3(0, 0, 0.7).applyQuaternion(wq));
+const views = [
+  ['FRONT', [0, 1.05, 4.2], [0.8, 0.95, 0]], ['3/4', [2.6, 1.3, 3.2], [0.2, 0.95, 0]], ['SIDE', [-4.2, 1.1, 0.01], [0, 0.95, 0]],
+  ['BACK', [0.3, 1.2, -4.2], [0.5, 0.95, 0]], ['HEAD', [head.x + 0.45, head.y + 0.3, head.z + 1.05], [head.x, head.y + 0.1, head.z + 0.04]],
+  ['WEAPON', [wmid.x + 1.6, wmid.y + 0.5, wmid.z + 1.3], [wmid.x, wmid.y, wmid.z]],
+];
+const lab = document.getElementById('lab');
+views.forEach(([n], k) => { const d = document.createElement('div'); d.textContent = `${n} · ${CHARS[id].name.zh}`; lab.appendChild(d); });
+const cam = new THREE.PerspectiveCamera(30, (W / 3) / (H / 2), 0.05, 50);
+views.forEach(([n, p, t], k) => {
+  const x = (k % 3) * W / 3, y = H / 2 - Math.floor(k / 3) * H / 2;
+  r.setViewport(x, y, W / 3, H / 2); r.setScissor(x, y, W / 3, H / 2);
+  cam.fov = n === 'HEAD' ? 26 : n === 'WEAPON' ? 34 : 30; cam.updateProjectionMatrix();
+  cam.position.set(...p); cam.lookAt(...t); r.render(scene, cam);
+});
+window.__ready = true;
+</script></body></html>

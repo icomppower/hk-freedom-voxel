@@ -59,7 +59,9 @@ export function createStory(game) {
 
   // ---- dialogue: one line at a time; lines resolve the speaker (hero / ally / SPK seal) and branch on the hero
   const say = (line) => {
-    const pick = line[S.char], zh = pick ? pick[0] : line.zh, en = pick ? pick[1] : line.en;
+    // a hero the line has no branch for (an officer playing outside his chapter's cast): the first branch
+    const pick = line[S.char] || (line.zh == null ? Object.values(line).find(Array.isArray) : null);
+    const zh = pick ? pick[0] : line.zh, en = pick ? pick[1] : line.en;
     const dur = Math.max(160, Math.min(270, 100 + zh.length * 8));   // ≈ 2.7-4.5 s: DW8 pace, taunts don't queue behind a briefing
     const e = { zh, en, dur };
     if (line.who === 'ally') { const a = CHARS[S.ally]; Object.assign(e, { speaker: a.name, portrait: a.id, side: 'shu' }); }
