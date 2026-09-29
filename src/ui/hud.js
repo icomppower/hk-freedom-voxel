@@ -141,11 +141,13 @@ export function createHud(root, game, camera) {
   on('story:banner', (e) => banner(e.html, e.en, e.dur ?? 150, !!e.big, e.big ? 2 : 1));
   on('story:objective', (e) => { S.obj = e.zh ? { zh: e.zh, en: e.en || '', f: game.frame } : null; if (S.obj) { text(objB, e.zh); text(objS, e.en || ''); } });
   on('crowd:wave', (e) => {
-    if (game.frame - S.waveF > 600) { S.waveF = game.frame; banner('<em>魏軍</em>援兵 抵達', 'Wei reinforcements have arrived!', 130); }
+    const nm = game.story.chapter?.sides?.names;                     // the chapter's sides (story/chapters.js), else 魏 / 蜀
+    if (game.frame - S.waveF > 600) { S.waveF = game.frame; banner(nm ? `<em>${nm.them.zh}</em>援兵 抵達` : '<em>魏軍</em>援兵 抵達', nm ? `${nm.them.en} reinforcements have arrived!` : 'Wei reinforcements have arrived!', 130); }
     S.waves.push({ x: e.x, z: e.z, f: game.frame });
   });
   on('crowd:allies', (e) => {
-    if (game.frame - S.allyF > 900) { S.allyF = game.frame; banner('<em>蜀軍</em>援兵 趕到', 'Shu reinforcements have joined the fight', 120); }
+    const nm = game.story.chapter?.sides?.names;
+    if (game.frame - S.allyF > 900) { S.allyF = game.frame; banner(nm ? `<em>${nm.us.zh}</em>趕到` : '<em>蜀軍</em>援兵 趕到', nm ? `${nm.us.en} joins the fight` : 'Shu reinforcements have joined the fight', 120); }
     S.waves.push({ x: e.x, z: e.z, f: game.frame, ally: true });
   });
   on('hit', (e) => { S.actF = game.frame; if (e.officer) { S.tgt = e.i; S.tgtF = game.frame; } });

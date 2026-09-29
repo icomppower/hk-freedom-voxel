@@ -7,9 +7,10 @@ import * as THREE from 'three';
 import { installHaze } from './sky.js';
 import { MAP } from './map.js';
 import { buildDingjun } from './maps/dingjun/world.js';
+import { buildPasture } from './maps/pasture/world.js';
 
 /** Render builders by map id. New maps register with one import + one entry. */
-export const WORLDS = { dingjun: buildDingjun };
+export const WORLDS = { dingjun: buildDingjun, pasture: buildPasture };
 
 installHaze();
 // the sun's shadow fades out over the outer 20 % of its box instead of cutting off: soldiers and props at the box edge

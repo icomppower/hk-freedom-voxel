@@ -37,7 +37,8 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
 /** Script position P = [zone id, fx, fz] (fractions of the zone's half extents) or ['gate', dx, dz] (metres). */
 function pos([id, a, b]) {
-  if (id === 'gate') return [GATE_X + a, WALL_Z + b];
+  if (typeof id === 'number') return [id, a];                     // a plain [x, z] (chapter scripts)
+  if (id === 'gate' && !zone('gate')) return [GATE_X + a, WALL_Z + b];
   const q = zone(id), hw = q.r ?? q.w / 2, hd = q.r ?? q.d / 2;
   return [q.x + a * hw, q.z + b * hd];
 }
@@ -70,8 +71,10 @@ export function createStory(game) {
     const zh = pick ? pick[0] : line.zh, en = pick ? pick[1] : line.en;
     const dur = Math.max(160, Math.min(270, 100 + zh.length * 8));   // ≈ 2.7-4.5 s: DW8 pace, taunts don't queue behind a briefing
     const e = { zh, en, dur };
-    if (line.who === 'ally') { const a = CHARS[S.ally]; Object.assign(e, { speaker: a.name, portrait: a.id, side: 'shu' }); }
-    else if (line.who !== 'hero') { const p = SPK[line.who]; Object.assign(e, { speaker: p.name, portrait: { seal: p.seal }, side: p.side }); }
+    let who = line.who;                                              // a playable id speaks as the hero or the ally
+    if (CHARS[who] && !SPK[who]?.force) who = who === S.char ? 'hero' : who === S.ally ? 'ally' : who;
+    if (who === 'ally') { const a = CHARS[S.ally]; Object.assign(e, { speaker: a.name, portrait: a.id, side: 'shu' }); }
+    else if (who !== 'hero') { const p = SPK[who]; Object.assign(e, { speaker: p.name, portrait: { seal: p.seal }, side: p.side }); }
     S.q.push(e);
   };
 
@@ -122,6 +125,7 @@ export function createStory(game) {
     say: (l) => say(l), banner: (b) => emit('story:banner', { dur: 150, ...b }),
     objective: (o) => { emit('story:objective', { zh: o.zh, en: o.en }); S.go = o.go; },
     flag: (name, v) => { if (v !== undefined) S.flags[name] = v; return !!S.flags[name]; },
+    gate: (id, open) => setGate(id, open), lose: () => S.end(false),
   };
 
   st.reset = ({ mode = 'free', char = 'zhaoyun', chapter } = {}) => {
@@ -150,7 +154,12 @@ export function createStory(game) {
     if (S.done) return;
     S.t++;
     if (h.combo > S.maxChain) S.maxChain = h.combo;
-    if (S.mode === 'free') { if (game.frame === 185) emit('story:say', { ...h.char.lines.intro, dur: 300 }); return; }   // the hero's opening line
+    if (S.mode === 'free') {
+      if (game.frame === 185) emit('story:say', { ...h.char.lines.intro, dur: 300 });   // the hero's opening line
+      const FN = st.chapter && st.chapter.freeNames;                  // the chapter's own names for the arena's officers
+      if (FN) for (let k = 0; k < c.offName.length; k++) if (c.offName[k] && !FN.includes(c.offName[k])) c.offName[k] = FN[k % FN.length];
+      return;
+    }
 
     // victory: slow-mo on the killing blow (0.3× for ~5 s of wall time, eased back), the hero untouchable, then results
     if (S.won >= 0) {

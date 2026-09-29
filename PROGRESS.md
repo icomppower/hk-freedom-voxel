@@ -13,13 +13,13 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 3 阿角 gok | done | gates 6/6 (moves 15/15, onsets = Box Moveset, N-string 28 sf apart live, weapon ≥ 0.29 m, feet slide ≤ 0.66 cm, Musou 39/40 of a packed ring); 60 fps held through the Musou at 600 enemies (p95 16.8 ms = Zhao Yun); model critic 3 rounds → P1 0; bot clears ch1 as gok (rank S); ch1 Node 6/6 |
 | 4 狼督 + grey / shadow / iron | done | boss gate 6/6 (phase 2 at 49.8 % HP, phase 3 at 19.8 %, banners on the phase frames, searchlight squads drop, KO → win, slot keeps the warden model) as gok + zhaoyun; officer lineup critic 3 rounds → P1 0; KO = kneel + raised horn + broken glaive; ch1 crowd 94/94, Node 6/6 |
 | 5 小咩 siume | done | gates 6/6 (moves 15/15, onsets = Box Moveset, N-string 18 sf apart live, blades ≥ 0.45 m, feet slide ≤ 0.70 cm, Musou 39/40); 60 fps through the Musou at 600 enemies; model critic 2 rounds → P1 0 (headband tails were a rigid plank); bot clears ch1 as siume (7:27, rank S); ch1 Node 6/6 |
-| 6 Chapter I pasture / sheep1 | todo | |
+| 6 Chapter I pasture / sheep1 | done | bot WIN 6/6 (gok + siume × steady / rush / back: no soft-lock); map gate 6/6 per officer (no NaN, standing soldiers ≥ −1.25 m, no teleport > 3 m/step, barnLane + villageGate reached, won); scroll columns ≤ 7; ch1 prologue 6/6, crowd 94/94, Node 6/6 |
 | 7 Chapter II lantern / sheep2 | todo | |
 | 8 Chapter III harbor / sheep3 + ENDING + TRIBUTE | todo | |
 | 9 Critic rounds | todo | |
 | 10 Ship | todo | |
 
-**Next action:** stage 6 Chapter I — map `pasture` (field / barns / gate / shrine, gates barnLane / villageGate), sheep1.js (scroll, beats, epilogue), sheepmap.js; bot clears it as gok + siume; no soft-lock. Then MILESTONE message.
+**Next action:** stage 7 Chapter II — map `lantern` (market / stairs / checkpoint / lookout, gate checkpoint) + sheep2.js.
 
 ## Contract ids (Divide & Conquer page)
 
@@ -65,3 +65,10 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 - The crowd material dissolves anything within ≈ 3 m of the lens (upstream DW-style): officer close-ups are long-lens.
 - 小咩 C1 = 旋風剪 tornado (Box Moveset frame data, the gate) and C3 = twin upward snip launcher; the Character Sheet
   lists them the other way round.
+- Ch I design calls: carts are lost if the hero is > 20 m from the gateway as they pass (a crowd-count rule lost every
+  cart: the engaged ring always keeps 10+ wolves round him); win needs ≥ 4 of 6 (60 %) at the lantern, else the chapter is
+  lost there. The barn collapse shuts gate 'barnLane' (story hook api.gate) and the objective walks the detour waypoints.
+- 羊村 render kit: src/world/maps/sheepkit/ (terrain: 1 m voxel tiles on the map grid; props: box lists). Free battles on a
+  羊村 map rename the crowd's built-in arena officers via chapter.freeNames (story index.js free-mode hook).
+- Bot: A* on the walk grid when the road ahead is blocked or the goal is off the road; Huang Zhong's ch1 clears with the
+  rush style (steady / back lose ≈ half the runs) — upstream content, not a 羊村 gate; his clear is in the hash logs.

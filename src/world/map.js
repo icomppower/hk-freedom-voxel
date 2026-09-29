@@ -21,11 +21,12 @@
 // The crowd's spatial grid spans ±240 m (crowd.js): every map must fit inside it.
 import { noise2, smooth, rectIn } from './mapkit.js';
 import DINGJUN from './maps/dingjun/map.js';
+import PASTURE from './maps/pasture/map.js';
 
 export { noise2, smooth };
 
 /** Every battlefield by id. New maps register with one import + one entry. */
-export const MAPS = { dingjun: DINGJUN };
+export const MAPS = { dingjun: DINGJUN, pasture: PASTURE };
 export const DEFAULT_MAP = 'dingjun';
 
 // ---- live bindings onto the active map (setMap)

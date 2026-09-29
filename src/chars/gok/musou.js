@@ -11,6 +11,7 @@
 import { emit, on } from '../../core/events.js';
 import { setState, stickDir } from '../../hero/locomotion.js';
 import { ST } from '../../crowd/crowd.js';
+import { clampWalk } from '../../world/map.js';
 import { offSun, easeOut, smooth, endMusou, gauge } from '../../musou/musou.js';
 import { MUSOU_FRAMES } from './anims.js';
 
@@ -87,7 +88,7 @@ export function createMusou(game) {
       for (const [i, fx, fz, tx, tz] of pulled) {
         const s = c.st[i];
         if (s !== ST.HURT && s !== ST.KNOCK && s !== ST.IDLE && s !== ST.GUARD && s !== ST.ADVANCE) continue;
-        c.x[i] = fx + (tx - fx) * u; c.z[i] = fz + (tz - fz) * u; c.vx[i] = c.vz[i] = 0;
+        [c.x[i], c.z[i]] = clampWalk(fx + (tx - fx) * u, fz + (tz - fz) * u, -0.5); c.vx[i] = c.vz[i] = 0;
       }
     }
     M.spins.forEach((f, j) => {                                      // three spins, each wider
@@ -119,7 +120,7 @@ export function createMusou(game) {
       if (s === ST.OFF || s === ST.DEAD || s === ST.AIR || s === ST.DOWN) continue;
       const lat = ((k++ % 5) - 2) * 0.45;                           // gathered side by side in front of the crook
       const tx = h.x + fx * HOOK.reach + fz * lat, tz = h.z + fz * HOOK.reach - fx * lat;
-      c.x[i] = x0 + (tx - x0) * u; c.z[i] = z0 + (tz - z0) * u; c.vx[i] = c.vz[i] = 0;
+      [c.x[i], c.z[i]] = clampWalk(x0 + (tx - x0) * u, z0 + (tz - z0) * u, -0.5); c.vx[i] = c.vz[i] = 0;
     }
   };
 
