@@ -1,0 +1,11 @@
+{
+  "name": "sheep-village",
+  "private": true,
+  "type": "module",
+  "description": "羊村 · 霧港渡 — a reskin of mike007jd/voxel-musou. No build step: the game is static (index.html). Tooling below is for the bench harness only.",
+  "scripts": {
+    "gate": "node --import ./bench/harness/register.mjs bench/harness/check.mjs",
+    "record": "node --import ./bench/harness/register.mjs bench/harness/record.mjs"
+  },
+  "devDependencies": { "playwright-core": "^1.55.0" }
+}
