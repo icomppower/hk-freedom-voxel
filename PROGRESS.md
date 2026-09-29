@@ -16,6 +16,7 @@ stage not `done`.
 | 7 Ch III hk3 yuenlong | done | bot WIN 6/6 (steady / rush / back × both; 2-3 of 10 passengers lost per run, 7-8 board); map gate 6/6 each (fareGates + platformStairs); touch-only real-page run WIN as 龍仔 (768 taps, 0 errors); critic: empty opening (bot outran idle squads) → the passengers are a real escort (walk only while covered, lost after 3 s under attack), all squads charge, waves from the start; the camera sat inside the platform canopy / entrance slab (moved clear) |
 | 8 Ch IV hk4 polyu + ENDING + TRIBUTE | done | bot WIN 6/6 (both × 3 styles; 龍仔 ends the Bear fight near 48 HP on steady / rush); map gate 6/6 each (barricade + mainGate); touch-only real-page run WIN as 小美 (1 456 taps, 0 errors); scroll-flow 11/11 (ENDING only after the hk4 win: result → ending → tribute → title; title 致敬 → tribute card); ENDING refs saved (7 frames); tribute link TBD per spec |
 | 9 Critic rounds | done | 2 rounds (bench/shots/9/r1, r2; 1280×720 + 844×390, all four chapters, battle + Musou, title / select / scroll / result / ending). r1 P1s: mobile 3 (pad over the K.O. count and Musou copy, pause over the objective, keyboard footer over the select stats) → 0; scene 2 (hk3 empty opening, camera inside canopy slabs) → 0; fx 2 (龍拳 dragon rendered dark, LegCo searchlight blow-out) → 0; ui 1 (三國 aim row / 選擇武將) → 0; chars 0; perf 0 (desktop p95 ≤ 16.8 ms at 600 enemies on hk1-4; Pixel 7 + 4× CPU p95 6.7-8.0 ms). r2: P1 0. New gates: phone tap-through 17/17, touch UI 13/13 (no button over the HUD) |
+| Cutscenes + Ending 天光 | done (branch cutscenes-ending) | 3 between-stage cutscenes (雨後 · 尾班車 · 竹枝, 20 s each) + new ENDING scroll + end scene (40 s) + tribute line, one shared player; flow 15/15 (hk1→between1→hk2 scroll, hk2→between2→hk3, hk3→between3→hk4, hk4 win → ENDING → end scene → TRIBUTE → title, losses / free wins: no cutscene, Esc at every step); look 9/9 (actors = the shipped models, P1 0 after 2 visual rounds); desktop p95 4.5-5.9 ms, Pixel 7 + 4× CPU p95 3.3-4.0 ms; audio peaks −12.1 … −2.0 dBFS, skip hands over in 0.53-0.72 s; ENDING cols ≤ 7, fits 14/14 cards at both sizes; subtitles fit at both sizes |
 | 10 Ship | done | verify.sh ALL GATES GREEN; README credits (upstream MIT, sheep-village, three.js, Yuji Boku, the Phaser original); production deploy READY at https://hk-freedom-voxel.vercel.app (200, 0 console errors desktop + 844×390, hk4 deep link); Notion: Live Projects Bookmark row + project Status ticked. Repo pushed to github.com/icomppower/hk-freedom-voxel and git-connected to Vercel |
 
 **Next action:** none — all stages done; open P2s below.
@@ -82,4 +83,13 @@ stage not `done`.
   Boku and fall back to the system serif on non-Mac devices.
 - brush.woff2 re-subset from Yuji Boku (Google Fonts, OFL) to 830 glyphs (was 560 of the 871 used): ch1 scroll frames stay
   pixel-identical on macOS (Xingkai first); all scroll refs re-saved once after the ink-map label moves (asset change).
+- Cutscenes (branch cutscenes-ending): src/story/cutscenes/ (player.js screen, kit.js, sound.js, between1-3.js,
+  ending.js). Hooks: main.js registers the `cutscene` screen with a small stage api (setMap, clearField) and hides the
+  battle hero during it; result.js 繼續 after a story win with `after` → cutscene → next chapter; prologue.js ENDING →
+  end scene (chapter `endScene`) → tribute, ending-scroll sound, and a tap during the ink wipe is deferred (it was
+  swallowed); audio.js exports BUS (the one AudioContext + buses); 小美's model honours rig.umbrellaMode (render-only,
+  cutscenes). The stand-in crowd is the real crowd view over a hand-placed crowd (built once, emptied between scenes).
+- The ending is the game's fiction (Hong Kong wins its freedom); the chapter epilogues keep the Phaser game's 2019 history.
+  The brief's '夥慨道' is written 夏慤道 (same fix as the Scroll Cutscenes page).
+- 龍仔's hat-off head is the shipped head minus the hat boxes, so the crown shows skin where the hat sat (no new hair).
 - Scroll-frame gate flaked twice on the first cold run in this clone (a different frame each time), then 4/4 clean.

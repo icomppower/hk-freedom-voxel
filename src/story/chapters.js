@@ -11,6 +11,8 @@
 //   allies [{ x, z, n, cols, hold }]   story start: the friendly ranks (crowd.spawnAllies)
 //   skin { foe, ally }  crowd skins (src/chars/officers/index.js SKINS; default: the Wei army / Shu allies)
 //   sides.names { us: {zh, en}, them: {zh, en} }   who the HUD's reinforcement banners name
+//   after              (香港自由戰士) the cutscene played after a story WIN, before the next chapter (story/cutscenes/)
+//   endScene           the end scene between the ENDING scroll and the TRIBUTE card
 import * as ch1 from './ch1.js';
 import * as hk1 from './hk1.js';
 import * as hk2 from './hk2.js';
@@ -26,7 +28,7 @@ const LIST = [
     allies: [-1, 1].map((sx) => ({ x: sx * 5.575, z: -121.6, n: 12, cols: 4, hold: true })),
   },
   {
-    ...hk1, id: 'hk1', map: 'admiralty', cast: ['lungjai', 'siumei'],
+    ...hk1, id: 'hk1', after: 'between1', map: 'admiralty', cast: ['lungjai', 'siumei'],
     title: { small: '第一章', zh: '金鐘', en: 'CHAPTER I · ADMIRALTY' },
     sides: { us: '港', them: '警', names: { us: { zh: '手足', en: 'Protesters' }, them: { zh: '防暴警', en: 'Riot police' } } },
     skin: { foe: 'riot', ally: 'blackbloc' },
@@ -34,21 +36,21 @@ const LIST = [
     allies: [-1, 1].map((sx) => ({ x: sx * 6, z: -130, n: 12, cols: 4, hold: true })),
   },
   {
-    ...hk2, id: 'hk2', map: 'legco', cast: ['lungjai', 'siumei'],
+    ...hk2, id: 'hk2', after: 'between2', map: 'legco', cast: ['lungjai', 'siumei'],
     title: { small: '第二章', zh: '立法會', en: 'CHAPTER II · LEGCO' },
     sides: { us: '港', them: '警', names: { us: { zh: '手足', en: 'Protesters' }, them: { zh: '防暴警', en: 'Riot police' } } },
     skin: { foe: 'riot', ally: 'blackbloc' },
     allies: [-1, 1].map((sx) => ({ x: sx * 6, z: -132, n: 10, cols: 5, hold: true })),   // the crowd on the plaza
   },
   {
-    ...hk3, id: 'hk3', map: 'yuenlong', cast: ['lungjai', 'siumei'],
+    ...hk3, id: 'hk3', after: 'between3', map: 'yuenlong', cast: ['lungjai', 'siumei'],
     title: { small: '第三章', zh: '元朗', en: 'CHAPTER III · YUEN LONG' },
     sides: { us: '港', them: '白', names: { us: { zh: '乘客', en: 'Passengers' }, them: { zh: '白衫友', en: 'White shirts' } } },
     skin: { foe: 'white', ally: 'civil' },
     allies: [-1, 1].map((sx) => ({ x: sx * 5, z: -128, n: 6, cols: 3, hold: true })),   // passengers who stood up to them
   },
   {
-    ...hk4, id: 'hk4', map: 'polyu', cast: ['lungjai', 'siumei'],
+    ...hk4, id: 'hk4', endScene: 'ending', map: 'polyu', cast: ['lungjai', 'siumei'],
     title: { small: '第四章', zh: '理工大學', en: 'CHAPTER IV · POLYU SIEGE' },
     sides: { us: '港', them: '警', names: { us: { zh: '手足', en: 'Protesters' }, them: { zh: '防暴警', en: 'Riot police' } } },
     skin: { foe: 'riot', ally: 'blackbloc' },

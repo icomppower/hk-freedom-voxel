@@ -2,13 +2,14 @@
 // brush 勝利 / 敗北, then the tallies count up one by one (KOs, max chain, time, damage taken), the rank stamps in (win:
 // S/A/B/C, rules in index.js rank()), and the active chapter's epilogue (story/chapters.js: EPILOGUE, branched per hero
 // { <char id>: {zh: [], en: []} } or one { zh: [], en: [] }; DEFEAT { zh, en } with {name} = the hero) closes the chapter.
-// Win → 繼續 (title; a chapter with an ENDING scroll: the ending, main.js 'ending'). Defeat → 再戰 (the loading card, then straight back into the battle, no prologue) or 返回 (title).
+// Win → 繼續 (title; a chapter with an ENDING scroll: the ending, main.js 'ending'; a story chapter with `after`: its
+// cutscene, then the next chapter's loading card and scroll). Defeat → 再戰 (the loading card, then straight back into the battle, no prologue) or 返回 (title).
 // Every exit is an ink wipe (ui lane menu.js). ctx.art (the officer's key-art still, main.js snapArt) fills the right side.
 // Keys (menu.js createNav, + gamepad): Enter / Space press the focused button (← → move between them), Esc → title.
 // The battle's difficulty rides beside VICTORY / DEFEAT; a clear that just opened 修羅 (ctx.unlock) says so under the tallies.
 // ctx in: { win, stats: { kos, time, hpMax, maxChain, dmg, rank? }, mode, char, chapter, diff (core/difficulty.js tier), unlock? }.
 import { CHARS, paintPortrait } from '../chars/index.js';
-import { resolveChapter } from './chapters.js';
+import { resolveChapter, CHAPTER_ORDER } from './chapters.js';
 import { inkWipe, afterWipe, createNav } from '../ui/menu.js';
 
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -22,6 +23,10 @@ export function createResult(el, flow) {
     if (!b) return;
     if (b.dataset.act === 'retry') leave(() => flow.go('loading', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter, art: ctx.art, retry: true }));
     else if (b.dataset.act === 'ending') leave(() => flow.go('ending', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter }));
+    else if (b.dataset.act === 'cut') {                             // 香港自由戰士: the between-chapter cutscene, then the next chapter
+      const next = CHAPTER_ORDER[CHAPTER_ORDER.indexOf(ctx.chapter) + 1], c = { mode: 'story', char: ctx.char, chapter: next };
+      leave(() => flow.go('cutscene', { id: resolveChapter(ctx.chapter, ctx.char).after, char: ctx.char, then: () => inkWipe(() => flow.go(next ? 'loading' : 'title', c)) }));
+    }
     else leave(() => flow.go('title'));
   });
   const nav = createNav({
@@ -37,6 +42,7 @@ export function createResult(el, flow) {
       const epi = E[ch.id] || (E.zh ? E : Object.values(E)[0]), T = CH.title;
       const lose = CH.DEFEAT || { zh: '{name}力戰不支，蜀軍攻勢受挫……', en: '{name} falls at last, and the Shu assault falters...' };
       const loseZh = lose.zh.replace('{name}', ch.name.zh), loseEn = lose.en.replace('{name}', ch.name.en), end = win && CH.ENDING;
+      const cut = win && c.mode === 'story' && CH.after;                // a story win with a cutscene after it
       const rows = [
         ['擊破數', 'K.O. COUNT', s.kos, (v) => v],
         ['最大連擊', 'MAX CHAIN', s.maxChain, (v) => v],
@@ -57,7 +63,7 @@ export function createResult(el, flow) {
           ? epi.zh.map((z, i) => `<p>${z}<small>${epi.en[i]}</small></p>`).join('')
           : `<p>${loseZh}<small>${loseEn}</small></p>`}</div>
         <div class="rs-btns">${win
-          ? `<button data-act="${end ? 'ending' : 'title'}">繼續<small>CONTINUE</small></button>`
+          ? `<button data-act="${end ? 'ending' : cut ? 'cut' : 'title'}">繼續<small>CONTINUE</small></button>`
           : '<button data-act="retry">再戰<small>RETRY</small></button><button data-act="title" class="sub">返回<small>TITLE</small></button>'}</div>
       </div>
       <footer class="ui-foot">${win ? '' : '<span><kbd>←</kbd><kbd>→</kbd>選擇<small>Select</small></span>'}

@@ -136,6 +136,10 @@ export function createSiumeiSecondary(scene, rig, mat, hero) {
   const upd = body.update;
   body.update = (dt) => {
     const t = upd(dt), u = rig.umbrellas; if (!u) return t;
+    if (rig.umbrellaMode) {                                          // cutscenes: 'open' | 'closed' | 'hidden', set by the scene
+      const m = rig.umbrellaMode; u.open[0].visible = u.open[1].visible = m === 'open'; u.closed[0].visible = u.closed[1].visible = m === 'closed';
+      return t;
+    }
     const o = isOpen(hero);
     if (u.open[0].visible !== o) { u.open[0].visible = u.open[1].visible = o; u.closed[0].visible = u.closed[1].visible = !o; }
     return t;

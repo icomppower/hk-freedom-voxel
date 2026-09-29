@@ -41,6 +41,9 @@ await P.keyboard.down('Enter'); await wait(1100); await P.keyboard.up('Enter'); 
 ok('hold 0.8 s skips to the stamp', (await cls('#ending')).includes('stamped'));
 await wait(1200);
 await P.keyboard.press('Escape'); await wait(1200);
+if (await P.evaluate(() => __vm.state === 'cutscene')) {           // 香港自由戰士: the end scene between the stamp and the tribute
+  ok('stamp → end scene', true); await wait(1500); await P.keyboard.press('Escape'); await wait(3200);
+}
 const T = await P.evaluate(() => !!document.querySelector('#ending .pl-tribute'));
 ok('stamp → tribute card', T ? (await cls('#ending')).includes('tribute') : true, T ? '' : '(chapter has no TRIBUTE)');
 await wait(1200);
