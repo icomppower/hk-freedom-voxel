@@ -14,6 +14,9 @@
 // searchlights, escorts). api: t(), frac(key) officer HP fraction, officer(key) crowd slot, dead(key), pos(P) → [x, z],
 // squad({ at: P | [x, z], n, charge, cols }), say(line), banner(b), objective(o), flag(name[, v]) (beats wait on
 // `when: { flag }`); a beat's `set: name` raises a flag, `cue: name` calls script.cue(name).
+// (hook, 香港自由戰士 stage 4) fire(beat): run a partial beat now (officers / squads / banner / say — a boss calling his
+// 分身 or a 速龍 squad mid-fight); model(key, modelKey): the officer's model key from here on (render-only: the Bear's
+// mask comes off).
 // Map gates (world/map.js GATES: 'pass' barricade, 'weiCamp' castle gate, 'summit' barricade) are sim state: story mode
 // closes all three at reset, a beat's `gate: id` opens one (clampWalk lets everyone through, world.js burns / swings it).
 // Emits story:say / story:banner / story:objective / story:end (payloads: core/events.js). The flow
@@ -126,6 +129,7 @@ export function createStory(game) {
     objective: (o) => { emit('story:objective', { zh: o.zh, en: o.en }); S.go = o.go; },
     flag: (name, v) => { if (v !== undefined) S.flags[name] = v; return !!S.flags[name]; },
     gate: (id, open) => setGate(id, open), lose: () => S.end(false),
+    fire: (b) => fire(b), model: (k, m) => { S.wantModel[k] = m; if (S.off[k] >= 0) S.slotModel[S.off[k]] = m; },
   };
 
   st.reset = ({ mode = 'free', char = 'zhaoyun', chapter } = {}) => {
