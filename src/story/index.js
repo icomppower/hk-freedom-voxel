@@ -6,6 +6,8 @@
 //   story.stats()                          → { kos, time (s), hpMax, maxChain, dmg, rank? } (story:end / result)
 //   story.morale                           蜀 share of the HUD morale bar 0-1 (undefined in free mode: HUD falls back)
 //   story.target                           {x, z} the HUD objective arrow points at, or null
+//   story.chapter                          the active chapter (story/chapters.js), set by reset
+//   story.modelOf(i)                       officer model key of crowd slot i (its OFF entry's `model`), or null (crowd view)
 // Map gates (world/map.js GATES: 'pass' barricade, 'weiCamp' castle gate, 'summit' barricade) are sim state: story mode
 // closes all three at reset, a beat's `gate: id` opens one (clampWalk lets everyone through, world.js burns / swings it).
 // Emits story:say / story:banner / story:objective / story:end (payloads: core/events.js). The flow
@@ -39,6 +41,8 @@ export function createStory(game) {
   const S = { mode: 'free', char: 'zhaoyun', t: 0, done: false, maxChain: 0, downT: -1 };
   const st = { morale: undefined, target: null };
   const DLG_GAP = 12;                            // sim frames between two queued lines
+
+  st.modelOf = (i) => S.slotModel[i] || null;
 
   st.stats = () => {
     const h = game.hero, time = Math.round(S.t / 60);
@@ -87,6 +91,7 @@ export function createStory(game) {
       const o = b.officers[k], d = OFF[o.like || k];
       const [x, z] = pos(o.at);
       S.want[k] = { x, z, name: d.name, hp: d.hp, boss: !!d.boss, engaged: !!o.engaged };
+      S.wantModel[k] = d.model || null;
       S.off[k] = -1; S.dead[k] = false;
     }
     if (b.waves != null) c.setWaves(b.waves);
@@ -106,7 +111,7 @@ export function createStory(game) {
     st.chapter = CH;
     Object.assign(S, { mode, char, ally: CH.cast.find((id) => id !== char) || CH.cast[0], t: 0, done: false, maxChain: 0,
       downT: -1, dmg: 0, beat: 0, beatT: 0, koBase: 0, off: {}, want: {}, dead: {}, q: [], sayUntil: 0, limit: Infinity, nag: null,
-      nagT: -999, mBase: 0.4, won: -1, go: null });
+      nagT: -999, mBase: 0.4, won: -1, go: null, wantModel: {}, slotModel: {} });
     game.timeScale = 1;
     st.target = null;
     if (mode === 'story') for (const id in GATES) setGate(id, false);   // spawnPoint() opened them all; the script opens each
@@ -145,7 +150,7 @@ export function createStory(game) {
     // officers the script asked for: spawn as soon as a slot is free (a KO'd officer frees his slot after crowd deadTime)
     for (const k in S.want) {
       const i = c.spawnOfficer(S.want[k]);
-      if (i >= 0) { S.off[k] = i; delete S.want[k]; }
+      if (i >= 0) { S.off[k] = i; S.slotModel[i] = S.wantModel[k]; delete S.want[k]; }
     }
 
     // stage gate: the hero can't run past the stage he is on (a nag line explains, at most every 10 s)

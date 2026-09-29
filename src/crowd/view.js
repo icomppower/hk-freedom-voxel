@@ -9,6 +9,14 @@
 // (crowd.raiseF) brandish their weapons and shout with him. Officers carry a spinning ▼ marker. Shu allies (crowd
 // indices N … T-1) are the same rig in Shu green (their own part meshes at all three LODs, a 蜀 standard); duels show no
 // wind-up glint / flare (those telegraph blows on the hero). Struck soldiers flash (aHit, below). Never writes sim state.
+// Skins + officer models (stage-2c engine hook): the active chapter's `skin: { foe, ally }` (story/chapters.js) names
+// entries of SKINS (src/chars/officers/index.js); a skin = { palette, officerPalette?, head?(C, officer, b, lamel) → head
+// boxes, crest?(C, b) → boxes, weapons?: { spear, sword, glaive, pole: weapon boxes, shield: {rim, a, b, boss, ring, far} },
+// flag: {glyph, bg} | null (null: the bearer's pole carries no cloth) }. Without a skin the Wei army and the Shu allies
+// render exactly as upstream (WEI / SHU_SKIN below). An ally skin with weapons gets its own weapon meshes. Officers the
+// story spawned with a model key (story.modelOf(i)) draw that entry of OFFICER_MODELS instead of the generic officer:
+// { parts: bodyParts-style {hips, torso, head, arm, thigh, shin}, weapon: boxes, broken?: {haft, head} boxes shown once
+// KO'd, scale, tip }.
 import * as THREE from 'three';
 import { sculpt, shade, boxesGeometry } from '../core/voxel.js';
 import { ST, KIND, CROWD } from './crowd.js';
@@ -16,6 +24,8 @@ import { COMBAT } from '../combat/combat.js';
 import { hash01 } from '../core/rng.js';
 import { HUD_TAG_R } from '../ui/hud.js';
 import { ground } from '../world/map.js';
+import { on } from '../core/events.js';
+import { SKINS, OFFICER_MODELS } from '../chars/officers/index.js';
 
 const V = 0.042;
 const b = (a, bb, c, paint) => ({ a, b: bb, c, paint });
@@ -38,12 +48,15 @@ const OFFICER = {
   pants: 0x23263a, wrap: 0x3a3f5a, wrapD: 0x23263a, helm: 0x2a3150, helmHi: 0xe0b450, belt: 0x6a4a20, buckle: 0xf0c860,
 };
 const WOOD = 0x5e3d24, STEEL = 0x98968f, RED = 0xc02a1c, BRONZE = 0x9a7838;
+// the upstream look as skins: Wei grunts / officers under the 魏 standard, Shu allies under the 蜀 standard
+const WEI = { palette: GRUNT, officerPalette: OFFICER, flag: { glyph: '魏', bg: '#b8301e' } };
+const SHU_SKIN = { palette: SHU, flag: { glyph: '蜀', bg: '#2f7a36' } };
 
 // skeleton (soldier space, feet at 0, facing +Z): pelvis 0.86 · waist +0.04 · neck +0.5 · shoulders ±0.235 @ +0.43
 // · hips ±0.095 @ -0.02 · knee -0.42 · hand -0.5 from the shoulder
 const J = { waist: 0.04, neck: 0.5, shX: 0.235, shY: 0.43, hipX: 0.095, hipY: -0.02, knee: 0.42, hand: 0.5 };
 
-function bodyParts(C, officer) {
+function bodyParts(C, officer, head) {
   const L = lamel(C.armor, C.hi, C.lace);
   const plate = (x, y, z, i, j) => ((i + j) % 4 === 0 ? C.rivet : j % 4 === 3 ? C.hi : C.plate);
   const pauld = (x, y, z, i, j) => (j === 0 ? C.hi : j % 2 ? C.armor : shade(C.armor, 0.8));
@@ -67,7 +80,7 @@ function bodyParts(C, officer) {
     b([-0.125, 0.44, -0.115], [0.125, 0.5, 0.115], C.cloth),
     b([-0.05, 0.46, -0.05], [0.05, 0.53, 0.05], C.skin),
   ];
-  if (officer) p.torso.push(b([-0.21, -0.36, -0.2], [0.21, 0.46, -0.145], (x, y, z, i, j) => (j % 5 === 0 ? 0x7a1e14 : 0xa82c1e)));   // cape
+  if (officer) p.torso.push(b([-0.21, -0.36, -0.2], [0.21, 0.46, -0.145], (x, y, z, i, j) => (j % 5 === 0 ? C.capeA ?? 0x7a1e14 : C.capeB ?? 0xa82c1e)));   // cape
   p.head = [
     b([-0.1, 0.02, -0.09], [0.1, 0.25, 0.11], C.skin),
     b([-0.1, 0.02, 0.06], [0.1, 0.07, 0.11], C.skinD, true),                           // jaw shadow
@@ -81,7 +94,8 @@ function bodyParts(C, officer) {
     b([-0.14, 0.18, -0.14], [0.14, 0.23, 0.14], C.band),                               // red headband
     b([-0.05, 0.05, -0.165], [-0.01, 0.2, -0.13], C.band), b([0.01, 0.09, -0.165], [0.05, 0.2, -0.13], C.band),   // knot tails
   ];
-  if (officer) {
+  if (head) p.head = head(C, officer, b, lamel);                                    // skin: its own head (wolf, sheep)
+  else if (officer) {
     p.head.push(
       b([-0.1, 0.0, 0.06], [0.1, 0.08, 0.13], 0x1e1612),                               // beard
       b([-0.25, 0.24, -0.02], [-0.13, 0.4, 0.03], C.helmHi), b([0.13, 0.24, -0.02], [0.25, 0.4, 0.03], C.helmHi),   // wings
@@ -109,54 +123,55 @@ function bodyParts(C, officer) {
 
 // weapons in weapon space: grip at the origin, +Z along the weapon
 const box = (s, p, c) => ({ s, p, c });
-function weaponGeos() {
-  const spear = boxesGeometry([
+function weaponGeos(W = {}) {
+  const spear = boxesGeometry(W.spear || [
     box([0.042, 0.042, 2.0], [0, 0, 0.38], WOOD), box([0.065, 0.065, 0.06], [0, 0, -0.62], 0x2a1d16),
     box([0.07, 0.07, 0.05], [0, 0, 1.4], BRONZE), box([0.1, 0.1, 0.08], [0, -0.02, 1.35], RED), box([0.05, 0.08, 0.08], [0, -0.08, 1.31], RED),
     box([0.085, 0.028, 0.16], [0, 0, 1.5], STEEL), box([0.05, 0.028, 0.12], [0, 0, 1.63], STEEL), box([0.025, 0.028, 0.06], [0, 0, 1.71], STEEL),
   ]);
-  const sword = boxesGeometry([
+  const sword = boxesGeometry(W.sword || [
     box([0.045, 0.045, 0.2], [0, 0, -0.02], 0x2a1d16), box([0.06, 0.06, 0.05], [0, 0, -0.14], BRONZE),
     box([0.05, 0.14, 0.04], [0, 0, 0.1], BRONZE),
     box([0.022, 0.085, 0.66], [0, 0.005, 0.45], STEEL), box([0.022, 0.1, 0.12], [0, 0.02, 0.76], STEEL), box([0.022, 0.05, 0.06], [0, 0.05, 0.84], STEEL),
   ]);
-  const glaive = boxesGeometry([
+  const glaive = boxesGeometry(W.glaive || [
     box([0.05, 0.05, 2.3], [0, 0, 0.45], 0x3a2418), box([0.08, 0.08, 0.06], [0, 0, 1.6], BRONZE),
     box([0.14, 0.14, 0.12], [0, 0, 1.52], RED),
     box([0.028, 0.16, 0.5], [0, 0.05, 1.9], STEEL), box([0.028, 0.1, 0.14], [0, 0.11, 2.2], STEEL), box([0.03, 0.06, 0.06], [0, -0.05, 1.7], BRONZE),
   ]);
-  const pole = boxesGeometry([
+  const pole = boxesGeometry(W.pole || [
     box([0.055, 0.055, 3.5], [0, 0, 0.9], WOOD), box([1.0, 0.045, 0.045], [0.45, 0, 2.55], WOOD),
     box([0.09, 0.09, 0.14], [0, 0, 2.72], BRONZE), box([0.14, 0.14, 0.12], [0, 0, 2.6], RED),
   ]);
   // round shield strapped to the forearm: centred in front of it, facing +Z of the hand frame
-  const R = 0.29;
+  const R = 0.29, SH = W.shield || { rim: BRONZE, a: 0x7a2418, b: 0x5e1a12, boss: 0xe0b860, ring: 0xc8a050 };
   const shieldBoxes = [b([-R, 0.12 - R, 0.07], [R, 0.12 + R, 0.13], (x, y, z) => {
     const r = Math.hypot(x, y - 0.12);
     if (r > R) return null;
     if (z < 0.1 && r > R - 0.06) return null;                                         // bevel the back
-    if (r > R - 0.05) return BRONZE;
-    if (r < 0.06) return z > 0.1 ? 0xe0b860 : BRONZE;
-    if (Math.abs(r - 0.16) < 0.025) return 0xc8a050;
-    return (Math.floor(Math.atan2(x, y - 0.12) / (Math.PI / 4)) & 1) ? 0x7a2418 : 0x5e1a12;
-  }), b([-0.07, 0.1, 0.13], [0.07, 0.15, 0.17], 0xe0b860)];
+    if (r > R - 0.05) return SH.rim;
+    if (r < 0.06) return z > 0.1 ? SH.boss : SH.rim;
+    if (Math.abs(r - 0.16) < 0.025) return SH.ring;
+    return (Math.floor(Math.atan2(x, y - 0.12) / (Math.PI / 4)) & 1) ? SH.a : SH.b;
+  }), b([-0.07, 0.1, 0.13], [0.07, 0.15, 0.17], SH.boss)];
   const shield = sculpt(shieldBoxes, V, 0.1), mid_shield = sculpt(shieldBoxes, V * 2, 0.1);
   // far LOD shield (≈ 36 tris vs ≈ 736): a stepped cross of solid boxes, the painted face's red + the bronze boss
-  const far_shield = boxesGeometry([box([0.58, 0.34, 0.06], [0, 0.12, 0.1], 0x6a1f15), box([0.34, 0.58, 0.06], [0, 0.12, 0.1], 0x6a1f15),
-    box([0.12, 0.12, 0.05], [0, 0.12, 0.14], 0xc8a050)]);
+  const far_shield = boxesGeometry([box([0.58, 0.34, 0.06], [0, 0.12, 0.1], SH.far ?? 0x6a1f15), box([0.34, 0.58, 0.06], [0, 0.12, 0.1], SH.far ?? 0x6a1f15),
+    box([0.12, 0.12, 0.05], [0, 0.12, 0.14], SH.ring)]);
   return { spear, sword, glaive, pole, shield, mid_shield, far_shield };
 }
 
-/** All crowd geometries. */
-function buildCrowdGeometries() {
+/** All crowd geometries for a foe skin and an ally skin (defaults: WEI, SHU_SKIN = upstream). */
+function buildCrowdGeometries(foe = WEI, ally = SHU_SKIN) {
   const g = {};
-  const grunt = bodyParts(GRUNT, false), off = bodyParts(OFFICER, true);
+  const grunt = bodyParts(foe.palette, false, foe.head), off = bodyParts(foe.officerPalette || foe.palette, true, foe.head);
+  if (foe.crest) grunt.crest = foe.crest(foe.palette, b);
   for (const k of ['hips', 'torso', 'head', 'crest', 'arm', 'thigh', 'shin']) g[k] = sculpt(grunt[k], V, 0.12);
   for (const k of ['hips', 'torso', 'head', 'arm', 'thigh', 'shin']) g['o_' + k] = sculpt(off[k], V, 0.1);
   // mid LOD (8-28 m from the lens): the same parts re-voxelised at twice the voxel size — ≈ a quarter of the faces, same silhouette,
   // lamellar rows and headband still read at that range
   for (const k of ['hips', 'torso', 'head', 'arm', 'thigh', 'shin']) g['mid_' + k] = sculpt(grunt[k], V * 2, 0.12);
-  const shu = bodyParts(SHU, false);                                                  // Shu allies: same parts, all three LODs
+  const shu = bodyParts(ally.palette, false, ally.head);                              // Shu allies: same parts, all three LODs
   for (const k of ['hips', 'torso', 'head', 'arm', 'thigh', 'shin']) { g['s_' + k] = sculpt(shu[k], V, 0.12); g['smid_' + k] = sculpt(shu[k], V * 2, 0.12); }
   // grunt shadow proxies: the same solid boxes, un-voxelised (~12 tris each) — the shadow pass never sees the voxel
   // detail. Hips + torso + head share one proxy on the torso matrix.
@@ -172,7 +187,8 @@ function buildCrowdGeometries() {
   for (const k of ['arm', 'thigh', 'shin']) g['far_' + k] = boxesGeometry(far(grunt[k]));
   g.sfar_trunk = boxesGeometry([...far(shu.hips, -J.waist), ...far(shu.torso), ...far(shu.head, J.neck)]);
   for (const k of ['arm', 'thigh', 'shin']) g['sfar_' + k] = boxesGeometry(far(shu[k]));
-  Object.assign(g, weaponGeos());
+  Object.assign(g, weaponGeos(foe.weapons));
+  if (ally.weapons) for (const [k, v] of Object.entries(weaponGeos(ally.weapons))) g['a_' + k] = v;   // the allies' own weapons
   // officer marker ▼ (voxel rows 7-5-3-1, gold rim around red)
   const tri = [];
   for (let r = 0; r < 4; r++) for (let q = 0; q < 7 - r * 2; q++) {
@@ -386,8 +402,8 @@ export function createCrowdView(scene, game) {
       p.instanceMatrix = m.instanceMatrix; p.castShadow = true; p.frustumCulled = false; p.count = 0;
       // perf r5: shadow pass only — the main pass calls onBeforeRender (the shadow pass doesn't), so the invisible proxy
       // draws 0 indices there (it used to cost as many main-pass tris as its shadow: ≈ 110k at C6)
-      p.onBeforeRender = () => { shadow.drawRange.count = 0; };
-      p.onAfterRender = () => { shadow.drawRange.count = Infinity; };
+      p.onBeforeRender = () => { p.geometry.drawRange.count = 0; };      // (the skin hook may swap the proxy geometry)
+      p.onAfterRender = () => { p.geometry.drawRange.count = Infinity; };
       scene.add(p); proxies.push([p, m]);
     }
     return m;
@@ -441,6 +457,47 @@ export function createCrowdView(scene, game) {
   M.flare.renderOrder = 6;
 
   // per-soldier render state: blended pose channels, a "seen" flag (snap on first sight), stable look variety
+  // ---- skins (stage-2c hook): on a battle start whose chapter names another skin, every part / weapon mesh gets that skin's
+  // geometry (built once per foe|ally pair, cached), the standards their cloth (or none), the allies their own weapons
+  const keyOf = new Map();                                  // mesh / shadow proxy → its geometry key in `geos`
+  for (const m of [...meshes, ...proxies.map(([q]) => q)]) for (const k in geos) if (geos[k] === m.geometry) { keyOf.set(m, k); break; }
+  const skinGeos = { 'wei|shu': geos }, flags = { foe: true, ally: true };
+  let skinKey = 'wei|shu', AW = null;                       // AW: the allies' weapon meshes (an ally skin with weapons)
+  const allyWeapons = {};
+  function applySkin(foeId, allyId) {
+    const key = foeId + '|' + allyId;
+    if (key === skinKey) return;
+    skinKey = key;
+    const foe = SKINS[foeId] || WEI, ally = SKINS[allyId] || SHU_SKIN;
+    const G2 = skinGeos[key] || (skinGeos[key] = buildCrowdGeometries(foe, ally));
+    for (const [m, k] of keyOf) { const aHit = m.geometry.attributes.aHit; m.geometry = G2[k]; if (aHit) m.geometry.setAttribute('aHit', aHit); }
+    flags.foe = !!foe.flag; flags.ally = !!ally.flag;
+    if (foe.flag) { flagMat.map.dispose(); flagMat.map = flagTexture(foe.flag.glyph, foe.flag.bg); }
+    if (ally.flag) { shuFlagMat.map.dispose(); shuFlagMat.map = flagTexture(ally.flag.glyph, ally.flag.bg); }
+    AW = null;
+    if (ally.weapons) {
+      AW = allyWeapons[allyId] || (allyWeapons[allyId] = Object.fromEntries(['spear', 'sword', 'glaive', 'pole', 'shield', 'mid_shield', 'far_shield']
+        .map((k) => [k, mk(G2['a_' + k], A)])));
+    }
+  }
+  // ---- officer models (stage-2c hook): officers the story spawned with a model key (story.modelOf) draw their own parts
+  const OM = {};
+  function officerModel(key) {
+    if (key in OM) return OM[key];
+    const d = OFFICER_MODELS[key];
+    if (!d) return (OM[key] = null);
+    const n = 2, gp = {};
+    for (const k of ['hips', 'torso', 'head', 'arm', 'thigh', 'shin']) gp[k] = sculpt(d.parts[k], V, 0.1);
+    const P = { hips: mk(gp.hips, n), torso: mk(gp.torso, n), head: mk(gp.head, n), arm: mk(gp.arm, n * 2), thigh: mk(gp.thigh, n * 2), shin: mk(gp.shin, n * 2) };
+    return (OM[key] = { d, P, w: mk(boxesGeometry(d.weapon), n), haft: d.broken ? mk(boxesGeometry(d.broken.haft), n) : null,
+      head: d.broken ? mk(boxesGeometry(d.broken.head), n) : null });
+  }
+  on('scenario', () => {
+    const CH = game.story.chapter, sk = (CH && CH.skin) || {};
+    applySkin(sk.foe || 'wei', sk.ally || 'shu');
+    for (const k in (CH && CH.OFF) || {}) if (CH.OFF[k].model) officerModel(CH.OFF[k].model);   // built under the loading card
+  });
+
   const cur = new Float32Array(N * NCH), T = new Float32Array(NCH), C = new Float32Array(NCH), seen = new Uint8Array(N);
   const tint = new Float32Array(N), side = new Float32Array(N), size = new Float32Array(N);
   for (let i = 0; i < N; i++) { tint[i] = 0.86 + h01(i) * 0.28; side[i] = h01(i, 1) < 0.5 ? 1 : -1; size[i] = 0.96 + h01(i, 2) * 0.08; }
@@ -609,7 +666,8 @@ export function createCrowdView(scene, game) {
     for (let j = 0; j < NCH; j++) { cur[o + j] += (T[j] - cur[o + j]) * k; C[j] = cur[o + j]; }
     // pelvis height from the legs (bent knees lower the body; lying overrides)
     const pel = -J.hipY + Math.max(legH(C[TL], C[SL], C[TL + 2]), legH(C[TR], C[SR], C[TR + 2]));
-    const sc = (officer ? 1.16 : kind === KIND.CAPTAIN ? 1.06 : 1) * size[i];
+    const mkey = officer && game.story.modelOf ? game.story.modelOf(i) : null, om = mkey ? officerModel(mkey) : null;
+    const sc = (om ? om.d.scale ?? 1.16 : officer ? 1.16 : kind === KIND.CAPTAIN ? 1.06 : 1) * size[i];
     const rx = crowd.rx[i];
     let y = crowd.y[i] + pel * sc;
     if (s >= ST.AIR && s <= ST.DEAD) {
@@ -631,7 +689,7 @@ export function createCrowdView(scene, game) {
     const hotStrike = s === ST.ATTACK && !crowd.feint[i] && crowd.foe[i] < 0 && t >= game.diff.windup - 14 && t < game.diff.windup;
     if (cap) _c.setRGB(_ch.r * 1.45, _ch.g * 1.1, _ch.b * 0.7); else _c.copy(_ch);                  // captains: bronze armour
     const ally = i >= NW, far = farNow && !officer;
-    const P = officer ? PO : ally ? (far ? PSF : midNow ? PSM : PS) : far ? PF : midNow ? PM : PG;
+    const P = om ? om.P : officer ? PO : ally ? (far ? PSF : midNow ? PSM : PS) : far ? PF : midNow ? PM : PG;
     mHips.copy(_root); if (!far) push(P.hips, mHips, _c);
     local(mTorso, mHips, 0, J.waist, 0, C[TO], C[TO + 1], C[TO + 2]); push(P.torso, mTorso, _c);
     local(mOut, mTorso, 0, J.neck, 0, C[HE], C[HE + 1], C[HE + 2]); if (!far) push(P.head, mOut, _ch);
@@ -645,16 +703,24 @@ export function createCrowdView(scene, game) {
     // weapons
     _g[0] = _g[1] = _g[2] = 0;                               // hit-impact: the victim tint is body-only (DW keeps weapons neutral)
     local(mW, mArmR, 0, -J.hand, 0, C[WR], C[WR + 1], C[WR + 2]);
-    const wm = g === 0 ? M.spear : g === 1 ? M.sword : g === 2 ? M.glaive : M.pole;
-    push(wm, mW, _c);
-    if (g === 3) push(ally ? M.shuFlag : M.flag, mW, null);
-    if (g === 1) push(far ? M.far_shield : midNow ? M.mid_shield : M.shield, local(mOut, mArmL, 0, -J.hand, 0, C[WL], C[WL + 1], C[WL + 2]), _c);
+    const WS = ally && AW ? AW : M;                          // skin hook: the allies' own weapons
+    const wm = g === 0 ? WS.spear : g === 1 ? WS.sword : g === 2 ? WS.glaive : WS.pole;
+    if (om) {                                                // officer model: its weapon; KO'd, the haft stays in hand, the head lies by him
+      if (s === ST.DEAD && om.haft) {
+        push(om.haft, mW, _c);
+        const yw = crowd.yaw[i] + 0.9, gx = crowd.x[i] + Math.sin(yw) * 1.4 * sc, gz = crowd.z[i] + Math.cos(yw) * 1.4 * sc;
+        _tmp.makeRotationFromEuler(_e.set(-Math.PI / 2, yw, 0.35)).scale(_v.set(sc, sc, sc)).setPosition(gx, ground(gx, gz) + 0.06, gz);
+        push(om.head, _tmp, _c);
+      } else push(om.w, mW, _c);
+    } else push(wm, mW, _c);
+    if (g === 3 && (ally ? flags.ally : flags.foe)) push(ally ? M.shuFlag : M.flag, mW, null);
+    if (g === 1) push(far ? WS.far_shield : midNow ? WS.mid_shield : WS.shield, local(mOut, mArmL, 0, -J.hand, 0, C[WL], C[WL + 1], C[WL + 2]), _c);
     // telegraph: pixel-star glint on the weapon tip through the wind-up (drawn over the crowd); a real blow flares it
     // into a big solid red pixel star (white core) for the last 14 sf
     if (s === ST.ATTACK && t >= 3 && t < game.diff.windup && M.glint.count < 32 && crowd.foe[i] < 0) {
       const pulse = hotStrike ? 0.46 + 0.16 * Math.abs(Math.sin(t * 0.9)) : 0.2 + 0.12 * Math.abs(Math.sin(t * 0.33)) + (t < 10 ? (10 - t) * 0.025 : 0);
       _tmp.makeRotationFromEuler(_e.set(t * 0.07, t * 0.11, 0.6)).scale(_v.set(pulse, pulse, pulse));
-      _tmp.setPosition(_v.set(0, 0, TIP[g]).applyMatrix4(mW));
+      _tmp.setPosition(_v.set(0, 0, om ? om.d.tip : TIP[g]).applyMatrix4(mW));
       if (hotStrike) { push(M.flare, _tmp, null); _tmp.scale(_v.set(0.45, 0.45, 0.45)); }
       push(M.glint, _tmp, _glintCold);
     }

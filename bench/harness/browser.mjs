@@ -13,7 +13,7 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/ja
   '.png': 'image/png', '.jpg': 'image/jpeg', '.gif': 'image/gif', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.wasm': 'application/wasm' };
 
 const PATCH = `
-;window.__vm = { game, flow, input, screens, camRig, render, get state() { return state; }, get paused() { return paused; } };`;
+;window.__vm = { game, flow, input, screens, camRig, render, scene, world, get state() { return state; }, get paused() { return paused; } };`;
 
 export function serve(root = ROOT) {
   return new Promise((ok) => {

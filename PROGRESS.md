@@ -8,7 +8,7 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 1 Seam | done | Node 4/4 logs identical (finals 90a1a382 64989ea8 6c41979e 2c32ffdc), Chrome 2/2 × 6/6 checkpoints; menus → chapter pick → prologue → battle, 0 errors |
 | 2a Scroll player | done | 定軍山 prologue 12/12 frames pixel-identical (both officers); scroll-flow 11/11 (ending only after a win of a chapter with ENDING, tap / hold / Esc, tribute → title); Node 4/4 |
 | 2b Dual-wield rig | done | rig probe 54/54 upstream clips joint-identical; dual probe 216 reachable grips: hand→grip 0.00 mm, fist→blade 0.000°, right hand moved 0; Node 4/4 |
-| 2c Crowd skin + officer hook | todo | |
+| 2c Crowd skin + officer hook | done | Wei/Shu crowd 94/94 meshes geometry+texture identical; skin-test 4/4 (wolf + sheep skins render, keyed officer model, broken weapon on KO, ch1 back to Wei after); Node 4/4 |
 | 2d Bot autoplay | todo | |
 | 3 阿角 gok | todo | |
 | 4 狼督 + grey / shadow / iron | todo | |
@@ -19,7 +19,7 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 9 Critic rounds | todo | |
 | 10 Ship | todo | |
 
-**Next action:** stage 2c crowd skin + officer-model hook (wolf grunts, officer models by key).
+**Next action:** stage 2d bot autoplay driver (clears ch1 as both officers on 普通).
 
 ## Contract ids (Divide & Conquer page)
 
@@ -46,3 +46,5 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 - `src/ui/brush.woff2` is a glyph subset: new HUD / menu glyphs fall back to system fonts until it is re-subset (ship).
 - Critic backlog (stage 9): at 1280×720 the result screen's `.ui-foot` covers the 繼續 / 再戰 buttons (elementFromPoint
   hits the footer) — upstream layout; Enter works, the mouse doesn't.
+- Crowd skins: chapter `skin: { foe: 'wolf', ally: 'sheep' }`; officers `model: key` in OFF (chars/officers/index.js). Wolves read
+  nearly black under the golden-hour light — critic item (lift the greys) once the 羊村 maps set their own light.
