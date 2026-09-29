@@ -25,6 +25,7 @@
 // script follows the map lane's zone table instead of hard geometry; ['gate', dx, dz] = metres from the camp gate.
 // Line = { who, zh, en } or { who, huangzhong: [zh, en], zhaoyun: [zh, en] } (branch on the hero).
 //   who: 'hero' | 'ally' | a SPK key.
+import { peaks, arrows } from './scrollkit.js';
 
 export const SPK = {
   liubei: { name: { zh: '劉備', en: 'Liu Bei' }, seal: '劉', side: 'shu' },
@@ -197,6 +198,59 @@ export const BEATS = [
       zhaoyun: ['夏侯淵，已被常山趙子龍討取！', 'Xiahou Yuan has fallen to Zhao Zilong of Changshan!'] }],
   },
 ];
+
+// ---- scroll map (prologue.js; moved here as data by the scroll-player commit, viewBox 1600×900): ranges, 漢水, places,
+// troop arrows. Arrow = [id, side, cubic path M x y C ...]
+const ARROWS = [
+  ['shu1', 'shu', 'M150 880 C185 720 250 520 292 342'],
+  ['wei1', 'wei', 'M1040 330 C930 370 810 450 712 548'],
+  ['wei2', 'wei', 'M1060 350 C1040 450 990 540 930 590'],
+  ['shu2', 'shu', 'M318 338 C390 400 440 480 530 612'],
+  ['shu3', 'shu', 'M540 652 C570 616 596 574 626 536'],
+  ['shu4', 'shu', 'M668 520 C780 420 900 340 1020 318'],
+];
+export const MAP = `
+<svg class="pl-map" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <defs>
+    <filter id="pl-grain"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="3" seed="4"/>
+      <feColorMatrix values="0 0 0 0 .32  0 0 0 0 .22  0 0 0 0 .12  0 0 0 .55 -.18"/></filter>
+    <filter id="pl-ink" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="2" seed="9"/>
+      <feDisplacementMap in="SourceGraphic" scale="7"/></filter>
+    <filter id="pl-blot"><feGaussianBlur stdDeviation="30"/></filter>
+    <radialGradient id="pl-vig" cx="50%" cy="50%" r="72%"><stop offset="55%" stop-color="#3a2410" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#2a170a" stop-opacity=".62"/></radialGradient>
+    <linearGradient id="pl-mtn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b1d12" stop-opacity=".78"/>
+      <stop offset=".7" stop-color="#4a3522" stop-opacity=".25"/><stop offset="1" stop-color="#4a3522" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="#d8c197"/>
+  <g filter="url(#pl-blot)" fill="#8a5a2a" opacity=".16"><ellipse cx="260" cy="700" rx="260" ry="150"/><ellipse cx="1320" cy="180" rx="300" ry="120"/>
+    <ellipse cx="900" cy="760" rx="220" ry="90"/></g>
+  <g class="pl-mtns" fill="url(#pl-mtn)" filter="url(#pl-ink)">
+    ${peaks([[90, 190, 1.1], [210, 170], [330, 200, 1.2], [470, 160, .9], [600, 190, 1.1], [760, 170], [900, 185, 1.2], [1060, 160], [1200, 190, 1.1], [1350, 170, .9], [1500, 195, 1.2]], 120, 90)}
+    ${peaks([[120, 900, 1.2], [300, 880], [480, 905, 1.1], [820, 890, .9], [1000, 905, 1.2], [1180, 885], [1380, 900, 1.1], [1540, 890]], 130, 100)}
+    ${peaks([[250, 330, .7], [340, 318, .8]], 110, 70)}
+  </g>
+  <g class="pl-mark" data-id="dingjun" fill="url(#pl-mtn)" filter="url(#pl-ink)">${peaks([[560, 640, .9], [640, 620, 1.35], [730, 645, .85]], 150, 80)}</g>
+  <g class="pl-mark" data-id="river" filter="url(#pl-ink)" fill="none" stroke-linecap="round">
+    <path d="M-20 360 C180 330 300 420 460 430 S760 360 920 420 S1220 470 1380 420 S1560 400 1620 430" stroke="#6f7c78" stroke-width="30" opacity=".35"/>
+    <path d="M-20 360 C180 330 300 420 460 430 S760 360 920 420 S1220 470 1380 420 S1560 400 1620 430" stroke="#46524f" stroke-width="7" opacity=".7"/>
+  </g>
+  <rect width="1600" height="900" filter="url(#pl-grain)"/>
+  <g class="pl-arrows" filter="url(#pl-ink)">
+    ${arrows(ARROWS)}
+  </g>
+  <g class="pl-labels">
+    <g class="pl-mark" data-id="yangping"><rect x="276" y="286" width="30" height="30" rx="3"/><text x="330" y="312">陽平關</text></g>
+    <g class="pl-mark" data-id="nanzheng"><rect x="1042" y="282" width="36" height="36" rx="3"/><text x="1034" y="350">南鄭</text></g>
+    <g class="pl-mark wei" data-id="dingjun"><text x="600" y="690">定軍山</text><text class="sm" x="686" y="520">夏侯淵</text></g>
+    <g class="pl-mark wei" data-id="east"><text class="sm" x="880" y="650">張郃 東圍</text></g>
+    <g class="pl-mark" data-id="river"><text class="sm river" x="190" y="412">漢 水</text></g>
+  </g>
+  <rect width="1600" height="900" fill="url(#pl-vig)"/>
+</svg>`;
+
+// chapter stamp after the last card (prologue.js): small line, big title, red seal, English line
+export const STAMP = { small: '第一章', big: '定軍山', seal: '漢中之戰', en: 'CHAPTER I · MOUNT DINGJUN' };
 
 // ---- prologue (prologue.js): ink-scroll cards over the 漢中 map. cols: vertical calligraphy columns (right to left);
 // show: map marks drawn in on this card (arrows animate in, labels light up); focus: map point + zoom the view drifts to.

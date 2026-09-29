@@ -255,7 +255,7 @@
   #menu .hint { margin: 3rem 0 0 .4rem; font: 500 max(13px, 1.4rem)/1.5 var(--sans); letter-spacing: .08em; opacity: .85; }
 
   /* ---- flow screens (main.js): one fixed full-screen layer each, shown one at a time (hidden attribute);
-     ui lane: #title #select · story lane: #prologue #result — each lane styles its own screen below its own marker. */
+     ui lane: #title #select · story lane: :is(#prologue, #ending) #result — each lane styles its own screen below its own marker. */
   .scr { position: fixed; inset: 0; z-index: 3; color: #f4ead8; font-family: var(--kai); user-select: none; }
   /* ui lane: #title / #select styles (+ #ink wipe, .ui-foot prompts, .ui-stamp seal, #menu look). Ink-wash + lacquer +
      gold leaf in the HUD's language: brush calligraphy (--brush / --kai), red seals, gold-leaf gradients; 1rem = 1/72 vh. */
@@ -267,9 +267,9 @@
   /* key chips on the screens and the pause menu (the HUD has its own, #hud kbd); .pad = a round gamepad face button */
   .scr kbd, #menu kbd { display: inline-block; font: 600 max(12px, 1.3rem)/1 var(--sans); padding: .3rem .5rem; margin-right: .3rem; min-width: 1rem;
     text-align: center; border: .12rem solid rgba(239,227,207,.6); border-radius: .35rem; background: rgba(0,0,0,.45); color: var(--paper); }
-  #title kbd, #prologue kbd { border-color: rgba(239,227,207,.75); background: rgba(0,0,0,.6); }
+  #title kbd, :is(#prologue, #ending) kbd { border-color: rgba(239,227,207,.75); background: rgba(0,0,0,.6); }
   #select kbd { font-size: 1.2rem; border-color: rgba(239,227,207,.55); background: rgba(0,0,0,.4); }
-  #prologue kbd { margin-right: .4rem; min-width: auto; text-align: inherit; text-shadow: none; color: #f6ecd9; }
+  :is(#prologue, #ending) kbd { margin-right: .4rem; min-width: auto; text-align: inherit; text-shadow: none; color: #f6ecd9; }
   #menu kbd { display: inline; font-size: 1.5rem; padding: .3rem .6rem; border-radius: .4rem; min-width: auto; text-align: inherit; color: inherit; }
   #menu .hint kbd { font-size: max(12px, 1.3rem); }
   #title kbd.pad, #select kbd.pad, #menu kbd.pad { border-radius: 50%; min-width: 0; width: max(12px, 1.3rem); padding: .3rem; color: #1a120d;
@@ -284,7 +284,7 @@
   /* red seals (HUD, menu, stamp, ink wait, title, select, loading, prologue): vertical brush glyphs on vermilion inside a
      pale ring. Each sets --sz, --pad and, where it differs, --lh, --rad, --glyph (glyph + ring rgb), --r1 / --r2 (ring
      edges), --ra (ring alpha), --drop (outer shadow). :where = no specificity, so every site's own rules win */
-  :where(#hud .seal, #menu .t i, .ui-stamp, .ink-wait i, .t-seal, .t-tag i, .s-card > i, .s-seal, .l-seal, .l-tip span, #prologue .pl-stamp i) {
+  :where(#hud .seal, #menu .t i, .ui-stamp, .ink-wait i, .t-seal, .t-tag i, .s-card > i, .s-seal, .l-seal, .l-tip span, :is(#prologue, #ending) .pl-stamp i) {
     --glyph: 251 233 214; font: 700 var(--sz)/var(--lh, 1.05) var(--brush); font-style: normal; writing-mode: vertical-rl; padding: var(--pad);
     border-radius: var(--rad, .3rem); color: rgb(var(--glyph)); background: var(--sealr); text-shadow: none;
     box-shadow: inset 0 0 0 var(--r1) var(--sealr), inset 0 0 0 var(--r2) rgb(var(--glyph) / var(--ra, .75)), var(--drop, 0 0 #0000); }
@@ -626,91 +626,91 @@
   @keyframes barSheen { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
   #result .ui-foot { left: 8vw; right: 6rem; }
 
-  /* story lane: #prologue / #result styles */
+  /* story lane: :is(#prologue, #ending) / #result styles */
   /* prologue: a handscroll on dark brocade. The paper unrolls from the centre (clip-path) as the two rods slide out; the
      map (SVG) drifts per card; columns are written by a ragged brush-tip mask sweeping down each one. */
-  #prologue { overflow: hidden; --ink: #1b120c; --shu: #1d5560; --wei: #a8281d;
+  :is(#prologue, #ending) { overflow: hidden; --ink: #1b120c; --shu: #1d5560; --wei: #a8281d;
     --brushmask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 300' preserveAspectRatio='none'><path d='M0 0H100V146L94 151 87 147 80 156 71 149 63 160 55 150 47 162 38 151 30 158 22 149 14 155 7 148 0 153Z' fill='black'/><path d='M0 150L9 156 18 152 27 161 39 155 50 166 60 156 70 163 81 154 91 160 100 152V144H0Z' fill='black' opacity='.45'/></svg>");
     background: radial-gradient(ellipse at 50% 50%, rgba(40,30,22,0) 40%, rgba(0,0,0,.6)),
       repeating-linear-gradient(45deg, rgba(214,170,90,.06) 0 .15rem, transparent .15rem 1.4rem),
       repeating-linear-gradient(-45deg, rgba(214,170,90,.06) 0 .15rem, transparent .15rem 1.4rem), #16211f; }
   /* out (prologue.js go): the scroll lifts toward the lens and fades off the live field; the HUD then slides in (#hud.in) */
-  #prologue.out { opacity: 0; transition: opacity .5s ease-in .05s; }
-  #prologue.out :is(.pl-paper, .pl-rod) { scale: 1.05; transition: scale .6s cubic-bezier(.3,0,.2,1); }
-  #prologue .pl-paper { position: absolute; inset: 4.4vh 4.6vw; overflow: hidden; background: #d8c197; clip-path: inset(0 50% 0 50%);
+  :is(#prologue, #ending).out { opacity: 0; transition: opacity .5s ease-in .05s; }
+  :is(#prologue, #ending).out :is(.pl-paper, .pl-rod) { scale: 1.05; transition: scale .6s cubic-bezier(.3,0,.2,1); }
+  :is(#prologue, #ending) .pl-paper { position: absolute; inset: 4.4vh 4.6vw; overflow: hidden; background: #d8c197; clip-path: inset(0 50% 0 50%);
     box-shadow: 0 0 0 .25rem #b8893a, 0 0 0 .6rem #2a1c10, 0 1.2rem 3rem rgba(0,0,0,.7); }
-  #prologue.open .pl-paper { clip-path: inset(0 0 0 0); transition: clip-path 1.15s cubic-bezier(.6,.05,.25,1); }
-  #prologue .pl-rod { position: absolute; top: 2.2vh; bottom: 2.2vh; width: 1.9vw; left: calc(50% - .95vw); border-radius: .5rem;
+  :is(#prologue, #ending).open .pl-paper { clip-path: inset(0 0 0 0); transition: clip-path 1.15s cubic-bezier(.6,.05,.25,1); }
+  :is(#prologue, #ending) .pl-rod { position: absolute; top: 2.2vh; bottom: 2.2vh; width: 1.9vw; left: calc(50% - .95vw); border-radius: .5rem;
     background: linear-gradient(90deg, #2a160a, #6b3f1e 35%, #8a5a2c 50%, #4a2a12 75%, #1e1006);
     box-shadow: 0 -.9rem 0 -.2rem #c79a3e, 0 .9rem 0 -.2rem #c79a3e, 0 .6rem 1.4rem rgba(0,0,0,.6); }
-  #prologue.open .pl-rod { transition: left 1.15s cubic-bezier(.6,.05,.25,1); }
-  #prologue.open .pl-rod.l { left: 2.7vw; }
-  #prologue.open .pl-rod.r { left: calc(100% - 4.6vw); }
-  #prologue .pl-map { position: absolute; inset: 0; width: 100%; height: 100%; transition: transform 2.8s cubic-bezier(.4,0,.2,1); }
-  #prologue .pl-mark { opacity: .42; transition: opacity 1s; }
-  #prologue .pl-mark.on { opacity: .8; }
-  #prologue .pl-mark.hot { opacity: 1; }
-  #prologue .pl-labels text { font: 700 46px var(--brush); fill: #24160b; stroke: rgba(232,214,178,.75); stroke-width: 7px; paint-order: stroke; }
-  #prologue .pl-labels text.sm { font-size: 32px; }
-  #prologue .pl-labels text.river { fill: #3d4b48; letter-spacing: 14px; }
-  #prologue .pl-labels .wei text { fill: #8e2016; }
-  #prologue .pl-labels rect { fill: rgba(232,214,178,.6); stroke: #24160b; stroke-width: 4px; }
-  #prologue .pl-arw { opacity: .4; transition: opacity 1s; }
-  #prologue .pl-arw.hot { opacity: 1; }
-  #prologue .pl-arw > path { fill: none; stroke-linecap: round; stroke-dasharray: 1.01 1.01; stroke-dashoffset: 1.01; }
-  #prologue .pl-arw .u { stroke-width: 28px; opacity: .2; }
-  #prologue .pl-arw .s { stroke-width: 11px; }
-  #prologue .pl-arw.shu > path { stroke: var(--shu); }
-  #prologue .pl-arw.wei > path { stroke: var(--wei); }
-  #prologue .pl-arw.shu .hd { fill: var(--shu); }
-  #prologue .pl-arw.wei .hd { fill: var(--wei); }
-  #prologue .pl-arw .hd { opacity: 0; }
-  #prologue .pl-arw.on > path { stroke-dashoffset: 0; transition: stroke-dashoffset 1.7s cubic-bezier(.5,0,.3,1) .5s; }
-  #prologue .pl-arw.on .hd { opacity: 1; transition: opacity .25s 2s; }
-  #prologue .pl-card { position: absolute; right: 7vw; top: 6vh; bottom: 19vh; opacity: 0; transition: opacity .35s; }
-  #prologue .pl-card.on { opacity: 1; }
+  :is(#prologue, #ending).open .pl-rod { transition: left 1.15s cubic-bezier(.6,.05,.25,1); }
+  :is(#prologue, #ending).open .pl-rod.l { left: 2.7vw; }
+  :is(#prologue, #ending).open .pl-rod.r { left: calc(100% - 4.6vw); }
+  :is(#prologue, #ending) .pl-map { position: absolute; inset: 0; width: 100%; height: 100%; transition: transform 2.8s cubic-bezier(.4,0,.2,1); }
+  :is(#prologue, #ending) .pl-mark { opacity: .42; transition: opacity 1s; }
+  :is(#prologue, #ending) .pl-mark.on { opacity: .8; }
+  :is(#prologue, #ending) .pl-mark.hot { opacity: 1; }
+  :is(#prologue, #ending) .pl-labels text { font: 700 46px var(--brush); fill: #24160b; stroke: rgba(232,214,178,.75); stroke-width: 7px; paint-order: stroke; }
+  :is(#prologue, #ending) .pl-labels text.sm { font-size: 32px; }
+  :is(#prologue, #ending) .pl-labels text.river { fill: #3d4b48; letter-spacing: 14px; }
+  :is(#prologue, #ending) .pl-labels .wei text { fill: #8e2016; }
+  :is(#prologue, #ending) .pl-labels rect { fill: rgba(232,214,178,.6); stroke: #24160b; stroke-width: 4px; }
+  :is(#prologue, #ending) .pl-arw { opacity: .4; transition: opacity 1s; }
+  :is(#prologue, #ending) .pl-arw.hot { opacity: 1; }
+  :is(#prologue, #ending) .pl-arw > path { fill: none; stroke-linecap: round; stroke-dasharray: 1.01 1.01; stroke-dashoffset: 1.01; }
+  :is(#prologue, #ending) .pl-arw .u { stroke-width: 28px; opacity: .2; }
+  :is(#prologue, #ending) .pl-arw .s { stroke-width: 11px; }
+  :is(#prologue, #ending) .pl-arw.shu > path { stroke: var(--shu); }
+  :is(#prologue, #ending) .pl-arw.wei > path { stroke: var(--wei); }
+  :is(#prologue, #ending) .pl-arw.shu .hd { fill: var(--shu); }
+  :is(#prologue, #ending) .pl-arw.wei .hd { fill: var(--wei); }
+  :is(#prologue, #ending) .pl-arw .hd { opacity: 0; }
+  :is(#prologue, #ending) .pl-arw.on > path { stroke-dashoffset: 0; transition: stroke-dashoffset 1.7s cubic-bezier(.5,0,.3,1) .5s; }
+  :is(#prologue, #ending) .pl-arw.on .hd { opacity: 1; transition: opacity .25s 2s; }
+  :is(#prologue, #ending) .pl-card { position: absolute; right: 7vw; top: 6vh; bottom: 19vh; opacity: 0; transition: opacity .35s; }
+  :is(#prologue, #ending) .pl-card.on { opacity: 1; }
   /* the inscription panel: paper washed pale behind the columns, so the map never fights the calligraphy */
-  #prologue .pl-card::before { content: ""; position: absolute; top: -10vh; bottom: -30vh; left: -9rem; right: -8vw; z-index: -1;
+  :is(#prologue, #ending) .pl-card::before { content: ""; position: absolute; top: -10vh; bottom: -30vh; left: -9rem; right: -8vw; z-index: -1;
     background: linear-gradient(90deg, rgba(226,206,166,0), rgba(226,206,166,.86) 8rem); }
-  #prologue .pl-cols { writing-mode: vertical-rl; height: 100%; font: 700 5rem/1.3 var(--brush); letter-spacing: .6rem; color: var(--ink);
+  :is(#prologue, #ending) .pl-cols { writing-mode: vertical-rl; height: 100%; font: 700 5rem/1.3 var(--brush); letter-spacing: .6rem; color: var(--ink);
     text-shadow: .1rem .15rem .2rem rgba(60,30,10,.25); }
-  #prologue .pl-cols span { display: block; margin-left: 1.2rem;
+  :is(#prologue, #ending) .pl-cols span { display: block; margin-left: 1.2rem;
     -webkit-mask: var(--brushmask) 0 100% / 100% 300% no-repeat; mask: var(--brushmask) 0 100% / 100% 300% no-repeat; }
-  #prologue .pl-cols span:first-child { color: #6e1a12; }
-  #prologue .pl-card.on .pl-cols span { -webkit-mask-position: 0 0; mask-position: 0 0;
+  :is(#prologue, #ending) .pl-cols span:first-child { color: #6e1a12; }
+  :is(#prologue, #ending) .pl-card.on .pl-cols span { -webkit-mask-position: 0 0; mask-position: 0 0;
     transition: -webkit-mask-position 1.05s cubic-bezier(.55,.1,.35,1) calc(var(--i) * .55s + .2s), mask-position 1.05s cubic-bezier(.55,.1,.35,1) calc(var(--i) * .55s + .2s); }
-  #prologue .pl-en { position: absolute; right: 7vw; bottom: 10.5vh; margin: 0; max-width: 56rem; text-align: right; text-wrap: balance; opacity: 0;
+  :is(#prologue, #ending) .pl-en { position: absolute; right: 7vw; bottom: 10.5vh; margin: 0; max-width: 56rem; text-align: right; text-wrap: balance; opacity: 0;
     font: italic 500 1.75rem/1.45 var(--sans); letter-spacing: .04em; color: #3b2a1a; transition: opacity .3s; }
-  #prologue .pl-card.on + .pl-en, #prologue .pl-en.on { opacity: .9; transition: opacity .8s 1.9s; }
-  #prologue .pl-pips { position: absolute; left: 4vw; bottom: 5vh; display: flex; gap: 1.1rem; font: 700 2.2rem/1 var(--brush); color: rgba(42,26,14,.58); }
-  #prologue .pl-pips b { transition: color .4s; }
-  #prologue .pl-pips b.past { color: rgba(42,26,14,.85); }
-  #prologue .pl-pips b.on { color: var(--wei); }
+  :is(#prologue, #ending) .pl-card.on + .pl-en, :is(#prologue, #ending) .pl-en.on { opacity: .9; transition: opacity .8s 1.9s; }
+  :is(#prologue, #ending) .pl-pips { position: absolute; left: 4vw; bottom: 5vh; display: flex; gap: 1.1rem; font: 700 2.2rem/1 var(--brush); color: rgba(42,26,14,.58); }
+  :is(#prologue, #ending) .pl-pips b { transition: color .4s; }
+  :is(#prologue, #ending) .pl-pips b.past { color: rgba(42,26,14,.85); }
+  :is(#prologue, #ending) .pl-pips b.on { color: var(--wei); }
   /* skip legend in the brocade strip under the scroll: same kbd + label + romanisation layout as .ui-foot */
-  #prologue .pl-skip { position: absolute; right: 5.5vw; bottom: max(2px, calc(2.2vh - 1.4rem)); display: flex; align-items: center; gap: 3rem;
+  :is(#prologue, #ending) .pl-skip { position: absolute; right: 5.5vw; bottom: max(2px, calc(2.2vh - 1.4rem)); display: flex; align-items: center; gap: 3rem;
     font: 700 max(15px, 1.9rem)/1 var(--kai); color: #f6ecd9; text-shadow: 0 .1rem .3rem #000, 0 0 .8rem #000; }
-  #prologue .pl-skip span { display: flex; align-items: center; }
-  #prologue .pl-skip small { display: inline; margin-left: .7rem; font: 600 max(13px, 1.3rem)/1 var(--sans); letter-spacing: .12em; color: #e2d4b6; }
-  #prologue .pl-skip svg { width: 2.6rem; height: 2.6rem; margin-right: .6rem; transform: rotate(-90deg); }
-  #prologue .pl-skip circle { fill: none; stroke: rgba(239,227,207,.35); stroke-width: 3; }
-  #prologue .pl-skip circle.p { stroke: #f2c14e; stroke-dasharray: 1 1; stroke-dashoffset: 1; }
+  :is(#prologue, #ending) .pl-skip span { display: flex; align-items: center; }
+  :is(#prologue, #ending) .pl-skip small { display: inline; margin-left: .7rem; font: 600 max(13px, 1.3rem)/1 var(--sans); letter-spacing: .12em; color: #e2d4b6; }
+  :is(#prologue, #ending) .pl-skip svg { width: 2.6rem; height: 2.6rem; margin-right: .6rem; transform: rotate(-90deg); }
+  :is(#prologue, #ending) .pl-skip circle { fill: none; stroke: rgba(239,227,207,.35); stroke-width: 3; }
+  :is(#prologue, #ending) .pl-skip circle.p { stroke: #f2c14e; stroke-dasharray: 1 1; stroke-dashoffset: 1; }
   /* held (prologue.js .on): the ring fills over HOLD = .8 s; let go, it snaps back */
-  #prologue .pl-skip circle.p.on { stroke-dashoffset: 0; transition: stroke-dashoffset .8s linear; }
-  #prologue.stamped .pl-card, #prologue.stamped .pl-en, #prologue.stamped .pl-pips, #prologue.stamped .pl-skip { opacity: 0; transition: opacity .4s; }
-  #prologue .pl-stamp { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  :is(#prologue, #ending) .pl-skip circle.p.on { stroke-dashoffset: 0; transition: stroke-dashoffset .8s linear; }
+  :is(#prologue, #ending).stamped .pl-card, :is(#prologue, #ending).stamped .pl-en, :is(#prologue, #ending).stamped .pl-pips, :is(#prologue, #ending).stamped .pl-skip { opacity: 0; transition: opacity .4s; }
+  :is(#prologue, #ending) .pl-stamp { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
     opacity: 0; pointer-events: none; }
-  #prologue .pl-stamp::before { content: ""; position: absolute; inset: 0; z-index: -1;
+  :is(#prologue, #ending) .pl-stamp::before { content: ""; position: absolute; inset: 0; z-index: -1;
     background: radial-gradient(ellipse at center, rgba(226,206,166,.94) 0 32%, rgba(226,206,166,.5) 65%, rgba(226,206,166,0)); }
-  #prologue.stamped .pl-stamp { opacity: 1; transition: opacity .6s; }
-  #prologue .pl-stamp small { font: 700 3.4rem/1 var(--kai); letter-spacing: 1.8rem; margin-right: -1.8rem; color: #4a3020; }
-  #prologue .pl-stamp b { position: relative; margin: 1.4rem -2.2rem 1.8rem 0; font: 700 19rem/1 var(--brush); letter-spacing: 2.2rem; color: #140c07;
+  :is(#prologue, #ending).stamped .pl-stamp { opacity: 1; transition: opacity .6s; }
+  :is(#prologue, #ending) .pl-stamp small { font: 700 3.4rem/1 var(--kai); letter-spacing: 1.8rem; margin-right: -1.8rem; color: #4a3020; }
+  :is(#prologue, #ending) .pl-stamp b { position: relative; margin: 1.4rem -2.2rem 1.8rem 0; font: 700 19rem/1 var(--brush); letter-spacing: 2.2rem; color: #140c07;
     opacity: 0; transform: scale(1.3); filter: blur(1.2rem); text-shadow: .3rem .4rem .6rem rgba(60,30,10,.3); }
-  #prologue.stamped .pl-stamp b { opacity: 1; transform: none; filter: none; transition: opacity .7s .15s, transform 1s cubic-bezier(.2,.7,.2,1) .15s, filter 1s .15s; }
-  #prologue .pl-stamp i { position: absolute; left: calc(50% + 32rem); top: calc(50% - 1rem); height: 2.1em; opacity: 0; transform: rotate(-8deg) scale(2.4);
+  :is(#prologue, #ending).stamped .pl-stamp b { opacity: 1; transform: none; filter: none; transition: opacity .7s .15s, transform 1s cubic-bezier(.2,.7,.2,1) .15s, filter 1s .15s; }
+  :is(#prologue, #ending) .pl-stamp i { position: absolute; left: calc(50% + 32rem); top: calc(50% - 1rem); height: 2.1em; opacity: 0; transform: rotate(-8deg) scale(2.4);
     --sz: 3.2rem; --pad: .6rem .7rem; --rad: .45rem; --glyph: 248 230 210; --r1: .22rem; --r2: .4rem; --ra: .8; --drop: 0 .3rem .8rem rgba(60,10,5,.35); }
-  #prologue.stamped .pl-stamp i { opacity: .95; transform: rotate(-8deg); transition: transform .26s cubic-bezier(.3,1.5,.5,1) 1.05s, opacity .08s 1.05s; }
-  #prologue .pl-stamp em { font: 600 1.6rem/1 var(--sans); font-style: normal; letter-spacing: .9em; margin-right: -.9em; color: #4a3020; opacity: 0; }
-  #prologue.stamped .pl-stamp em { opacity: .85; transition: opacity .8s 1.4s; }
+  :is(#prologue, #ending).stamped .pl-stamp i { opacity: .95; transform: rotate(-8deg); transition: transform .26s cubic-bezier(.3,1.5,.5,1) 1.05s, opacity .08s 1.05s; }
+  :is(#prologue, #ending) .pl-stamp em { font: 600 1.6rem/1 var(--sans); font-style: normal; letter-spacing: .9em; margin-right: -.9em; color: #4a3020; opacity: 0; }
+  :is(#prologue, #ending).stamped .pl-stamp em { opacity: .85; transition: opacity .8s 1.4s; }
 
   /* result: ink wash over the frozen field; brush 勝利 / 敗北, counted tallies, the rank stamp, the epilogue */
   #result:not([hidden]) { display: flex; }
@@ -780,8 +780,27 @@
   @media (prefers-reduced-motion: reduce) {
     *, ::before, ::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
     .ink-wait svg { animation: none; }
-    #prologue.out :is(.pl-paper, .pl-rod) { scale: none; }
+    :is(#prologue, #ending).out :is(.pl-paper, .pl-rod) { scale: none; }
   }
+
+  /* scroll player (story lane): arrow sides of the 羊村 map, the tribute card after the ENDING scroll */
+  :is(#prologue, #ending) .pl-arw.sheep > path { stroke: var(--shu); }
+  :is(#prologue, #ending) .pl-arw.wolf > path { stroke: var(--wei); }
+  :is(#prologue, #ending) .pl-arw.sheep .hd { fill: var(--shu); }
+  :is(#prologue, #ending) .pl-arw.wolf .hd { fill: var(--wei); }
+  :is(#prologue, #ending) .pl-arw.sheep.dot > path.s { stroke-dasharray: .012 .018; stroke-dashoffset: 0; }
+  :is(#prologue, #ending) .pl-labels .wolf text { fill: #8e2016; }
+  :is(#prologue, #ending) .pl-labels .sheep text { fill: #1d4f58; }
+  #ending .pl-tribute { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; justify-content: center;
+    padding: 0 14vw; gap: 1.6rem; color: var(--ink); background: rgba(216,193,151,.94); opacity: 0; pointer-events: none; }
+  #ending.tribute .pl-tribute { opacity: 1; pointer-events: auto; transition: opacity .8s; }
+  #ending.tribute .pl-stamp { opacity: 0; transition: opacity .5s; }
+  #ending .pl-tribute h2 { margin: 0 0 1rem; font: 700 5rem/1.1 var(--brush); letter-spacing: .6rem; color: #6e1a12; }
+  #ending .pl-tribute h2 small { display: block; margin-top: .8rem; font: 600 max(13px, 1.4rem)/1 var(--sans); letter-spacing: .3em; color: #4a3020; }
+  #ending .pl-tribute p { margin: 0; font: 700 2.3rem/1.55 var(--kai); max-width: 90rem; }
+  #ending .pl-tribute p small { display: block; font: 500 max(13px, 1.45rem)/1.45 var(--sans); color: #3a2818; margin-top: .3rem; }
+  #ending .pl-tribute a { align-self: flex-start; margin-top: 1rem; font: 700 2rem/1 var(--kai); color: #6e1a12; text-decoration: underline; }
+  #ending .pl-tribute a small { margin-left: .8rem; font: 600 max(13px, 1.3rem)/1 var(--sans); letter-spacing: .08em; }
 </style>
 </head>
 <body class="inkhold">
@@ -800,6 +819,7 @@
 <div id="select" class="scr" hidden></div>
 <div id="loading" class="scr" hidden></div>
 <div id="prologue" class="scr" hidden></div>
+<div id="ending" class="scr" hidden></div>
 <div id="result" class="scr" hidden></div>
 <div id="ink" class="boot"><div class="ink-wait"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" stroke-width="2.6" stroke-dasharray="120 163"/>
   <circle cx="50" cy="50" r="41" stroke-width="1.2" stroke-dasharray="36 222" stroke-dashoffset="-150" opacity=".6"/></svg><i>無雙</i></div></div>

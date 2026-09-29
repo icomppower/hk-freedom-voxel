@@ -1,6 +1,6 @@
 // Boot, flow and the fixed 60 Hz loop. Sim modules (hero, combat, crowd, musou, story, camera control yaw) advance only
 // in step(); render-side modules read sim state in render() and never write it.
-// Flow: title → select → loading → (story: prologue →) battle → result → title. Each non-battle state is a DOM screen (index.html
+// Flow: title → select → loading → (story: prologue →) battle → result → (a won chapter with an ENDING scroll: ending →) title. Each non-battle state is a DOM screen (index.html
 // #title #select #loading #prologue #result, modules below: createX(el, flow) → { enter(ctx), exit(), view? }; view(scene, camera,
 // focus, dt) = optional render-only camera/stage hook run after the gameplay rig while that screen is up); the sim only steps in
 // 'battle' and not paused (Esc: pause menu #menu). startBattle() resets the sim for a character / mode.
@@ -169,7 +169,8 @@ mBtns.forEach((b, i) => {
   b.addEventListener('click', () => { mFocus(i); mOk(); });
 });
 const flow = {
-  /** Enter a flow state: 'title' | 'select' | 'loading' | 'prologue' | 'battle' | 'result' (ctx: see each screen module). */
+  /** Enter a flow state: 'title' | 'select' | 'loading' | 'prologue' | 'battle' | 'result' | 'ending' (ctx: see each screen
+   *  module). */
   go(s, c = {}) {
     if (s === 'loading' && state === 'select') c.art = arts[c.char] = snapArt();
     if (screens[state]) { screens[state].exit(); $(state).hidden = true; }
@@ -226,6 +227,7 @@ async function deploy(c) {
 const screens = {
   title: createTitle($('title'), flow), select: createSelect($('select'), flow), loading: createLoading($('loading')),
   prologue: createPrologue($('prologue'), flow), result: createResult($('result'), flow),
+  ending: createPrologue($('ending'), flow, 'ENDING'),              // after the final chapter's win (result → ending → title)
 };
 // a win records the clear (上級 / 修羅 opens 修羅: unlock = the result screen announces it)
 on('story:end', (e) => {

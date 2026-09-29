@@ -1,89 +1,53 @@
-// Chapter prologue (#prologue): a handscroll unrolls over a sepia ink map of 漢中; each card writes 3 vertical brush
-// columns (right to left, revealed stroke-first by a ragged brush-tip mask), an English subline, and draws its troop
-// arrows onto the map (蜀 teal ink, 魏 vermilion) while the view drifts to the card's focus. Then the chapter title
-// stamps in (「第一章 定軍山」 + the red 漢中之戰 seal) and the battle starts.
+// Scroll player (#prologue before a chapter, #ending after the final one): a handscroll unrolls over the chapter's sepia
+// ink map; each card writes 3 vertical brush columns (right to left, revealed stroke-first by a ragged brush-tip mask), an
+// English subline, and draws its troop arrows onto the map (our side teal ink, theirs vermilion) while the view drifts to
+// the card's focus. Then the chapter title stamps in (small line, big title, red seal, English line) and the battle
+// starts — or, for the ending scroll, the tribute card (if the chapter has one) and then the title screen.
 // Controls: tap Enter / Space / click = next card · hold (0.8 s, ring fills) = skip to the title · Esc = skip.
-// ctx in: { mode: 'story', char }. Done → flow.go('battle', ctx). Cards / branching: ./ch1.js PROLOGUE.
+// Data (scroll-player commit): the active chapter (story/chapters.js) supplies MAP (SVG string, viewBox 1600×900, marks
+// [data-id] + .pl-arw arrows: story/scrollkit.js), PROLOGUE / STAMP, and optionally ENDING / ENDING_STAMP and TRIBUTE
+// { title {zh, en}, zh: [lines], en: [lines], link {href, zh, en} }. Card = { cols: [≤ 7 chars × 3], en, show: [mark ids],
+// focus: [x, y, zoom] } or branched on the hero { <char id>: { cols, en }, show, focus }.
+// ctx in: { mode: 'story', char, chapter }. Prologue done → flow.go('battle', ctx); ending done → ink wipe → title.
 // Render-side DOM only (wall-clock timers); nothing here touches the sim.
-import { PROLOGUE } from './ch1.js';
+import { resolveChapter } from './chapters.js';
+import { inkWipe } from '../ui/menu.js';
 
 const NUM = ['壹', '貳', '參', '肆', '伍', '陸'];
 const HOLD = 0.8;                                  // s held to skip (index.html: the ring's .on transition)
 
-// ---- the map (viewBox 1600×900): ranges, 漢水, places, troop arrows. Arrow = [id, side, cubic path M x y C ...]
-const peaks = (list, h, w) => list.map(([x, y, k = 1]) =>
-  `<path d="M${x - w * k} ${y} Q${x - w * k * 0.35} ${y - h * k * 0.55} ${x} ${y - h * k} Q${x + w * k * 0.3} ${y - h * k * 0.5} ${x + w * k} ${y}Z"/>`).join('');
-const ARROWS = [
-  ['shu1', 'shu', 'M150 880 C185 720 250 520 292 342'],
-  ['wei1', 'wei', 'M1040 330 C930 370 810 450 712 548'],
-  ['wei2', 'wei', 'M1060 350 C1040 450 990 540 930 590'],
-  ['shu2', 'shu', 'M318 338 C390 400 440 480 530 612'],
-  ['shu3', 'shu', 'M540 652 C570 616 596 574 626 536'],
-  ['shu4', 'shu', 'M668 520 C780 420 900 340 1020 318'],
-];
-function head(d) {                                 // arrowhead at the path end, along the last control leg
-  const n = d.match(/-?\d+(\.\d+)?/g).map(Number), [cx, cy, x, y] = n.slice(-4), a = Math.atan2(y - cy, x - cx) * 180 / Math.PI;
-  return `<path d="M0 0 L-34 -17 L-24 0 L-34 17Z" transform="translate(${x} ${y}) rotate(${a.toFixed(1)})"/>`;
-}
-const MAP = `
-<svg class="pl-map" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-  <defs>
-    <filter id="pl-grain"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="3" seed="4"/>
-      <feColorMatrix values="0 0 0 0 .32  0 0 0 0 .22  0 0 0 0 .12  0 0 0 .55 -.18"/></filter>
-    <filter id="pl-ink" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="2" seed="9"/>
-      <feDisplacementMap in="SourceGraphic" scale="7"/></filter>
-    <filter id="pl-blot"><feGaussianBlur stdDeviation="30"/></filter>
-    <radialGradient id="pl-vig" cx="50%" cy="50%" r="72%"><stop offset="55%" stop-color="#3a2410" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#2a170a" stop-opacity=".62"/></radialGradient>
-    <linearGradient id="pl-mtn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b1d12" stop-opacity=".78"/>
-      <stop offset=".7" stop-color="#4a3522" stop-opacity=".25"/><stop offset="1" stop-color="#4a3522" stop-opacity="0"/></linearGradient>
-  </defs>
-  <rect width="1600" height="900" fill="#d8c197"/>
-  <g filter="url(#pl-blot)" fill="#8a5a2a" opacity=".16"><ellipse cx="260" cy="700" rx="260" ry="150"/><ellipse cx="1320" cy="180" rx="300" ry="120"/>
-    <ellipse cx="900" cy="760" rx="220" ry="90"/></g>
-  <g class="pl-mtns" fill="url(#pl-mtn)" filter="url(#pl-ink)">
-    ${peaks([[90, 190, 1.1], [210, 170], [330, 200, 1.2], [470, 160, .9], [600, 190, 1.1], [760, 170], [900, 185, 1.2], [1060, 160], [1200, 190, 1.1], [1350, 170, .9], [1500, 195, 1.2]], 120, 90)}
-    ${peaks([[120, 900, 1.2], [300, 880], [480, 905, 1.1], [820, 890, .9], [1000, 905, 1.2], [1180, 885], [1380, 900, 1.1], [1540, 890]], 130, 100)}
-    ${peaks([[250, 330, .7], [340, 318, .8]], 110, 70)}
-  </g>
-  <g class="pl-mark" data-id="dingjun" fill="url(#pl-mtn)" filter="url(#pl-ink)">${peaks([[560, 640, .9], [640, 620, 1.35], [730, 645, .85]], 150, 80)}</g>
-  <g class="pl-mark" data-id="river" filter="url(#pl-ink)" fill="none" stroke-linecap="round">
-    <path d="M-20 360 C180 330 300 420 460 430 S760 360 920 420 S1220 470 1380 420 S1560 400 1620 430" stroke="#6f7c78" stroke-width="30" opacity=".35"/>
-    <path d="M-20 360 C180 330 300 420 460 430 S760 360 920 420 S1220 470 1380 420 S1560 400 1620 430" stroke="#46524f" stroke-width="7" opacity=".7"/>
-  </g>
-  <rect width="1600" height="900" filter="url(#pl-grain)"/>
-  <g class="pl-arrows" filter="url(#pl-ink)">
-    ${ARROWS.map(([id, side, d]) => `<g class="pl-arw ${side}" data-id="${id}"><path class="u" d="${d}" pathLength="1"/><path class="s" d="${d}" pathLength="1"/><g class="hd">${head(d)}</g></g>`).join('')}
-  </g>
-  <g class="pl-labels">
-    <g class="pl-mark" data-id="yangping"><rect x="276" y="286" width="30" height="30" rx="3"/><text x="330" y="312">陽平關</text></g>
-    <g class="pl-mark" data-id="nanzheng"><rect x="1042" y="282" width="36" height="36" rx="3"/><text x="1034" y="350">南鄭</text></g>
-    <g class="pl-mark wei" data-id="dingjun"><text x="600" y="690">定軍山</text><text class="sm" x="686" y="520">夏侯淵</text></g>
-    <g class="pl-mark wei" data-id="east"><text class="sm" x="880" y="650">張郃 東圍</text></g>
-    <g class="pl-mark" data-id="river"><text class="sm river" x="190" y="412">漢 水</text></g>
-  </g>
-  <rect width="1600" height="900" fill="url(#pl-vig)"/>
-</svg>`;
-
-export function createPrologue(el, flow) {
-  el.innerHTML = `<div class="pl-paper">${MAP}
+/** part: 'PROLOGUE' (before the battle) | 'ENDING' (after the final chapter's result). */
+export function createPrologue(el, flow, part = 'PROLOGUE') {
+  const ending = part === 'ENDING';
+  let built = null, map, card, cols, en, pips, ring, CARDS = [];
+  /** (Re)build the scroll for chapter CH (only when its map / stamp / tribute differ from what is on the paper). */
+  function build(CH) {
+    const st = (ending ? CH.ENDING_STAMP : CH.STAMP) || {}, T = ending && CH.TRIBUTE;
+    const key = CH.id + part;
+    if (built === key) return;
+    built = key;
+    el.innerHTML = `<div class="pl-paper">${CH.MAP}
       <div class="pl-card"><div class="pl-cols"></div></div><p class="pl-en"></p>
-      <div class="pl-stamp"><small>第一章</small><b>定軍山</b><i>漢中之戰</i><em>CHAPTER I · MOUNT DINGJUN</em></div>
-      <div class="pl-pips"></div>
+      <div class="pl-stamp"><small>${st.small}</small><b>${st.big}</b><i>${st.seal}</i><em>${st.en}</em></div>
+      <div class="pl-pips"></div>${T ? `
+      <div class="pl-tribute"><h2>${T.title.zh}<small>${T.title.en}</small></h2>
+        ${T.zh.map((z, i) => `<p>${z}<small>${T.en[i]}</small></p>`).join('')}
+        ${T.link ? `<a href="${T.link.href}" target="_blank" rel="noopener">${T.link.zh}<small>${T.link.en}</small></a>` : ''}</div>` : ''}
     </div>
     <i class="pl-rod l"></i><i class="pl-rod r"></i>
     <div class="pl-skip"><span><kbd>Enter</kbd><kbd>Click</kbd>下一頁<small>Next</small></span>
       <span><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15"/><circle class="p" cx="18" cy="18" r="15" pathLength="1"/></svg>長按跳過<small>Hold to skip</small></span>
       <span><kbd>Esc</kbd>跳過<small>Skip</small></span></div>`;
-  const $ = (s) => el.querySelector(s);
-  const map = $('.pl-map'), card = $('.pl-card'), cols = $('.pl-cols'), en = $('.pl-en'), pips = $('.pl-pips'), ring = $('.pl-skip .p');
-  let ctx = {}, k = -1, timer = 0, swapT = 0, holdTimer = 0, holdT0 = 0, phase = 'off', stampAt = 0;
+    const $ = (s) => el.querySelector(s);
+    map = $('.pl-map'); card = $('.pl-card'); cols = $('.pl-cols'); en = $('.pl-en'); pips = $('.pl-pips'); ring = $('.pl-skip .p');
+  }
+  let ctx = {}, k = -1, timer = 0, swapT = 0, holdTimer = 0, holdT0 = 0, phase = 'off', stampAt = 0, CH = null;
 
   const later = (fn, s) => { clearTimeout(timer); timer = setTimeout(fn, s * 1000); };
   function show(i) {
     k = i;
-    if (k >= PROLOGUE.length) return stamp();
-    const c = PROLOGUE[k], v = c[ctx.char] || c;
+    if (k >= CARDS.length) return stamp();
+    const c = CARDS[k], v = c[ctx.char] || c;
     card.classList.remove('on');                             // the old card fades, then the new one is written in
     clearTimeout(swapT);
     swapT = setTimeout(() => {
@@ -93,7 +57,7 @@ export function createPrologue(el, flow) {
       card.classList.add('on');
     }, k ? 380 : 0);
     for (const m of el.querySelectorAll('[data-id]')) {     // this card's marks draw in; earlier ones stay, dimmed
-      const id = m.dataset.id, now = c.show.includes(id), before = PROLOGUE.slice(0, k).some((p) => p.show.includes(id));
+      const id = m.dataset.id, now = c.show.includes(id), before = CARDS.slice(0, k).some((p) => p.show.includes(id));
       m.classList.toggle('on', now || before); m.classList.toggle('hot', now);
     }
     // drift: bring the focus toward 38 % x (clear of the calligraphy card on the right, which covered 南鄭 when the focus
@@ -112,12 +76,12 @@ export function createPrologue(el, flow) {
     const lim = (s - 1) / 2 * 100;
     tx = Math.max(-lim, Math.min(lim, tx)); ty = Math.max(-lim, Math.min(lim, ty));
     map.style.transform = `translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%) scale(${s})`;
-    pips.innerHTML = PROLOGUE.map((_, j) => `<b class="${j === k ? 'on' : j < k ? 'past' : ''}">${NUM[j]}</b>`).join('');
+    pips.innerHTML = CARDS.map((_, j) => `<b class="${j === k ? 'on' : j < k ? 'past' : ''}">${NUM[j]}</b>`).join('');
     later(() => show(k + 1), 1.4 + v.cols.length * 0.55 + Math.min(3.2, 1.6 + v.en.length * 0.018));
   }
   function stamp() {
-    if (phase === 'stamp' || phase === 'out') return;
-    phase = 'stamp'; k = PROLOGUE.length; stampAt = performance.now(); clearTimeout(swapT);
+    if (phase === 'stamp' || phase === 'tribute' || phase === 'out') return;
+    phase = 'stamp'; k = CARDS.length; stampAt = performance.now(); clearTimeout(swapT);
     el.classList.add('stamped'); card.classList.remove('on');
     for (const m of el.querySelectorAll('[data-id]')) { m.classList.add('on'); m.classList.remove('hot'); }
     map.style.transform = 'translate(0, 0) scale(1.06)';
@@ -125,7 +89,15 @@ export function createPrologue(el, flow) {
   }
   function go() {
     if (phase === 'out') return;
-    phase = 'out'; el.classList.add('out');
+    if (ending && CH.TRIBUTE && phase !== 'tribute') {   // the tribute card on the paper, until a tap (or 30 s)
+      phase = 'tribute'; stampAt = performance.now(); clearTimeout(timer);
+      el.classList.add('tribute');
+      later(go, 30);
+      return;
+    }
+    phase = 'out';
+    if (ending) { clearTimeout(timer); inkWipe(() => flow.go('title')); return; }
+    el.classList.add('out');
     later(() => flow.go('battle', ctx), 0.55);          // index.html #prologue.out: the fade off the field
   }
 
@@ -137,25 +109,26 @@ export function createPrologue(el, flow) {
     holdTimer = setTimeout(() => { holdT0 = 0; ring.classList.remove('on'); stamp(); }, HOLD * 1000);
   };
   const up = () => {
-    if (phase === 'stamp') { if (performance.now() - stampAt > 900) go(); return; }
+    if (phase === 'stamp' || phase === 'tribute') { if (performance.now() - stampAt > 900) go(); return; }
     if (!holdT0) return;
     const held = (performance.now() - holdT0) / 1000;
     holdT0 = 0; clearTimeout(holdTimer); ring.classList.remove('on');
     if (held < HOLD && phase === 'cards') show(k + 1);
   };
   const key = (e) => {
-    if (e.code === 'Escape') { if (phase === 'cards') stamp(); else if (phase === 'stamp') go(); return; }
+    if (e.code === 'Escape') { if (phase === 'cards') stamp(); else if (phase === 'stamp' || phase === 'tribute') go(); return; }
     if (e.code !== 'Enter' && e.code !== 'NumpadEnter' && e.code !== 'Space') return;
     e.preventDefault();
     if (e.type === 'keydown') { if (!e.repeat) down(); } else up();
   };
-  el.addEventListener('pointerdown', (e) => { if (e.button === 0) down(); });
-  el.addEventListener('pointerup', (e) => { if (e.button === 0) up(); });
+  el.addEventListener('pointerdown', (e) => { if (e.button === 0 && !e.target.closest('a')) down(); });
+  el.addEventListener('pointerup', (e) => { if (e.button === 0 && !e.target.closest('a')) up(); });
 
   return {
     enter(c) {
+      CH = resolveChapter(c.chapter, c.char); build(CH); CARDS = CH[part] || [];
       ctx = c; phase = 'cards'; holdT0 = 0; stampAt = 0;
-      el.classList.remove('stamped', 'out', 'open'); card.classList.remove('on');
+      el.classList.remove('stamped', 'out', 'open', 'tribute'); card.classList.remove('on');
       for (const m of el.querySelectorAll('[data-id]')) m.classList.remove('on', 'hot');
       map.style.transform = 'translate(0, 0) scale(1.1)';
       ring.classList.remove('on');
