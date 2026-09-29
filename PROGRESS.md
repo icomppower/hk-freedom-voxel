@@ -10,7 +10,7 @@ stage not `done`.
 | 1 Touch hook | done | ch1 Node 6/6 identical, Chrome checkpoints 6/6 × 2, crowd 94/94, scroll 6/6; touch twin 7/7 (1 500-frame plan as keys vs touch: input logs identical, in-page hashes 5/5, Node replay finals b08625f0 = b08625f0); touch UI 12/12 at 844×390 (6 buttons hit-testable, ≥ 44 px, no overlap, drag turns camera, stick moves hero, 無雙 lit, key hides pad, portrait 請打橫手機); Pixel 7 + 4× CPU ch1 p95 20.5–30.3 ms (budget 33; was 33.4–34.6 before dropping shadows / rays on the tier) |
 | 2 龍仔 lungjai | done | gates 6/6 (moves 15/15, onsets = Box Moveset, N-string 24-25 sf apart live, pole ≥ 0.27 m above ground, feet slide ≤ 0.95 cm, Musou 34/40 of a packed ring); Musou at 600 enemies p95 16.8 ms (Zhao Yun 33.4); model critic 2 rounds → P1 0 (r1: armour cut read as lamellar → shared plain outfit); bot WIN ch1 (?dev) × steady / rush / back |
 | 3 小美 siumei | done | gates 6/6 (moves 15/15, onsets = Box Moveset, N-string 18 sf apart, umbrellas ≥ 0.10 m, feet ≤ 0.70 cm, Musou 39/40); Musou at 600 enemies p95 16.8 ms; model critic 2 rounds → P1 0 (r1: no eyes — paint boxes off the face layer; jacket read as stripes); open / closed umbrella swap on n3 c1 c4 c6 jc + Musou tornado; bot WIN ch1 × 3 styles; title + select show only 龍仔 / 小美, 0 errors |
-| 4 Enemy side | | |
+| 4 Enemy side | done | boss gate 4/4 as lungjai and 4/4 as siumei (every phase on its threshold: HP 74.80 / 49.70-49.97 / 24.67-24.80 % etc., banner on the phase frame, behaviours: 777 slams, 比卡超 shock rings + 2 速龍 called, 強哥 chilli + bottles, 維尼熊 3 分身 / lights out / mask off; KO → win, slot keeps its model); lineup critic 2 rounds → P1 0 (r1: 777's tie + chain and the Bear's collar + seam read as crosses; mask slits missing); skin-test 4/4 (riot / blackbloc); ch1 crowd 94/94 |
 | 5 Ch I hk1 admiralty | | |
 | 6 Ch II hk2 legco | | |
 | 7 Ch III hk3 yuenlong | | |
@@ -61,4 +61,10 @@ stage not `done`.
   hidden. Paint boxes (Pt) only recolour voxels inside the box's own span: face details sit on the face's front layer.
 - 小美's open canopy is a render-only swap in her secondary update (the sim hero's move / moveT, OPEN table in model.js).
 - Title controls table hides the 黃忠 aim row unless ?dev. The select screen keeps upstream's 選擇武將 heading (P2).
+- Boss phase floor: a hit that would carry a boss past a threshold holds his HP at threshold − 0.2 % that step (one
+  Musou can't skip a phase), so each phase starts within 0.5 % of its threshold (the gate). Phase banners / roars fire
+  from the script (bosses.js `on`) on the phase frame, not from `below` beats (those saw the raw HP before the floor).
+- Director hook (own commit c88462e): script api fire(beat) and model(key, modelKey) — the Bear's 分身 and 777's …; the
+  Bear's mask-off is the extra officer model `bear_unmasked` (render-only swap; not a Contracts id, internal).
+- KO'd officer models kneel with the left hand raised (crowd view kneelPose, frozen): reads as a raised fist (P2).
 - Scroll-frame gate flaked twice on the first cold run in this clone (a different frame each time), then 4/4 clean.

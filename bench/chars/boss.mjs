@@ -1,49 +1,69 @@
-// Boss gate (stage 4): a test chapter on the 定軍山 map — 狼督 (hp 2340, model 'warden') spawned on the Shu camp square,
-// fought by the bot as 阿角 — must pass phase 2 at < 50 % and phase 3 at < 20 % (fx.phase flips on the frame his HP crosses,
-// banners on the same frame), drop searchlight squads in phase 2, and end on his KO (win, glaive broken: slot's model key).
-//   node --import ./bench/harness/register.mjs bench/chars/boss.mjs [char]
+// Boss gate (stage 4): for each boss (777 stamp, 比卡超 shocker, 強哥 fixer, 維尼熊 bear) a test chapter on the 定軍山 map
+// with the `riot` / `white` skins — the boss spawned on the Shu camp square (Character Sheets HP, officer model), run by its
+// chapter-script module (src/chars/officers/hk/bosses.js), fought by the bot as the given playable. Gates per boss: every
+// phase fires at its HP threshold (the HP on the phase's first frame within −0.5 % … 0 of it), its phase banner on that
+// frame, the phase's behaviour happens (stamp: slams in P3 · shocker: shock rings in P2, 速龍 called in P3 · fixer: chilli
+// clouds in P2, bottles in P3 · bear: 3 分身 in P2, lights out in P3, mask off in P4), the KO wins, the KO'd slot keeps
+// its model (kneels, broken weapon).
+//   node --import ./bench/harness/register.mjs bench/chars/boss.mjs [char] [boss…]
 import { createSim } from '../harness/sim.mjs';
 import { CHAPTERS } from '../../src/story/chapters.js';
-import { wardenBoss } from '../../src/chars/officers/warden/boss.js';
+import { bossScript, BOSS_PHASES } from '../../src/chars/officers/hk/bosses.js';
 import { createBot } from '../bot/bot.mjs';
 import { on } from '../../src/core/events.js';
 
-const char = process.argv[2] || 'gok';
+const [char = 'lungjai', ...only] = process.argv.slice(2);
 const C1 = CHAPTERS.ch1;
-CHAPTERS.bosstest = { ...C1, id: 'bosstest', cast: ['gok', 'siume'], skin: { foe: 'wolf', ally: 'sheep' },
-  OFF: { warden: { name: { zh: '狼督', en: 'WARDEN-WOLF' }, hp: 2340, boss: true, model: 'warden' } },
-  BEATS: [
-    { when: { wait: 30 }, officers: { warden: { at: ['honjin', 0, 0.85], engaged: true } }, obj: { zh: '擊破狼督', en: 'Defeat the Warden-Wolf', go: 'warden' } },
-    { when: { below: ['warden', 0.5] }, skip: { down: 'warden' }, banner: { html: '<em>燈塔</em>熄滅', en: 'The lighthouse goes dark' } },
-    { when: { below: ['warden', 0.2] }, skip: { down: 'warden' }, banner: { html: '狼督 <em>暴怒</em>', en: 'The Warden-Wolf rages' } },
-    { when: { down: 'warden' }, win: true, banner: { html: '狼督 <em>刀斷</em>', en: 'The Warden-Wolf\'s glaive breaks', big: true } },
-  ],
-  script: (g, api) => wardenBoss(g, api, { arena: [0, -132], r: 12, calls: [[-0.8, 0.6], [0.8, 0.6]] }),
-};
+const HP = { stamp: 1300, shocker: 1560, fixer: 1300, bear: 2340 };
+const NAME = { stamp: ['777', 'THE RUBBER STAMP'], shocker: ['比卡超', 'THE SHOCKER'], fixer: ['強哥', 'THE FIXER'], bear: ['維尼熊', 'THE BEAR'] };
+const kinds = only.length ? only : ['stamp', 'shocker', 'fixer', 'bear'];
 const sim = await createSim({ enemies: 300 }), G = sim.game;
-const log = [], banners = [];
+const banners = [];
 on('story:banner', (e) => banners.push([G.frame, e.en]));
-sim.start({ char, mode: 'story', chapter: 'bosstest' });
-const bot = createBot(), fx = () => G.story.fx;
-let phase = 0, squads = 0, slot = -1, frac = 1;
-const cs = G.crowd;
-let sqN = 0;
-while (!sim.end && G.frame < 20 * 3600) {
-  sim.step(bot(G));
-  const s = G.story;
-  for (let i = cs.grunts; i < cs.N; i++) if (s.modelOf(i) === 'warden') slot = i;
-  if (slot >= 0 && cs.st[slot] && cs.hpMax[slot]) frac = Math.max(0, cs.hp[slot] / cs.hpMax[slot]);
-  if (fx() && fx().phase !== phase) { phase = fx().phase; log.push([G.frame, phase, frac]); }
-  if (fx()) squads = fx().drops;
+let bad = 0;
+for (const kind of kinds) {
+  const TH = BOSS_PHASES[kind], on_ = {};
+  TH.forEach((_, k) => { on_[k + 2] = { banner: { html: `phase ${k + 2}`, en: `${kind} phase ${k + 2}` } }; });
+  CHAPTERS.bosstest = { ...C1, id: 'bosstest', cast: ['lungjai', 'siumei'], skin: { foe: kind === 'fixer' ? 'white' : 'riot', ally: 'blackbloc' },
+    OFF: { [kind]: { name: { zh: NAME[kind][0], en: NAME[kind][1] }, hp: HP[kind], boss: true, model: kind },
+      raptor: { name: { zh: '速龍', en: 'RAPTOR' }, hp: 520, model: 'raptor' }, clone: { name: { zh: '分身', en: 'SHADOW CLONE' }, hp: 160, model: 'clone' } },
+    BEATS: [
+      { when: { wait: 30 }, officers: { [kind]: { at: ['honjin', 0, 0.85], engaged: true } }, obj: { zh: '擊破', en: 'Defeat the boss', go: kind } },
+      { when: { down: kind }, win: true, banner: { html: '擊破', en: `${kind} down`, big: true } },
+    ],
+    script: bossScript(kind, { calls: [[-6, -125], [6, -125]], on: on_ }),
+  };
+  banners.length = 0;
+  sim.start({ char, mode: 'story', chapter: 'bosstest' });
+  const bot = createBot(), cs = G.crowd, log = [];
+  let phase = 0, slot = -1, clones = 0, raptors = 0, dark = false, unmasked = false, slams = 0, shocks = 0, chilli = 0, bottles = 0;
+  const seen = new Set();
+  while (!sim.end && G.frame < 30 * 3600) {
+    sim.step(bot(G));
+    const s = G.story, fx = s.fx;
+    for (let i = cs.grunts; i < cs.N; i++) if (cs.st[i]) {
+      const m = s.modelOf(i);
+      if (m === kind || (kind === 'bear' && m === 'bear_unmasked')) slot = i;
+      if ((m === 'clone' || m === 'raptor') && !seen.has(i + m)) { seen.add(i + m); if (m === 'clone') clones++; else raptors++; }
+    }
+    if (fx.phase !== phase && fx.phase < 9) { phase = fx.phase; log.push([G.frame, phase, cs.hp[slot] / cs.hpMax[slot]]); }
+    if (fx.dark) dark = true;
+    if (slot >= 0 && s.modelOf(slot) === 'bear_unmasked') unmasked = true;
+    for (const r of fx.rings) { const id = r.kind + r.t + r.x.toFixed(2); if (!seen.has(id)) { seen.add(id); if (r.kind === 'slam') slams++; if (r.kind === 'shock') shocks++; if (r.kind === 'chilli') chilli++; if (r.kind === 'bottle') bottles++; } }
+  }
+  const res = [], ok = (n, v, x = '') => { res.push(v); console.log(`${v ? 'ok  ' : 'FAIL'} ${kind.padEnd(7)} ${n}${x ? '  ' + x : ''}`); };
+  TH.forEach((thr, k) => {
+    const e = log.find(([, p]) => p === k + 2), bn = banners.find(([, t]) => t === `${kind} phase ${k + 2}`);
+    ok(`phase ${k + 2} at ${thr * 100} % (±0.5)`, !!e && e[2] <= thr && e[2] >= thr - 0.005, e ? `frame ${e[0]}, HP ${(e[2] * 100).toFixed(2)} %` : 'never');
+    ok(`phase ${k + 2} banner on its frame`, !!(e && bn && Math.abs(bn[0] - e[0]) <= 1), `${bn?.[0]} vs ${e?.[0]}`);
+  });
+  if (kind === 'stamp') ok('P3 ground-pound slams', slams >= 3, `${slams}`);
+  if (kind === 'shocker') { ok('P2 shock rings', shocks >= 1, `${shocks}`); ok('P3 calls 速龍', raptors >= 1, `${raptors} raptor officers`); }
+  if (kind === 'fixer') { ok('P2 chilli clouds', chilli >= 1, `${chilli}`); ok('P3 bottle volleys', bottles >= 5, `${bottles}`); }
+  if (kind === 'bear') { ok('P2 three 分身', clones === 3, `${clones}`); ok('P3 lights out', dark); ok('P4 mask off', unmasked); }
+  ok('KO ends the fight (win)', !!(sim.end && sim.end.win), `${(G.frame / 60).toFixed(0)} s, hero hp ${G.hero.hp}`);
+  ok('KO\'d slot keeps its model (kneels, broken weapon)', slot >= 0 && [kind, 'bear_unmasked'].includes(G.story.modelOf(slot)));
+  if (!res.every(Boolean)) bad++;
 }
-const res = [], ok = (n, v, x = '') => { res.push(v); console.log(`${v ? 'ok  ' : 'FAIL'} ${n}${x ? '  ' + x : ''}`); };
-const p2 = log.find(([, p]) => p === 2), p3 = log.find(([, p]) => p === 3);
-ok('phase 2 at < 50 % HP', !!p2 && p2[2] < 0.5 && p2[2] > 0.35, p2 && `frame ${p2[0]}, HP ${(p2[2] * 100).toFixed(1)} %`);
-ok('phase 3 at < 20 % HP', !!p3 && p3[2] < 0.2 && p3[2] > 0.05, p3 && `frame ${p3[0]}, HP ${(p3[2] * 100).toFixed(1)} %`);
-const b2 = banners.find(([, e]) => e.includes('lighthouse')), b3 = banners.find(([, e]) => e.includes('rages'));
-ok('banners on the phase frames', !!(b2 && b3 && Math.abs(b2[0] - p2[0]) <= 1 && Math.abs(b3[0] - p3[0]) <= 1), `${b2?.[0]} / ${b3?.[0]}`);
-ok('searchlight squads drop in phases 2–3', squads >= 1, `${squads} squads`);
-ok('KO ends the fight (win)', !!(sim.end && sim.end.win), `${(G.frame / 60).toFixed(0)} s, KOs ${G.hero.kos}`);
-ok('the KO\'d slot keeps the warden model (glaive broken, kneels)', slot >= 0 && G.story.modelOf(slot) === 'warden');
-console.log(res.every(Boolean) ? `BOSS PASS ${res.length}/${res.length}` : 'BOSS FAIL');
-process.exit(res.every(Boolean) ? 0 : 1);
+console.log(bad ? `BOSS FAIL (${bad} boss${bad > 1 ? 'es' : ''})` : `BOSS PASS ${kinds.length}/${kinds.length} as ${char}`);
+process.exit(bad ? 1 : 0);
