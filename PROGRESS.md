@@ -6,7 +6,7 @@ stage not `done`.
 | Stage | Status | Gate numbers |
 |---|---|---|
 | 0 Fork + strip | done (local) | Node 6/6 logs identical (finals 90a1a382 64989ea8 6c41979e 2c32ffdc 6a95e25b b7fe682c); bot WIN ch1 zhaoyun 普通 (4:41, S); rig 54/54, dual PASS; Chrome: title 香港自由戰士 only, 0 errors; ch1 scroll 6/6, crowd 94/94, checkpoints 6/6 × 2 |
-| 0 Vercel deploy | pending | |
+| 0 Vercel deploy | done (CLI) | project `hk-freedom-voxel` (sharkgundams-projects), static, no build; production https://hk-freedom-voxel.vercel.app READY, loads 200, title screen, 0 console errors. Git link + per-branch previews wait for the GitHub repo |
 | 1 Touch hook | | |
 | 2 龍仔 lungjai | | |
 | 3 小美 siumei | | |
@@ -31,6 +31,10 @@ stage not `done`.
 - SPK keys `lungjai` `siumei` `raptor` `plain` `stamp` `shocker` `fixer` `bear` `sauzuk` `medic` `reporter` `passenger`
 
 ## Decisions / notes
+
+- Live: **https://hk-freedom-voxel.vercel.app** (production = CLI deploys of local main until the repo exists; then
+  `vercel git connect` so production = main and every branch / PR gets a preview). `vercel deploy` from the CLI uploads
+  and goes READY in seconds but the CLI itself sometimes never returns: run it in the background and check `vercel ls`.
 
 - 2026-09-29: creating / pushing the public GitHub repo `icomppower/hk-freedom-voxel` was refused by the Claude Code
   auto-mode permission classifier. The build runs in the local clone (`origin` already points at the new repo URL,

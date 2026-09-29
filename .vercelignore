@@ -1,3 +1,5 @@
-media/
-README*.md
-LICENSE
+node_modules
+bench
+media
+concept
+*.md

@@ -1,6 +1,6 @@
 # 香港自由戰士 HK Freedom Fighter · Voxel
 
-**Play:** _Vercel project `hk-freedom-voxel` — URL added once the first production deploy is live._
+**▶ Play in your browser — [hk-freedom-voxel.vercel.app](https://hk-freedom-voxel.vercel.app)**
 
 A 3D voxel rebuild of the Phaser beat 'em up [香港自由戰士](https://hk-freedom-fighter.vercel.app) on the Voxel Musou
 engine. Hong Kong, June – November 2019: real places, fictional heroes. Two playable fighters — 龍仔 Dragon (bamboo
