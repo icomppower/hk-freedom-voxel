@@ -23,6 +23,8 @@ const out = await g.page.evaluate(() => {
 });
 await g.close();
 if (si > 0) { refs[name] = out; writeFileSync(RJ, JSON.stringify(refs, null, 1)); console.log(`saved ${out.length} crowd meshes as ${name}`); process.exit(0); }
-const ref = refs[name] || [], same = out.filter((h, k) => h === ref[k]).length;
+// multiset compare: the world manager re-attaches its root group on sync(), which rotates scene order, not content
+const ref = refs[name] || [], pool = [...ref];
+const same = out.filter((h) => { const k = pool.indexOf(h); if (k < 0) return false; pool.splice(k, 1); return true; }).length;
 console.log(`${same === ref.length && out.length === ref.length ? 'ok  ' : 'FAIL'} ${name}: ${same}/${ref.length} crowd meshes identical (${out.length} now)`, g.errors.slice(0, 2));
 process.exit(same === ref.length && out.length === ref.length ? 0 : 1);

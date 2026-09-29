@@ -1,39 +1,34 @@
-# Voxel Musou
+# 羊村 · 霧港渡 — Sheep Village: Fog Harbor Crossing
 
-<p align="center">
-  <a href="https://voxel-musou.vercel.app"><img src="media/gameplay.gif" alt="Zhao Yun and Huang Zhong vs 300 soldiers — the Musou" width="100%"></a>
-</p>
+<p align="center"><a href="https://icomppower.github.io/sheep-village/"><img src="media/sv-lantern.jpg" alt="Ah Gok's crook sweep on Lantern Street, lambs following" width="100%"></a></p>
 
-<p align="center"><b><a href="https://voxel-musou.vercel.app">▶ Play in your browser — voxel-musou.vercel.app</a></b></p>
+<p align="center"><b><a href="https://icomppower.github.io/sheep-village/">▶ Play in your browser — icomppower.github.io/sheep-village</a></b></p>
 
 | | |
 | --- | --- |
-| ![Zhao Yun in the crowd](media/zhaoyun.jpg) | ![Huang Zhong's Musou volley](media/volley.jpg) |
-| Zhao Yun — spear string through the crowd | Huang Zhong — Musou 百步穿楊, flaming volley |
-| ![Zhao Yun's Musou dragon](media/dragon.jpg) | ![Huang Zhong's giant arrow](media/arrow.jpg) |
-| Zhao Yun — Musou 蒼龍破陣, the dragon | Huang Zhong — the giant arrow |
-| ![Character select](media/select.jpg) | ![Chapter I prologue](media/story.jpg) |
-| Choose your officer | Chapter I 「定軍山」 prologue |
+| ![Title](media/sv-title.jpg) | ![Officer select](media/sv-select.jpg) |
+| Title — 羊村 seal | Pick 阿角 (crook) or 小咩 (twin shears) |
+| ![Chapter I pasture](media/sv-pasture.jpg) | ![Chapter III harbor Musou](media/sv-harbor-musou.jpg) |
+| Ch. I 羊村牧場 — the pasture | Ch. III 霧港 — Musou 牧羊歸欄 on the beach |
+| ![The Warden](media/sv-warden.jpg) | ![Prologue scroll](media/sv-scroll.jpg) |
+| 狼督 the Warden, final duel | Hand-scroll prologue |
 
-A browser-playable voxel action game in the style of Dynasty Warriors, built with Three.js. Take the field as Zhao Yun (趙雲) with his spear or Huang Zhong (黃忠) with his great bow, and cut through hundreds of Wei soldiers — in the story chapter at Mount Dingjun or in an endless free battle.
+A browser-playable voxel crowd-battler. The wolves have taken the lambs across the fog harbor; the villagers of
+羊村 go and bring every one of them home. Three chapters, two playable sheep, four wolf officers, a happy ending.
 
-No build step: plain ES modules, Three.js r186 vendored in `vendor/three/`, deterministic fixed 60 Hz simulation.
+A reskin of [Voxel Musou](https://github.com/mike007jd/voxel-musou) on its unchanged engine: plain ES modules,
+Three.js r186 vendored, deterministic fixed 60 Hz simulation, no build step.
 
-## Features
+## What's in it
 
-- Two playable officers with their own movesets, models and Musou:
-  - **Zhao Yun** — spear: normal combos (N1–N6), charge attacks (C1–C6), Musou 蒼龍破陣 with a dragon
-  - **Huang Zhong** — bow: limb slashes and point-blank shots, charge shots (fan, barrage, arrow rain, fire arrow), aim mode, Musou 百步穿楊 (a flaming volley and a giant arrow)
-- Story mode, Chapter I 「定軍山」: prologue, scripted battle with dialogue, objectives, enemy officers and gates, result screen; play it as either officer (the other one joins the dialogue)
-- Free battle: endless waves
-- Four difficulties, picked after the mode on the title: 初級 · 普通 · 上級 · 修羅 (修羅 opens once Chapter I is cleared on 上級). Grunts stay one-sweep fodder; the tiers turn enemy pressure, officer toughness and the cost of a hit
-- Jump, jump attack, dodge; hit-stop and impact VFX
-- Dense voxel crowds of Wei soldiers (~300, InstancedMesh) blasted apart into voxel debris, allied Shu troops
-- Enemy officers with name and HP tags
-- Golden-hour valley battlefield with a river, camps, castle, fires and banners
-- Custom post-processing: atmospheric haze, depth of field, bloom, retro pixel look
-- Procedural WebAudio sound
-- Calligraphy-style title, character select, HUD and ink-wipe transitions
+- **Officers** — 阿角 Ah Gok (shepherd's crook: sweeps, hooks, Musou 牧羊歸欄 *Shepherd's Round-Up*) and 小咩 Siu Me
+  (twin shears, dual-wield: tornado charge, Musou 千剪飛花 *Thousand Snips*). The other one joins the dialogue.
+- **Story** — 第一章 羊村牧場 the pasture raid · 第二章 燈籠街夜行 Lantern Street by night · 第三章 霧港 the Fog
+  Harbor, each opened by an ink hand-scroll and closed with a seal stamp; the ending scroll brings all twelve home.
+- **Wolves** — grey-kit grunts, officers 灰牙 Grey Fang, 影爪 Shadow Claw, 鐵吻 Iron Muzzle and 狼督 the Warden
+  (three-phase boss). Plain grey kit, no flags or insignia.
+- Upstream's Chapter 「定軍山」 and free battle are still in the menu.
+- **Tribute** (致敬, title menu) — a card on the real events the books grew from (below).
 
 ## Run
 
@@ -43,7 +38,7 @@ ES modules don't load from `file://`, so serve the folder with any static server
 python3 -m http.server 8000
 ```
 
-Then open http://localhost:8000 . Requires a WebGL2 browser; a desktop GPU is recommended. Sound starts on the first key press or click.
+Then open http://localhost:8000 . Needs a WebGL2 browser; a desktop GPU is recommended.
 
 ## Controls
 
@@ -59,33 +54,25 @@ Keyboard and mouse, or a gamepad.
 | Musou (gauge full) | I | B ○ |
 | Camera | mouse (click the field to lock it) / Q E | right stick |
 | Recenter / face nearest officer | R | L1 L2 |
-| Aim (Huang Zhong) | hold K / right click, release to loose | hold Y △ |
 | Pause / controls | Esc | |
 
-![Title screen](media/title.jpg)
+## Tests
 
-## Options
-
-| URL parameter | Description |
-| --- | --- |
-| `?enemies=N` | Number of enemy soldiers, 0–2000 (default 300) |
-| `?go=free\|story&char=zhaoyun\|huangzhong` | Skip the menus straight into a battle |
-| `?hq` | Pin full render quality (no automatic MSAA downgrade) |
-
-## Project layout
-
-```
-index.html      entry point, importmap, all screen CSS
-src/            core, hero, chars (per-character kits), combat, crowd, musou, camera, vfx, post, world, audio,
-                story (chapter script, prologue, result), ui
-vendor/three/   Three.js r186
-media/          README screenshots and GIF
-```
+`sh bench/verify.sh` runs every gate: upstream Chapter I state hashes (Node + headless Chrome), rig and dual-wield
+probes, character and boss gates, map gates and a bot that must win every chapter with both officers in three play
+styles, crowd-skin and scroll pixel hashes, and frame time at 300 / 600 wolves. `--quick` skips the Chrome half.
+Build log: `PROGRESS.md`.
 
 ## Credits & License
 
-- Code: MIT, see [LICENSE](LICENSE).
-- [three.js](https://threejs.org/): MIT.
-- HUD fallback font `src/ui/brush.woff2` is a subset of Yuji Boku by Kinuta Font Factory, licensed under the SIL Open Font License 1.1.
+- Engine and original game: [mike007jd/voxel-musou](https://github.com/mike007jd/voxel-musou) by BubuAi — MIT, see
+  [LICENSE](LICENSE). The Sheep Village content is added on top under the same license.
+- [three.js](https://threejs.org/) r186 — MIT.
+- Fallback brush font `src/ui/brush.woff2`: a subset of Yuji Boku by Kinuta Font Factory, SIL Open Font License 1.1.
+  macOS system fonts (Xingkai SC, Kaiti SC) are used when present.
+- Inspiration: the *Sheep Village* (羊村) picture books and the "Twelve Warriors of Sheep Village" story, as recorded by
+  the [China Unofficial Archives (#3429)](https://minjian-danganguan.org/archive/3429). Only the premise inspired this
+  game; no text or art from the books is used, and all characters and designs here are original.
 
-This is a fan project, not affiliated with or endorsed by KOEI TECMO. "Dynasty Warriors" is a trademark of KOEI TECMO. No game assets from the original games are included.
+Fan project, not affiliated with or endorsed by KOEI TECMO or the books' authors. "Dynasty Warriors" is a trademark of
+KOEI TECMO. No assets from any commercial game are included.

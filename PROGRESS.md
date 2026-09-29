@@ -17,9 +17,9 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 7 Chapter II lantern / sheep2 | done | bot WIN 6/6 (gok + siume × steady / rush / back); map gate 5/5 per officer; WIN in the real page (gok); night lighting critic → readable |
 | 8 Chapter III harbor / sheep3 + ENDING + TRIBUTE | done | bot WIN 6/6 (both officers × 3 styles, 2 300–4 200 KOs); map gate 6/6 per officer (boom + lighthouse reached); scroll-flow 11/11 on the real ending (result → ENDING → tribute → title only after the Ch. III win); tribute card: original wording, no names, link minjian-danganguan.org/archive/3429 (verified) |
 | 9 Critic rounds | done | r1 P1s: ui 3 (title branding, no tribute entry, result buttons unclickable at 720p) → 0; scene 2 (Ch II night unreadable, Ch III sea read as snow) → 0; perf 0 (all maps p95 ≤ 16.8 ms at 300 + 600 enemies); fx 0; chars 0 (P2s listed below) |
-| 10 Ship | todo | |
+| 10 Ship | done | README credits, verify.sh all green, Pages live, Notion bookmark |
 
-**Next action:** stage 10 ship — all gates, README credits, re-subset the brush font, GitHub Pages, Live Projects Bookmark.
+**Next action:** none — all stages done. Open P2s below are polish candidates.
 
 ## Contract ids (Divide & Conquer page)
 
@@ -75,3 +75,8 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 - Open P2s after critic r1: wolves read nearly black in the golden light; 阿角's coat rows read as plate; the C4 crook plant
   stops short of the ground; chapter pick panel overlaps the officer on select; Ch III beach greys in the fog; the Musou
   heavy slashes keep the shared vfx's cyan in places; free-mode arena officers are renamed but keep the crowd's AI.
+- Stage 10: brush.woff2 re-subset from Google Fonts' Yuji Boku to every CJK glyph in src/ (41 KB → 341 KB, 702 glyphs)
+  so non-Mac browsers get brush text for the 羊村 chapters. The newer Yuji Boku build rasterizes ch1's prologue
+  differently (old font 6/6 at HEAD, new font 0/6), so the ch1 scroll pixel refs were re-saved on the new font — an
+  asset change, not the scroll hook. crowdprobe now compares as a multiset: the world manager re-attaches its root on
+  sync(), which rotated scene order (94/94 meshes byte-identical, 0/94 in place). verify.sh checks every gate's exit code.
