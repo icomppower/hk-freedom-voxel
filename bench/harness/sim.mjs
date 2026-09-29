@@ -17,7 +17,7 @@ import { createCombat } from '../../src/combat/combat.js';
 import { createCamSim } from '../../src/camera/camera.js';
 import { CHARS } from '../../src/chars/index.js';
 import { createStory } from '../../src/story/index.js';
-import { difficulty } from '../../src/core/difficulty.js';
+import { difficulty, DIFFS, setDifficulty } from '../../src/core/difficulty.js';
 
 export const ACTIONS = ['attack', 'charge', 'jump', 'dodge', 'musou', 'target'];
 
@@ -97,6 +97,7 @@ export function* rleFrames(rle) { for (const [n, ...rec] of rle) for (let k = 0;
 
 /** Replay a log; returns { checks: { frame: hash }, end, frames }. checkEvery: also hash every n frames. */
 export function replay(sim, log, { checkEvery = 600 } = {}) {
+  if (log.diff) setDifficulty(DIFFS.find((d) => d.id === log.diff));          // (setDifficulty's localStorage write fails quietly in Node)
   sim.start({ char: log.char, mode: log.mode, chapter: log.chapter });
   const checks = {};
   let f = 0;
