@@ -11,6 +11,7 @@ echo "== ch1 bot (?dev chapter)";    g $N bench/bot/run.mjs --char zhaoyun --qui
 echo "== character + boss gates";    g $N bench/chars/gates.mjs lungjai; g $N bench/chars/gates.mjs siumei
 g $N bench/chars/boss.mjs lungjai; g $N bench/chars/boss.mjs siumei
 echo "== scroll columns";            g $N bench/harness/cols.mjs
+echo "== cutscene look";             g $N bench/chars/cut-look.mjs
 for ch in hk1 hk2 hk3 hk4; do
   echo "== $ch: map gate + bot (both playables × steady / rush / back)"
   g $N bench/maps/mapcheck.mjs $ch lungjai; g $N bench/maps/mapcheck.mjs $ch siumei
@@ -24,6 +25,8 @@ g node bench/harness/shots-scroll.mjs hk1 --char lungjai
 echo "== Chrome: ch1 checkpoints";   g node bench/harness/xcheck.mjs ch1-zhaoyun 3600; g node bench/harness/xcheck.mjs ch1-huangzhong 3600
 echo "== Chrome: touch hook";        g node bench/harness/touch-twin.mjs; g node bench/harness/touch-ui.mjs; g node bench/harness/phone-flow.mjs
 echo "== Chrome: ending flow";       g node bench/harness/scroll-flow.mjs hk4
+echo "== Chrome: cutscenes";         g node bench/harness/cut-flow.mjs; g node bench/harness/cut-shots.mjs; g node bench/harness/cut-shots.mjs --skip
+g node bench/harness/cut-shots.mjs --mobile; g node bench/harness/ending-fit.mjs
 echo "== Chrome: frame time";        g node bench/maps/perfmap.mjs hk1 hk4
 echo "== Chrome: mobile frame time"; g node bench/maps/perf-mobile.mjs ch1 hk1 hk4
 echo "ALL GATES GREEN"
