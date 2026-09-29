@@ -47,7 +47,7 @@ export function buildGround(root, { colorAt, rise = defRise, sea = null, roughne
   mesh.receiveShadow = true; mesh.name = 'ground';
   root.add(mesh);
   if (sea) {
-    const s = new THREE.Mesh(new THREE.PlaneGeometry(sea.size || 2400, sea.size || 2400), new THREE.MeshStandardMaterial({ color: sea.color, roughness: 0.35, metalness: 0.1 }));
+    const s = new THREE.Mesh(new THREE.PlaneGeometry(sea.size || 2400, sea.size || 2400), new THREE.MeshStandardMaterial({ color: sea.color, roughness: sea.rough ?? 0.18, metalness: sea.metal ?? 0.55 }));
     s.rotation.x = -Math.PI / 2; s.position.y = sea.y; s.receiveShadow = true; s.name = 'sea';
     root.add(s);
   }

@@ -29,16 +29,16 @@ export function buildHarbor(scene, root) {
   scene.background = FOG.clone();
   scene.fog = new THREE.Fog(FOG.clone(), 10, 95);
   root.add(fogSky());
-  root.add(new THREE.HemisphereLight(0x9aaac4, 0x40485a, 2.2));
+  root.add(new THREE.HemisphereLight(0x8a9ab4, 0x3a4050, 1.8));
   const key = new THREE.DirectionalLight(0xd0dcf0, 2.0);
   key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
   Object.assign(key.shadow.camera, { left: -SHADOW_BOX, right: SHADOW_BOX, top: SHADOW_BOX, bottom: -SHADOW_BOX, near: 1, far: 160 });
   key.shadow.bias = -0.0006; key.shadow.normalBias = 0.03;
   root.add(key, key.target);
 
-  const SAND = 0x9a8e74, WET = 0x6e6656, STONE = 0x6a6a6c, QUAY = 0x5e5c5a, ROCK = 0x4e4e52, GRASS = 0x4a5a44;
+  const SAND = 0x8c7a5a, WET = 0x5e5646, STONE = 0x6a6a6c, QUAY = 0x5e5c5a, ROCK = 0x4e4e52, GRASS = 0x4a5a44;
   buildGround(root, {
-    sea: { y: -0.15, color: 0x2e3e50 },
+    sea: { y: -0.15, color: 0x0e1a24 },
     rise: (x, z, out) => -Math.min(4, out * 0.6),
     colorAt(x, z, y, inside, out) {
       if (inside < -0.6) return y < -0.2 ? WET : ROCK;

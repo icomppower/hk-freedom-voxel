@@ -16,10 +16,10 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 6 Chapter I pasture / sheep1 | done | bot WIN 6/6 (gok + siume × steady / rush / back: no soft-lock); map gate 6/6 per officer (no NaN, standing soldiers ≥ −1.25 m, no teleport > 3 m/step, barnLane + villageGate reached, won); scroll columns ≤ 7; ch1 prologue 6/6, crowd 94/94, Node 6/6 |
 | 7 Chapter II lantern / sheep2 | done | bot WIN 6/6 (gok + siume × steady / rush / back); map gate 5/5 per officer; WIN in the real page (gok); night lighting critic → readable |
 | 8 Chapter III harbor / sheep3 + ENDING + TRIBUTE | done | bot WIN 6/6 (both officers × 3 styles, 2 300–4 200 KOs); map gate 6/6 per officer (boom + lighthouse reached); scroll-flow 11/11 on the real ending (result → ENDING → tribute → title only after the Ch. III win); tribute card: original wording, no names, link minjian-danganguan.org/archive/3429 (verified) |
-| 9 Critic rounds | todo | |
+| 9 Critic rounds | done | r1 P1s: ui 3 (title branding, no tribute entry, result buttons unclickable at 720p) → 0; scene 2 (Ch II night unreadable, Ch III sea read as snow) → 0; perf 0 (all maps p95 ≤ 16.8 ms at 300 + 600 enemies); fx 0; chars 0 (P2s listed below) |
 | 10 Ship | todo | |
 
-**Next action:** stage 9 critic rounds (fx / scene / ui / chars / perf). Known P1: title screen is still upstream's 三國無雙 branding with Zhao Yun / Huang Zhong; result footer covers the buttons at 720p; title menu needs the tribute entry.
+**Next action:** stage 10 ship — all gates, README credits, re-subset the brush font, GitHub Pages, Live Projects Bookmark.
 
 ## Contract ids (Divide & Conquer page)
 
@@ -72,3 +72,6 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
   羊村 map rename the crowd's built-in arena officers via chapter.freeNames (story index.js free-mode hook).
 - Bot: A* on the walk grid when the road ahead is blocked or the goal is off the road; Huang Zhong's ch1 clears with the
   rush style (steady / back lose ≈ half the runs) — upstream content, not a 羊村 gate; his clear is in the hash logs.
+- Open P2s after critic r1: wolves read nearly black in the golden light; 阿角's coat rows read as plate; the C4 crook plant
+  stops short of the ground; chapter pick panel overlaps the officer on select; Ch III beach greys in the fog; the Musou
+  heavy slashes keep the shared vfx's cyan in places; free-mode arena officers are renamed but keep the crowd's AI.
