@@ -14,7 +14,7 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 4 狼督 + grey / shadow / iron | done | boss gate 6/6 (phase 2 at 49.8 % HP, phase 3 at 19.8 %, banners on the phase frames, searchlight squads drop, KO → win, slot keeps the warden model) as gok + zhaoyun; officer lineup critic 3 rounds → P1 0; KO = kneel + raised horn + broken glaive; ch1 crowd 94/94, Node 6/6 |
 | 5 小咩 siume | done | gates 6/6 (moves 15/15, onsets = Box Moveset, N-string 18 sf apart live, blades ≥ 0.45 m, feet slide ≤ 0.70 cm, Musou 39/40); 60 fps through the Musou at 600 enemies; model critic 2 rounds → P1 0 (headband tails were a rigid plank); bot clears ch1 as siume (7:27, rank S); ch1 Node 6/6 |
 | 6 Chapter I pasture / sheep1 | done | bot WIN 6/6 (gok + siume × steady / rush / back: no soft-lock); map gate 6/6 per officer (no NaN, standing soldiers ≥ −1.25 m, no teleport > 3 m/step, barnLane + villageGate reached, won); scroll columns ≤ 7; ch1 prologue 6/6, crowd 94/94, Node 6/6 |
-| 7 Chapter II lantern / sheep2 | todo | |
+| 7 Chapter II lantern / sheep2 | done | bot WIN 6/6 (gok + siume × steady / rush / back); map gate 5/5 per officer; WIN in the real page (gok); night lighting critic → readable |
 | 8 Chapter III harbor / sheep3 + ENDING + TRIBUTE | todo | |
 | 9 Critic rounds | todo | |
 | 10 Ship | todo | |

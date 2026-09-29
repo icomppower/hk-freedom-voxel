@@ -113,3 +113,6 @@ export function shrineHall(w = 14, d = 7) {
 /** The signal lantern: stone base, a tall pole, a crossbar; the lantern body itself is separate (lit / unlit). */
 export const signalPole = () => [bx([2.2, 0.8, 2.2], [0, 0.4, 0], STONE), bx([0.35, 7, 0.35], [0, 4.3, 0], WOOD_D), bx([2.6, 0.25, 0.25], [0.9, 7.6, 0], WOOD_D)];
 export const signalLantern = () => [bx([1.3, 1.8, 1.3], [0, 0, 0], 0xe05030), bx([1.0, 0.18, 1.0], [0, 0.98, 0], 0x2a2018), bx([1.0, 0.18, 1.0], [0, -0.98, 0], 0x2a2018)];
+/** A lamb of the twelve (small, +Z forward): cream wool body, dark face and legs, an unlit lantern bundle on its back. */
+export const lamb = () => [bx([0.5, 0.42, 0.72], [0, 0.55, 0], 0xece6d8), bx([0.26, 0.3, 0.3], [0, 0.78, 0.42], 0x2e2c2a), bx([0.3, 0.14, 0.3], [0, 0.95, 0.38], 0xece6d8),
+  ...[[-0.16, 0.24], [0.16, 0.24], [-0.16, -0.24], [0.16, -0.24]].map(([x, z]) => bx([0.1, 0.36, 0.1], [x, 0.18, z], 0x2e2c2a)), bx([0.36, 0.3, 0.3], [0, 0.9, -0.15], 0x8a6a44)];

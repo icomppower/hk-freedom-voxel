@@ -13,6 +13,7 @@
 //   sides.names { us: {zh, en}, them: {zh, en} }   who the HUD's reinforcement banners name
 import * as ch1 from './ch1.js';
 import * as sheep1 from './sheep1.js';
+import * as sheep2 from './sheep2.js';
 
 const LIST = [
   {
@@ -28,6 +29,13 @@ const LIST = [
     skin: { foe: 'wolf', ally: 'sheep' },
     // the festival flock with crooks and pitchforks, either side of the pasture track
     allies: [-1, 1].map((sx) => ({ x: sx * 6, z: -132, n: 10, cols: 3, hold: true })),
+  },
+  {
+    ...sheep2, id: 'sheep2', map: 'lantern', cast: ['gok', 'siume'],
+    title: { small: '第二章', zh: '燈籠街夜行', en: 'CHAPTER II · LANTERN STREET BY NIGHT' },
+    sides: { us: '羊', them: '狼', names: { us: { zh: '羊群', en: 'The flock' }, them: { zh: '狼群', en: 'Wolf' } } },
+    skin: { foe: 'wolf', ally: 'sheep' },
+    allies: [-1, 1].map((sx) => ({ x: sx * 5, z: -104, n: 6, cols: 3, hold: true })),   // the villagers who came out to help
   },
 ];
 
