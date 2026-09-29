@@ -8,9 +8,19 @@ g() { out=$("$@" 2>&1); rc=$?; if [ $rc -ne 0 ]; then echo "$out" | tail -5; ech
 echo "== ch1 hash gate (Node)";      g $N bench/harness/check.mjs
 echo "== rig / dual-wield probes";   g $N bench/harness/rigprobe.mjs; g $N bench/harness/dualprobe.mjs
 echo "== ch1 bot (?dev chapter)";    g $N bench/bot/run.mjs --char zhaoyun --quiet
+echo "== character + boss gates";    g $N bench/chars/gates.mjs lungjai; g $N bench/chars/gates.mjs siumei
+g $N bench/chars/boss.mjs lungjai; g $N bench/chars/boss.mjs siumei
+echo "== scroll columns";            g $N bench/harness/cols.mjs
+for ch in hk1 hk2 hk3 hk4; do
+  echo "== $ch: map gate + bot (both playables × steady / rush / back)"
+  g $N bench/maps/mapcheck.mjs $ch lungjai; g $N bench/maps/mapcheck.mjs $ch siumei
+  for c in lungjai siumei; do for st in steady rush back; do g $N bench/bot/run.mjs --char $c --chapter $ch --style $st --quiet; done; done
+done
 [ "$1" = "--quick" ] && { echo "QUICK GATES GREEN"; exit 0; }
 echo "== Chrome: boot, scrolls";     g node bench/harness/smoke.mjs "?x" 4; g node bench/harness/shots-scroll.mjs ch1
-echo "== Chrome: crowd";             g node bench/harness/crowdprobe.mjs ch1
+echo "== Chrome: crowd, skins, UI";  g node bench/harness/crowdprobe.mjs ch1; g node bench/harness/skin-test.mjs
+g node bench/harness/ui-flow.mjs bench/out/ui; g node bench/harness/result-fit.mjs
+g node bench/harness/shots-scroll.mjs hk1 --char lungjai
 echo "== Chrome: ch1 checkpoints";   g node bench/harness/xcheck.mjs ch1-zhaoyun 3600; g node bench/harness/xcheck.mjs ch1-huangzhong 3600
 echo "== Chrome: touch hook";        g node bench/harness/touch-twin.mjs; g node bench/harness/touch-ui.mjs
 echo "== Chrome: mobile frame time"; g node bench/maps/perf-mobile.mjs ch1

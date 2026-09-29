@@ -12,6 +12,10 @@
 //   skin { foe, ally }  crowd skins (src/chars/officers/index.js SKINS; default: the Wei army / Shu allies)
 //   sides.names { us: {zh, en}, them: {zh, en} }   who the HUD's reinforcement banners name
 import * as ch1 from './ch1.js';
+import * as hk1 from './hk1.js';
+import * as hk2 from './hk2.js';
+import * as hk3 from './hk3.js';
+import * as hk4 from './hk4.js';
 import { DEV } from '../chars/index.js';
 
 const LIST = [
@@ -20,6 +24,35 @@ const LIST = [
     title: { small: '第一章', zh: '定軍山', en: 'CHAPTER I · MOUNT DINGJUN' }, sides: { us: '蜀', them: '魏' },
     // the van drawn up either side of the road inside the 本陣 gate, holding rank until the hero marches past
     allies: [-1, 1].map((sx) => ({ x: sx * 5.575, z: -121.6, n: 12, cols: 4, hold: true })),
+  },
+  {
+    ...hk1, id: 'hk1', map: 'admiralty', cast: ['lungjai', 'siumei'],
+    title: { small: '第一章', zh: '金鐘', en: 'CHAPTER I · ADMIRALTY' },
+    sides: { us: '港', them: '警', names: { us: { zh: '手足', en: 'Protesters' }, them: { zh: '防暴警', en: 'Riot police' } } },
+    skin: { foe: 'riot', ally: 'blackbloc' },
+    // the umbrella line: 手足 either side of the carriageway ahead of the start
+    allies: [-1, 1].map((sx) => ({ x: sx * 6, z: -130, n: 12, cols: 4, hold: true })),
+  },
+  {
+    ...hk2, id: 'hk2', map: 'legco', cast: ['lungjai', 'siumei'],
+    title: { small: '第二章', zh: '立法會', en: 'CHAPTER II · LEGCO' },
+    sides: { us: '港', them: '警', names: { us: { zh: '手足', en: 'Protesters' }, them: { zh: '防暴警', en: 'Riot police' } } },
+    skin: { foe: 'riot', ally: 'blackbloc' },
+    allies: [-1, 1].map((sx) => ({ x: sx * 6, z: -132, n: 10, cols: 5, hold: true })),   // the crowd on the plaza
+  },
+  {
+    ...hk3, id: 'hk3', map: 'yuenlong', cast: ['lungjai', 'siumei'],
+    title: { small: '第三章', zh: '元朗', en: 'CHAPTER III · YUEN LONG' },
+    sides: { us: '港', them: '白', names: { us: { zh: '乘客', en: 'Passengers' }, them: { zh: '白衫友', en: 'White shirts' } } },
+    skin: { foe: 'white', ally: 'civil' },
+    allies: [-1, 1].map((sx) => ({ x: sx * 5, z: -128, n: 6, cols: 3, hold: true })),   // passengers who stood up to them
+  },
+  {
+    ...hk4, id: 'hk4', map: 'polyu', cast: ['lungjai', 'siumei'],
+    title: { small: '第四章', zh: '理工大學', en: 'CHAPTER IV · POLYU SIEGE' },
+    sides: { us: '港', them: '警', names: { us: { zh: '手足', en: 'Protesters' }, them: { zh: '防暴警', en: 'Riot police' } } },
+    skin: { foe: 'riot', ally: 'blackbloc' },
+    allies: [-1, 1].map((sx) => ({ x: sx * 6, z: -130, n: 10, cols: 5, hold: true })),   // the students holding the podium
   },
 ];
 

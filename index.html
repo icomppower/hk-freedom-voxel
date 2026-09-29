@@ -767,6 +767,16 @@
   #result.lose .rs-epi { animation-delay: 1.9s; }
   #result .rs-epi p { margin: 0 0 1.1rem; font: 700 2.1rem/1.55 var(--kai); color: #efe3cf; }
   #result .rs-epi small { display: block; font: 500 1.35rem/1.45 var(--sans); letter-spacing: .02em; color: #cdbb9c; }
+  /* 香港自由戰士: the chapter epilogues are the Phaser game's history paragraphs (long) — the block scrolls; quotes italic;
+     a phone held sideways (≤ 500 px tall: 1rem ≈ 5 px) gets readable pixel sizes and the whole card scrolls */
+  #result .rs-epi { max-height: 19rem; overflow-y: auto; padding-right: 1rem; scrollbar-width: thin; }
+  #result .rs-epi i { font-style: italic; }
+  @media (max-height: 500px) {
+    #result .rs { max-height: 100vh; overflow-y: auto; gap: 1rem; padding: 1rem 0 5rem; box-sizing: border-box; }
+    #result .rs-epi { max-height: none; overflow: visible; }
+    #result .rs-epi p { font-size: 14px; } #result .rs-epi small { font-size: 12px; }
+    #result .rs-btns button { min-height: 44px; }
+  }
   #result .rs-btns { display: flex; gap: 1.6rem; animation: rsIn .5s both 3s; }
   #result.lose .rs-btns { animation-delay: 2.1s; }
   #result .rs-btns button { padding: 1.1rem 3.6rem; cursor: pointer; border: 0; border-radius: .4rem; font: 700 2.8rem/1 var(--brush); letter-spacing: .5rem;
