@@ -1,6 +1,8 @@
 // Moveset helpers shared by every character kit (src/chars/*/): move-table preparation, lunge and clip retiming.
 // The move-table format is documented at the top of src/hero/moves.js (Zhao Yun's moveset); a kit's table goes through
 // prepMoves() once at module load.
+// Dual wield (stage-2b hook): a move may name the striking hand — hand: 'R' (default) | 'L', or [[frame, 'R' | 'L'], …]
+// switching from those move frames on (alternating snips). Render-only: the weapon trail follows that hand's blade.
 
 /** Fill derived fields in place: id, lunge (default []), hits (default []), tell (start → first active frame, the
  *  charge tell; a move without hitboxes — e.g. a pure projectile shot — may set `tell` itself), and the `anim` key
@@ -40,4 +42,14 @@ export function moveClip(m, t) {
   const k = a[i], n = a[i + 1];
   if (!n || n[3] !== k[3] || t <= k[0]) return [k[2], k[1], k[3]];
   return [k[2], k[1] + (n[1] - k[1]) * (t - k[0]) / (n[0] - k[0]), k[3]];
+}
+
+/** Striking hand at move frame t: 'R' | 'L' (move.hand, see header). */
+export function handAt(m, t) {
+  const h = m && m.hand;
+  if (!h) return 'R';
+  if (typeof h === 'string') return h;
+  let r = 'R';
+  for (const [f, v] of h) if (t >= f) r = v;
+  return r;
 }

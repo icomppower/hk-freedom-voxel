@@ -7,7 +7,7 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 0 Harness | done | 4 Node logs replay identical (ch1 × zhaoyun / huangzhong, 7 200 + 36 000 f); Chrome 6/6 checkpoints stable run to run |
 | 1 Seam | done | Node 4/4 logs identical (finals 90a1a382 64989ea8 6c41979e 2c32ffdc), Chrome 2/2 × 6/6 checkpoints; menus → chapter pick → prologue → battle, 0 errors |
 | 2a Scroll player | done | 定軍山 prologue 12/12 frames pixel-identical (both officers); scroll-flow 11/11 (ending only after a win of a chapter with ENDING, tap / hold / Esc, tribute → title); Node 4/4 |
-| 2b Dual-wield rig | todo | |
+| 2b Dual-wield rig | done | rig probe 54/54 upstream clips joint-identical; dual probe 216 reachable grips: hand→grip 0.00 mm, fist→blade 0.000°, right hand moved 0; Node 4/4 |
 | 2c Crowd skin + officer hook | todo | |
 | 2d Bot autoplay | todo | |
 | 3 阿角 gok | todo | |
@@ -19,7 +19,7 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 9 Critic rounds | todo | |
 | 10 Ship | todo | |
 
-**Next action:** stage 2b dual-wield rig (weaponL joint + IK), gated on unchanged ch1 hashes.
+**Next action:** stage 2c crowd skin + officer-model hook (wolf grunts, officer models by key).
 
 ## Contract ids (Divide & Conquer page)
 

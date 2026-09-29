@@ -14,6 +14,10 @@
 // the arrow line toward the target, limbs along local ±Y; the right hand draws along the line behind it (gripR < 0 = the
 // draw length) or swings free (rfree/armR, the mirror of lfree/armL). Zhao Yun never sets rfree (0 = both hands on the
 // shaft as before).
+// Dual wield (stage-2b engine hook, 小咩's twin shears): a second weapon joint `weaponL` (child of root) keyed by its own
+// channels spearL (x, y, z, yaw, elev, roll — same axes as the spear, origin = the left grip); `dual` 0…1 moves the left
+// hand onto that grip (IK) and turns the fist with the blade, over whatever lfree / the shaft asked for. dual 0 (every
+// upstream clip) leaves the rig exactly as it was.
 import * as THREE from 'three';
 
 export const DIM = {
@@ -39,9 +43,11 @@ export const CH = {
                                   // the body over planted feet instead of skating them round (attack clips use 1)
   rfree: 40,                      // 0 = right hand on the weapon line, 1 = right arm FK (armR) — the bow's string hand
   armR: 41,                       // right arm FK: shoulder rx, ry, rz (mirrored: + = away from the body), elbow bend
+  spearL: 45,                     // left weapon (dual wield): x,y,z, yaw, elev, roll
+  dual: 51,                       // 0 = no left weapon in hand, 1 = left hand on the weaponL grip
 };
-export const POSE_SIZE = 45;
-const ANGLES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18, 19, 23, 24, 28, 29, 30, 34, 35, 36, 37, 38, 41, 42, 43, 44];
+export const POSE_SIZE = 52;
+const ANGLES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18, 19, 23, 24, 28, 29, 30, 34, 35, 36, 37, 38, 41, 42, 43, 44, 48, 49, 50];
 const IS_ANGLE = new Uint8Array(POSE_SIZE); for (const i of ANGLES) IS_ANGLE[i] = 1;
 const D2R = Math.PI / 180;
 
@@ -53,6 +59,7 @@ export const STANCE = {
   footL: [0.17, 0.08, 0.3, 0, 15], footR: [-0.2, 0.08, -0.26, 0, -30],
   spear: [-0.24, 0.98, 0.0, 30, 30, 0], gripR: 0, gripL: 0.5, lfree: 0, armL: [0, 0, 0, 0], spin: 0, plant: 0,
   rfree: 0, armR: [0, 0, 0, 0],
+  spearL: [0.24, 0.98, 0.0, -30, 30, 0], dual: 0,
 };
 
 /** Build a pose from a spec (angles in degrees). Missing fields come from `base` (default STANCE). */
@@ -64,6 +71,7 @@ export function P(spec = {}, base = STANCE) {
   put(CH.footL, s.footL); put(CH.footR, s.footR); put(CH.spear, s.spear);
   o[CH.gripR] = s.gripR; o[CH.gripL] = s.gripL; o[CH.lfree] = s.lfree; put(CH.armL, s.armL); o[CH.spin] = s.spin;
   o[CH.plant] = s.plant || 0; o[CH.rfree] = s.rfree || 0; put(CH.armR, s.armR || STANCE.armR);
+  put(CH.spearL, s.spearL || STANCE.spearL); o[CH.dual] = s.dual || 0;
   for (const i of ANGLES) o[i] *= D2R;
   return o;
 }
@@ -265,10 +273,12 @@ export function createRig() {
     mk('foot' + s, j['shin' + s], 0, -DIM.shin, 0);
   }
   mk('weapon', j.root);
+  mk('weaponL', j.root);                                      // dual wield: the left weapon (spearL channels)
 
   const reach = (DIM.upper + DIM.fore) * 0.985;
   const gripW = new THREE.Vector3(), fkHand = new THREE.Vector3(), spearDir = new THREE.Vector3();
   const rootQ = new THREE.Quaternion(), chestQ = new THREE.Quaternion(), spearQ = new THREE.Quaternion();
+  const leftQ = new THREE.Quaternion(), leftO = new THREE.Vector3();
   const footT = [new THREE.Vector3(), new THREE.Vector3()];
 
   const rig = {
@@ -286,6 +296,8 @@ export function createRig() {
       j.head.rotation.set(pose[12] - pose[3] - pose[6] - pose[9], pose[13] - pose[4] - pose[7] - pose[10], pose[14]);
       j.weapon.position.set(pose[25], pose[26], pose[27]);
       j.weapon.rotation.set(-spearElev(pose, pos.y), pose[28], pose[30]);
+      j.weaponL.position.set(pose[45], pose[46], pose[47]);
+      j.weaponL.rotation.set(-pose[49], pose[48], pose[50]);
       for (const s of ['R', 'L']) {
         j['upperArm' + s].quaternion.identity(); j['foreArm' + s].quaternion.identity();
         j['thigh' + s].quaternion.identity(); j['shin' + s].quaternion.identity();
@@ -309,6 +321,8 @@ export function createRig() {
       j.weapon.getWorldQuaternion(spearQ);
       j.weapon.getWorldPosition(_O);
       spearDir.set(0, 0, 1).applyQuaternion(spearQ);
+      const dual = pose[51];
+      if (dual > 0.001) { j.weaponL.getWorldQuaternion(leftQ); j.weaponL.getWorldPosition(leftO); }
 
       // --- arms: each hand on the shaft or FK (blended by lfree / rfree; the right arm's FK is mirrored)
       let gR = 0;             // right hand's actual shaft offset (the left keeps clear of it)
@@ -332,11 +346,13 @@ export function createRig() {
           gripW.lerp(fkHand, free);
           _pole.lerp(_v2.set(sx * 0.5, -0.2, -0.8).applyQuaternion(_q2), free);
         }
+        if (s === 'L' && dual > 0.001) gripW.lerp(leftO, dual);   // dual wield: the left fist on its own weapon's grip
         solve2(up, fo, gripW, _pole, DIM.upper, DIM.fore, _v3.copy(_pole).negate());
         // hand: fist wraps the shaft (local Z along the spear)
         fo.getWorldQuaternion(_q2);
         _q.copy(spearQ);
         if (free > 0.001) _q.slerp(_q2, free);
+        if (s === 'L' && dual > 0.001) _q.slerp(leftQ, dual);
         ha.quaternion.copy(_q2.invert().multiply(_q));
         ha.updateMatrixWorld(true);
       }
@@ -363,6 +379,14 @@ export function createRig() {
 export function spearWorld(pose, pos, yaw, zBase, zTip, outBase, outTip) {
   weaponWorld(pose, pos, yaw, 0, 0, zBase, outBase);
   weaponWorld(pose, pos, yaw, 0, 0, zTip, outTip);
+}
+
+/** A point (lx, ly, lz m) of the left (dual-wield) weapon's frame in world space (pure; VFX trails of left-hand moves). */
+export function weaponLWorld(pose, pos, yaw, lx, ly, lz, out) {
+  _e.set(-pose[49], pose[48], pose[50]); _q.setFromEuler(_e);
+  const cy = Math.cos(yaw + pose[38]), sy = Math.sin(yaw + pose[38]);
+  _v.set(lx, ly, lz).applyQuaternion(_q).add(_v2.set(pose[45], pose[46], pose[47])).multiplyScalar(HERO_SCALE);
+  return out.set(pos.x + _v.x * cy + _v.z * sy, pos.y + _v.y, pos.z - _v.x * sy + _v.z * cy);
 }
 
 /** A point (lx, ly, lz m) of the weapon frame in world space (pure). The bow's limbs run along local y (VFX trails). */

@@ -24,7 +24,8 @@ import { on } from '../core/events.js';
 import { vrng } from '../core/rng.js';
 import { boxesGeometry } from '../core/voxel.js';
 import { heroPose } from '../hero/hero.js';
-import { POSE_SIZE, spearWorld, weaponWorld } from '../hero/rig.js';
+import { POSE_SIZE, spearWorld, weaponWorld, weaponLWorld } from '../hero/rig.js';
+import { handAt } from '../hero/moveset.js';
 import { lensClear } from '../camera/occlusion.js';        // camera part (r3): debris never blocks the lens
 import { ground } from '../world/map.js';                  // effects live in sim space (y above ground); lifted at draw
 
@@ -1171,6 +1172,7 @@ export function createVfx(scene, game, world) {
   });
 
   // ---- per sim step: trail samples, thrust streaks per line-hitbox tick, lunge dust (reads sim, never writes it)
+  let lastHand = 'R';
   vfx.afterStep = () => {
     const h = game.hero;
     if (game.hitstop === 0 || game.hitstop % 2 === 0) clock++;   // half-rate ageing in hitstop: a heavy hit must not hang the crescent
@@ -1178,7 +1180,11 @@ export function createVfx(scene, game, world) {
     hpos.set(h.x, h.y, h.z);
     const musou = h.state === 'musou', heavy = musou || (h.state === 'attack' && isHeavyMove(h.move)), tr = h.kit.trail;
     if (tr.axis === 'y') { weaponWorld(pose, hpos, h.yaw, 0, tr.base, 0.02, baseNow); weaponWorld(pose, hpos, h.yaw, 0, tr.tip, 0.05, tipNow); }   // bow limb
-    else spearWorld(pose, hpos, h.yaw, heavy ? tr.baseHeavy : tr.base, tr.tip, baseNow, tipNow);   // ribbon ≈ 0.9-1.1 m wide: a crisp band, not a sheet
+    else if (h.state === 'attack' && handAt(h.kit.moves[h.move], h.moveT) === 'L') {   // dual wield: a left-hand cut
+      weaponLWorld(pose, hpos, h.yaw, 0, 0, heavy ? tr.baseHeavy : tr.base, baseNow); weaponLWorld(pose, hpos, h.yaw, 0, 0, tr.tip, tipNow);
+    } else spearWorld(pose, hpos, h.yaw, heavy ? tr.baseHeavy : tr.base, tr.tip, baseNow, tipNow);   // ribbon ≈ 0.9-1.1 m wide: a crisp band, not a sheet
+    const hand = h.state === 'attack' ? handAt(h.kit.moves[h.move], h.moveT) : 'R';
+    if (hand !== lastHand) { lastHand = hand; if (samples.length && !samples[samples.length - 1].brk) samples.push({ brk: true, c: clock }); }   // blade swap: new ribbon
 
     if (h.state === 'attack' && game.hitstop === 0) {
       const tick = h.moveSeq * 1000 + h.moveT;
