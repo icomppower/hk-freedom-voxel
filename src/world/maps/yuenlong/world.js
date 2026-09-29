@@ -29,7 +29,7 @@ export function buildYuenlong(scene, root) {
   moon.shadow.bias = -0.0006; moon.shadow.normalBias = 0.03;
   root.add(moon, moon.target);
 
-  const ASP = 0x2e3036, TILE = 0x9a968c, TILE2 = 0x8a8680, PLAT = 0x8a8a82, EDGE = 0xd8b030;
+  const ASP = 0x2e3036, TILE = 0x7a7870, TILE2 = 0x6e6c66, PLAT = 0x74746e, EDGE = 0xb8962a;   // critic r1: interiors read washed out
   buildGround(root, {
     colorAt(x, z, y, inside) {
       if (inside < -0.6) return 0x2a2c30;
@@ -52,7 +52,7 @@ export function buildYuenlong(scene, root) {
   const lampAt = [];
   for (let z = -150; z < -86; z += 16) for (const sx of [-1, 1]) { const x = sx * 17.5, L = streetLamp(7); boxes.push(...place(L.body, x, 0, z, sx > 0 ? -Math.PI / 2 : Math.PI / 2)); glows.push(...place(L.glow, x, 0, z, sx > 0 ? -Math.PI / 2 : Math.PI / 2)); lampAt.push([x - sx * 1.7, 6.6, z]); }
   // station shell: the entrance canopy, concourse walls (cutaway), pillars, ticket machines
-  boxes.push(bx([40, 1, 6], [0, 6.5, -88], 0x5a5e66), bx([2, 6.5, 1], [-20, 3.2, -88], 0x5a5e66), bx([2, 6.5, 1], [20, 3.2, -88], 0x5a5e66));
+  boxes.push(bx([40, 1, 4], [0, 11, -89], 0x5a5e66), bx([2, 11, 1], [-20, 5.5, -88], 0x5a5e66), bx([2, 11, 1], [20, 5.5, -88], 0x5a5e66));   // entrance frame, high (camera clearance)
   for (const sx of [-1, 1]) {
     boxes.push(bx([1, 6, 52], [sx * 23, 3, -62], 0xb8b4ac), bx([1, 6, 28], [sx * 16, 3, -24], 0xb8b4ac));
     for (const z of [-75, -51]) boxes.push(bx([2, 6, 2], [sx * 11, 3, z], 0xc8c4bc));
@@ -61,11 +61,11 @@ export function buildYuenlong(scene, root) {
   // fare-gate cabinets (the paddles are separate: they swing), the stair walls, platform canopy, the far track wall
   for (let k = 0; k < 11; k++) boxes.push(bx([0.5, 1.1, 2.2], [-13 + k * 2.6, 0.75, -26], 0x8a8e96), bx([0.52, 0.08, 2.2], [-13 + k * 2.6, 1.34, -26], 0x3a3e46));
   for (const sx of [-1, 1]) boxes.push(bx([1, 4, 14], [sx * 8.5, 2, -3], 0xb8b4ac));
-  for (let z = 4; z < 74; z += 6) boxes.push(bx([0.3, 4, 0.3], [-6.5, ground(0, z) + 2, z], 0x6a6e74));
-  boxes.push(bx([16, 0.3, 72], [2, ground(0, 30) + 4.2, 38], 0x5a5e66), bx([1, 5, 72], [-8, ground(0, 30) + 1, 38], 0xb8b4ac));
+  for (let z = 4; z < 74; z += 6) boxes.push(bx([0.3, 5, 0.3], [6.8, ground(0, z) + 2.5, z], 0x6a6e74));
+  boxes.push(bx([6, 0.3, 72], [9, ground(0, 30) + 5.2, 38], 0x5a5e66), bx([1, 5, 72], [-8, ground(0, 30) + 1, 38], 0xb8b4ac));   // canopy over the track side only (the camera rides over the platform)
   { const ty = ground(0, 30) - 1.4; boxes.push(bx([5, 0.3, 80], [10.5, ty + 0.05, 36], 0x2a2a2c), bx([0.2, 0.2, 80], [9.7, ty + 0.3, 36], 0x6a6a6a), bx([0.2, 0.2, 80], [11.3, ty + 0.3, 36], 0x6a6a6a)); }   // trackbed + rails
   for (let z = -86; z < -36; z += 10) for (const sx of [-1, 1]) { glows.push(bx([1.4, 0.15, 1.4], [sx * 8, 5.9, z], 0xf0f4ff)); lampAt.push([sx * 8, 5.6, z]); }
-  for (let z = 8; z < 74; z += 12) { glows.push(bx([1.4, 0.15, 1.4], [0, ground(0, z) + 4, z], 0xf0f4ff)); lampAt.push([0, ground(0, z) + 3.8, z]); }
+  for (let z = 8; z < 74; z += 12) { glows.push(bx([1.4, 0.15, 1.4], [8, ground(0, z) + 5, z], 0xf0f4ff)); lampAt.push([6, ground(0, z) + 4.8, z]); }
   const propMat = propMaterial();
   const props = new THREE.Mesh(merge(boxes), propMat); props.castShadow = props.receiveShadow = true; root.add(props);
   root.add(new THREE.Mesh(merge(lit), new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(0.95, 0.9, 0.8) })));
@@ -106,7 +106,7 @@ export function buildYuenlong(scene, root) {
       const on = !flick || (Math.sin(t * 23) + Math.sin(t * 7.3) > -0.6);
       glowMat.color.setScalar(on ? 2.8 : 0.4);
       const near = lampAt.slice().sort((a, b) => (a[0] - focus.x) ** 2 + (a[2] - focus.z) ** 2 - (b[0] - focus.x) ** 2 - (b[2] - focus.z) ** 2);
-      lights.forEach((l, n) => { const p = near[n]; l.position.set(p[0], p[1], p[2]); l.intensity = (on ? 55 : 8) * (1 - smooth(26, 44, Math.hypot(p[0] - focus.x, p[2] - focus.z))); });
+      lights.forEach((l, n) => { const p = near[n]; l.position.set(p[0], p[1], p[2]); l.intensity = (on ? 40 : 6) * (1 - smooth(26, 44, Math.hypot(p[0] - focus.x, p[2] - focus.z))); });
       hemi.intensity = on ? 2.5 : 1.6;
       torches.visible = flick;
       if (flick) { for (let k = 0; k < TN; k++) { const x = focus.x + (hash01(k, 1) - 0.5) * 30, z = focus.z + (hash01(k, 2) - 0.5) * 30; tpos[k * 3] = x; tpos[k * 3 + 1] = ground(x, z) + 1.4 + Math.sin(t * 2 + k) * 0.2; tpos[k * 3 + 2] = z; } tgeo.attributes.position.needsUpdate = true; }

@@ -3,14 +3,17 @@
 // reporter livestreams, passengers call 999 and nobody comes; 龍仔 and 小美 get the passengers through the fare gates; on
 // the platform a train pulls in and they hold the doors for 45 s while the passengers board; then 強哥 The Fixer.
 // Lines: Scroll Cutscenes page (hk3). Crowd: foe skin `white` (白衫友), ally skin `civil` (乘客).
-// Script (story hook): the passengers (ten walk in from the street 3 s apart, through the fare gates, and wait at the stair
-// foot; one is lost if the hero is > 20 m from the fare gates as it passes; more than four lost → the chapter is lost:
+// Script (story hook): the passengers (ten walk in from the street as a group, 1 s apart, through the fare gates to the
+// stair foot; the group only walks while the hero is within 18 m of its middle — the objective arrow rides with it —
+// and a passenger with a white shirt on top of them and the hero > 8 m away for 3 s is lost; more than four lost → the
+// chapter is lost:
 // fx.passengers), the lights (fx.flicker), the train (pulls in over 4 s, doors open 45 s while the safe passengers board,
 // then it leaves: fx.train / fx.doors, flag 'trainGone'), 強哥's phases (bosses.js). Win: 強哥 down + ≥ 60 % boarded.
 import { HK_MAP } from './hkmap.js';
 import { SPK, freeNames } from './hk1.js';
 import { bossScript } from '../chars/officers/hk/bosses.js';
 import { along } from './hkfx.js';
+import { ST } from '../crowd/crowd.js';
 
 export { SPK, freeNames };
 export const OFF = {
@@ -27,14 +30,15 @@ export const BEATS = [
     cue: 'passengers', gate: 'fareGates',
     banner: { html: '22:45 <em>元朗站</em>', en: '22:45 · Yuen Long Station', dur: 170 },
     obj: { zh: '護送乘客過閘', en: 'Get the passengers through the gates', go: ['faregates', 0, -0.2] },
-    squads: [{ at: ['street', -0.4, 0.6], n: 18, charge: true }, { at: ['concourse', 0.3, -0.2], n: 18 }, { at: ['concourse', -0.4, 0.3], n: 16 }],
+    squads: [{ at: ['street', -0.4, 0.6], n: 18, charge: true }, { at: ['concourse', 0.3, -0.2], n: 18, charge: true }, { at: ['concourse', -0.4, 0.3], n: 16, charge: true },
+      { at: ['street', 0.4, 0.9], n: 16, charge: true }],
     limit: { z: ['faregates', 0, 0.2], nag: NAG },
-    morale: 0,
+    morale: 0, waves: true,
     say: [{ who: 'passenger', zh: '救命呀！', en: 'Help!' }],
   },
   {
     when: { wait: 20 * 60 },
-    waves: true,
+    squads: [{ at: ['concourse', 0, 0.6], n: 16, charge: true }],
     say: [
       { who: 'reporter', zh: '打咗九九九⋯⋯冇人嚟。', en: 'We called 999... no one\'s coming.' },
       { who: 'siumei', zh: '咪我哋囉。', en: 'Then it\'s us.' },
@@ -109,7 +113,7 @@ const GATE_Z = -26, HOLD = 45 * 60, N = 10;
 export function script(game, api) {
   const b = boss(game, api), fx = b.fx;
   Object.assign(fx, { passengers: [...Array(N)].map(() => ({ x: 0, z: -140, yaw: 0, on: false, moving: false })), flicker: false, train: 0, doors: false, safe: 0, lost: 0, boarded: 0 });
-  let paxT = -1, trainT = -1;
+  let paxT = -1, trainT = -1, paxK = 0;
   return {
     fx,
     cue(name) {
@@ -121,22 +125,31 @@ export function script(game, api) {
       const h = game.hero, t = api.t();
       b.step();
       if (paxT >= 0) {
-        const k = t - paxT;
-        fx.passengers.forEach((p, j) => {                             // passenger j leaves at 2 + 3 s·j, 30 s to the stair foot
+        // the group walks (40 s from the street to the stair foot, 1 s apart) only while the hero is within 18 m of its
+        // middle; a passenger with a white shirt on top of them (≤ 1.6 m) and the hero > 8 m away for 3 s is lost
+        const walking = fx.passengers.filter((p) => p.on && !p.checked);
+        const mid = walking.length ? walking.map((p) => p.z).sort((a, b) => a - b)[walking.length >> 1] : h.z;
+        const covered = Math.abs(h.z - mid) < 18 || !walking.length;
+        if (covered) paxK++;
+        const c = game.crowd;
+        fx.passengers.forEach((p, j) => {
           if (p.lost || p.boarded) { p.on = false; return; }
-          const u = (k - 120 - j * 180) / 1800;
+          const u = (paxK - 120 - j * 60) / 2400;
           if (u < 0) return;
           if (trainT < 0 || !p.safe) {
-            p.on = true; p.moving = u < 1;
+            p.on = true; p.moving = u < 1 && covered;
             [p.x, p.z, p.yaw] = along(PAX_PATH, Math.min(1, u)); p.x += ((j % 3) - 1) * 1.2;
-            if (!p.checked && p.z >= GATE_Z) {
-              p.checked = true;
-              if (Math.hypot(h.x, h.z - GATE_Z) > 20) { p.lost = true; fx.lost++; } else { p.safe = true; fx.safe++; }
-              if (fx.lost > N - 6) api.lose();                           // fewer than 60 % can still get through
+            if (!p.checked) {
+              let near = false;
+              if (Math.hypot(h.x - p.x, h.z - p.z) > 8) for (let i = 0; i < c.grunts && !near; i++) if (c.st[i] >= ST.ADVANCE && c.st[i] <= ST.ATTACK && Math.abs(c.x[i] - p.x) < 1.6 && Math.abs(c.z[i] - p.z) < 1.6) near = true;
+              p.hurt = near ? (p.hurt || 0) + 1 : 0;
+              if (p.hurt > 180) { p.lost = p.checked = true; fx.lost++; if (fx.lost > N - 6) api.lose(); return; }   // < 60 % left
+              if (p.z >= GATE_Z) { p.checked = true; p.safe = true; fx.safe++; }
             }
           }
         });
         if (fx.safe + fx.lost === N) api.flag('paxThrough', true);
+        if (!api.flag('paxThrough') && t % 30 === 0 && walking.length) api.objective({ zh: '護送乘客過閘', en: 'Get the passengers through the gates', go: [0, mid] });
       }
       if (trainT >= 0) {
         const k = t - trainT;
