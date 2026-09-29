@@ -16,7 +16,10 @@
 // render exactly as upstream (WEI / SHU_SKIN below). An ally skin with weapons gets its own weapon meshes. Officers the
 // story spawned with a model key (story.modelOf(i)) draw that entry of OFFICER_MODELS instead of the generic officer:
 // { parts: bodyParts-style {hips, torso, head, arm, thigh, shin}, weapon: boxes, broken?: {haft, head} boxes shown once
-// KO'd, scale, tip }.
+// KO'd, scale, tip, voxel? (part voxel size, default the crowd's), offhand? (boxes in the left hand frame: a shield, a
+// bow), cracked? + crackAt (weapon boxes shown below that HP fraction), kneel? (KO'd: kneels where he fell instead of
+// sprawling and sinking — the officers of the 羊村 chapters are beaten, not killed), horn? (boxes raised in the left hand
+// while kneeling) }.
 import * as THREE from 'three';
 import { sculpt, shade, boxesGeometry } from '../core/voxel.js';
 import { ST, KIND, CROWD } from './crowd.js';
@@ -487,10 +490,11 @@ export function createCrowdView(scene, game) {
     const d = OFFICER_MODELS[key];
     if (!d) return (OM[key] = null);
     const n = 2, gp = {};
-    for (const k of ['hips', 'torso', 'head', 'arm', 'thigh', 'shin']) gp[k] = sculpt(d.parts[k], V, 0.1);
+    for (const k of ['hips', 'torso', 'head', 'arm', 'thigh', 'shin']) gp[k] = sculpt(d.parts[k], d.voxel || V, 0.1);
     const P = { hips: mk(gp.hips, n), torso: mk(gp.torso, n), head: mk(gp.head, n), arm: mk(gp.arm, n * 2), thigh: mk(gp.thigh, n * 2), shin: mk(gp.shin, n * 2) };
     return (OM[key] = { d, P, w: mk(boxesGeometry(d.weapon), n), haft: d.broken ? mk(boxesGeometry(d.broken.haft), n) : null,
-      head: d.broken ? mk(boxesGeometry(d.broken.head), n) : null });
+      head: d.broken ? mk(boxesGeometry(d.broken.head), n) : null, off: d.offhand ? mk(boxesGeometry(d.offhand), n) : null,
+      cracked: d.cracked ? mk(boxesGeometry(d.cracked), n) : null, horn: d.horn ? mk(boxesGeometry(d.horn), n) : null });
   }
   on('scenario', () => {
     const CH = game.story.chapter, sk = (CH && CH.skin) || {};
@@ -658,19 +662,28 @@ export function createCrowdView(scene, game) {
   };
   let frameNo = 0;
 
+  /** Officer model KO'd: kneels where he fell, head bowed toward the broken haft, the left hand raised (the retreat horn). */
+  function kneelPose() {
+    T.fill(0);
+    set3(TO, 0.22, 0.1, 0); set3(HE, 0.55, -0.2, 0);
+    set3(AR, -0.95, 0, -0.15); T[WR] = 0.6; set3(AL, -2.7, 0, 0.35); T[WL] = 0;
+    set3(TR, -1.45, 0, -0.08); T[SR] = 1.5; set3(TL, 0.05, 0, 0.1); T[SL] = 1.62;
+    return 5;
+  }
   function write(i, s, dt) {
     const t = crowd.stT[i], o = i * NCH, officer = crowd.type[i] === 1, kind = crowd.kind[i], g = GROUP[kind];
-    const rate = pose(i, s, t);
+    const mkey = officer && game.story.modelOf ? game.story.modelOf(i) : null, om = mkey ? officerModel(mkey) : null;
+    const kneel = !!(om && om.d.kneel && s === ST.DEAD);
+    const rate = kneel ? kneelPose() : pose(i, s, t);
     const k = seen[i] ? 1 - Math.exp(-rate * dt) : 1;
     seen[i] = 1; recI = i; recN[i] = 0;
     for (let j = 0; j < NCH; j++) { cur[o + j] += (T[j] - cur[o + j]) * k; C[j] = cur[o + j]; }
     // pelvis height from the legs (bent knees lower the body; lying overrides)
     const pel = -J.hipY + Math.max(legH(C[TL], C[SL], C[TL + 2]), legH(C[TR], C[SR], C[TR + 2]));
-    const mkey = officer && game.story.modelOf ? game.story.modelOf(i) : null, om = mkey ? officerModel(mkey) : null;
     const sc = (om ? om.d.scale ?? 1.16 : officer ? 1.16 : kind === KIND.CAPTAIN ? 1.06 : 1) * size[i];
-    const rx = crowd.rx[i];
+    const rx = kneel ? 0 : crowd.rx[i];
     let y = crowd.y[i] + pel * sc;
-    if (s >= ST.AIR && s <= ST.DEAD) {
+    if (s >= ST.AIR && s <= ST.DEAD && !kneel) {
       // hit-impact: lower the pivot by how horizontal the body is (on its back or face down, in the air too), so a
       // tumbling body touches the ground continuously instead of snapping down when it lands
       const lie = Math.abs(Math.sin(rx));
@@ -711,7 +724,9 @@ export function createCrowdView(scene, game) {
         const yw = crowd.yaw[i] + 0.9, gx = crowd.x[i] + Math.sin(yw) * 1.4 * sc, gz = crowd.z[i] + Math.cos(yw) * 1.4 * sc;
         _tmp.makeRotationFromEuler(_e.set(-Math.PI / 2, yw, 0.35)).scale(_v.set(sc, sc, sc)).setPosition(gx, ground(gx, gz) + 0.06, gz);
         push(om.head, _tmp, _c);
-      } else push(om.w, mW, _c);
+      } else push(om.cracked && crowd.hp[i] < crowd.hpMax[i] * (om.d.crackAt ?? 0.2) ? om.cracked : om.w, mW, _c);
+      const lh = om.off || (kneel && om.horn);
+      if (lh) push(kneel && om.horn ? om.horn : om.off, local(mOut, mArmL, 0, -J.hand, 0, C[WL], C[WL + 1], C[WL + 2]), _c);
     } else push(wm, mW, _c);
     if (g === 3 && (ally ? flags.ally : flags.foe)) push(ally ? M.shuFlag : M.flag, mW, null);
     if (g === 1) push(far ? WS.far_shield : midNow ? WS.mid_shield : WS.shield, local(mOut, mArmL, 0, -J.hand, 0, C[WL], C[WL + 1], C[WL + 2]), _c);
