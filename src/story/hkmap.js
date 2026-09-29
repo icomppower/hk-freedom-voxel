@@ -59,7 +59,7 @@ export const HK_MAP = `
     ${mark('lungjai', 776, 716, '龍仔', { sm: true, side: 'hk' })}${mark('siumei', 908, 706, '小美', { sm: true, side: 'hk' })}
     ${mark('sauzuk', 620, 720, '手足', { sm: true, side: 'hk' })}
     ${mark('stamp', 1040, 664, '777', { sm: true, side: 'riot' })}${mark('shocker', 990, 588, '比卡超', { sm: true, side: 'riot' })}
-    ${mark('fixer', 430, 250, '強哥', { sm: true, side: 'white' })}${mark('bear', 990, 440, '維尼熊', { sm: true, side: 'riot' })}
+    ${mark('fixer', 500, 262, '強哥', { sm: true, side: 'white' })}${mark('bear', 990, 440, '維尼熊', { sm: true, side: 'riot' })}
   </g>
   <rect width="1600" height="900" fill="url(#pl-vig)"/>
 </svg>`;
