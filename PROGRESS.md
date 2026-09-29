@@ -11,7 +11,7 @@ stage not `done`.
 | 2 龍仔 lungjai | done | gates 6/6 (moves 15/15, onsets = Box Moveset, N-string 24-25 sf apart live, pole ≥ 0.27 m above ground, feet slide ≤ 0.95 cm, Musou 34/40 of a packed ring); Musou at 600 enemies p95 16.8 ms (Zhao Yun 33.4); model critic 2 rounds → P1 0 (r1: armour cut read as lamellar → shared plain outfit); bot WIN ch1 (?dev) × steady / rush / back |
 | 3 小美 siumei | done | gates 6/6 (moves 15/15, onsets = Box Moveset, N-string 18 sf apart, umbrellas ≥ 0.10 m, feet ≤ 0.70 cm, Musou 39/40); Musou at 600 enemies p95 16.8 ms; model critic 2 rounds → P1 0 (r1: no eyes — paint boxes off the face layer; jacket read as stripes); open / closed umbrella swap on n3 c1 c4 c6 jc + Musou tornado; bot WIN ch1 × 3 styles; title + select show only 龍仔 / 小美, 0 errors |
 | 4 Enemy side | done | boss gate 4/4 as lungjai and 4/4 as siumei (every phase on its threshold: HP 74.80 / 49.70-49.97 / 24.67-24.80 % etc., banner on the phase frame, behaviours: 777 slams, 比卡超 shock rings + 2 速龍 called, 強哥 chilli + bottles, 維尼熊 3 分身 / lights out / mask off; KO → win, slot keeps its model); lineup critic 2 rounds → P1 0 (r1: 777's tie + chain and the Bear's collar + seam read as crosses; mask slits missing); skin-test 4/4 (riot / blackbloc); ch1 crowd 94/94 |
-| 5 Ch I hk1 admiralty | done (preview: see notes) | bot WIN 6/6 (lungjai + siumei × steady / rush / back, 4:12-7:34 sim); map gate 6/6 per playable (policeLine + hqGate crossed, no NaN / teleport); scroll columns 24/24 cards; touch-emulated run WIN in the real page (Pixel 7 landscape, mobile tier, 943 pad taps, 0 errors); result card fits 8/8 (hk1-4 × 1280×720 / 844×390, epilogue scrolls on the phone); flyover + prologue shots in bench/shots/5 |
+| 5 Ch I hk1 admiralty | done | bot WIN 6/6 (lungjai + siumei × steady / rush / back, 4:12-7:34 sim); map gate 6/6 per playable (policeLine + hqGate crossed, no NaN / teleport); scroll columns 24/24 cards; touch-emulated run WIN in the real page (Pixel 7 landscape, mobile tier, 943 pad taps, 0 errors); result card fits 8/8 (hk1-4 × 1280×720 / 844×390, epilogue scrolls on the phone); flyover + prologue shots in bench/shots/5 |
 | 6 Ch II hk2 legco | | |
 | 7 Ch III hk3 yuenlong | | |
 | 8 Ch IV hk4 polyu + ENDING + TRIBUTE | | |
@@ -20,7 +20,7 @@ stage not `done`.
 
 **Next action:** see the table.
 
-**MILESTONE — Ch I playable** (2026-09-29): hk1 金鐘 plays start to finish (bot + touch). Preview deploy: see the Vercel note below.
+**MILESTONE — Ch I playable** (2026-09-29): hk1 金鐘 plays start to finish (bot + touch). Preview: https://hk-freedom-voxel-dtpn479sy-sharkgundams-projects.vercel.app (READY; Vercel Authentication — log in to view).
 
 ## Contract ids (Contracts page)
 
