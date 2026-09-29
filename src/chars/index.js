@@ -37,6 +37,7 @@
 import { ZHAOYUN_KIT } from './zhaoyun/kit.js';
 import { HUANGZHONG_KIT } from './huangzhong/kit.js';
 import { GOK } from './gok/char.js';
+import { SIUME } from './siume/char.js';
 
 const ZY_FACE = [
   '....................',
@@ -123,7 +124,7 @@ const HUANGZHONG = {
   kit: HUANGZHONG_KIT,
 };
 
-const LIST = [ZHAOYUN, HUANGZHONG, GOK];
+const LIST = [ZHAOYUN, HUANGZHONG, GOK, SIUME];
 export const CHARS = Object.fromEntries(LIST.map((c) => [c.id, c]));
 export const CHAR_ORDER = LIST.map((c) => c.id);
 
