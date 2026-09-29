@@ -26,13 +26,16 @@ async function open(w, h, touch, q = '?go=story&char=zhaoyun&ch=ch1') {
     const hit = bs.map((b, i) => { const r = rects[i]; return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('.t-btn') === b; });
     const inside = rects.map((r) => r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight);
     let overlap = 0; for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) { const a = rects[i], b = rects[j]; if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) overlap++; }
-    return { shown: !root.hidden && getComputedStyle(root).display !== 'none', ids: bs.map((b) => b.dataset.a), hit, inside, overlap, minSize: Math.min(...rects.map((r) => Math.min(r.width, r.height))) };
+    const hud = ['.h-ko', '.h-player .name', '.h-map'].map((q) => document.querySelector('#hud ' + q)?.getBoundingClientRect()).filter(Boolean);
+    let hudHit = 0; for (const a of hud) for (const b of rects) if (a.width && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) hudHit++;
+    return { hudHit, shown: !root.hidden && getComputedStyle(root).display !== 'none', ids: bs.map((b) => b.dataset.a), hit, inside, overlap, minSize: Math.min(...rects.map((r) => Math.min(r.width, r.height))) };
   });
   ok('pad shown in a battle on a coarse pointer', r.shown);
   ok('every button hit-testable at its centre (844×390)', r.hit.every(Boolean), r.ids.map((a, i) => `${a}:${r.hit[i] ? 'y' : 'N'}`).join(' '));
   ok('every button inside the viewport', r.inside.every(Boolean));
   ok('no two buttons overlap', r.overlap === 0, `${r.overlap}`);
   ok('buttons ≥ 44 px', r.minSize >= 44, `${r.minSize.toFixed(0)} px`);
+  ok('no button over the HUD (K.O. count, name, minimap)', r.hudHit === 0, `${r.hudHit}`);
   await page.screenshot({ path: shots + 'touch-844x390.png' });
   // camera drag (right half, above the buttons) with real touch input through CDP
   const cdp = await ctx.newCDPSession(page);

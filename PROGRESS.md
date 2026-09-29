@@ -15,7 +15,7 @@ stage not `done`.
 | 6 Ch II hk2 legco | done | bot WIN 6/6 (both × 3 styles; clearance escort 200 s, the four come to the hero within 20 m, join at 8 m); map gate 6/6 each (glassWall + chamberDoor crossed); touch-only real-page run WIN as 小美 (2 988 taps, 0 errors); prologue refs saved; flyover critic: searchlight cone blew out the frame (cones off, spots dimmed), lobby wall had no door opening (12 m opening + high lintel) |
 | 7 Ch III hk3 yuenlong | done | bot WIN 6/6 (steady / rush / back × both; 2-3 of 10 passengers lost per run, 7-8 board); map gate 6/6 each (fareGates + platformStairs); touch-only real-page run WIN as 龍仔 (768 taps, 0 errors); critic: empty opening (bot outran idle squads) → the passengers are a real escort (walk only while covered, lost after 3 s under attack), all squads charge, waves from the start; the camera sat inside the platform canopy / entrance slab (moved clear) |
 | 8 Ch IV hk4 polyu + ENDING + TRIBUTE | done | bot WIN 6/6 (both × 3 styles; 龍仔 ends the Bear fight near 48 HP on steady / rush); map gate 6/6 each (barricade + mainGate); touch-only real-page run WIN as 小美 (1 456 taps, 0 errors); scroll-flow 11/11 (ENDING only after the hk4 win: result → ending → tribute → title; title 致敬 → tribute card); ENDING refs saved (7 frames); tribute link TBD per spec |
-| 9 Critic rounds | | |
+| 9 Critic rounds | done | 2 rounds (bench/shots/9/r1, r2; 1280×720 + 844×390, all four chapters, battle + Musou, title / select / scroll / result / ending). r1 P1s: mobile 3 (pad over the K.O. count and Musou copy, pause over the objective, keyboard footer over the select stats) → 0; scene 2 (hk3 empty opening, camera inside canopy slabs) → 0; fx 2 (龍拳 dragon rendered dark, LegCo searchlight blow-out) → 0; ui 1 (三國 aim row / 選擇武將) → 0; chars 0; perf 0 (desktop p95 ≤ 16.8 ms at 600 enemies on hk1-4; Pixel 7 + 4× CPU p95 6.7-8.0 ms). r2: P1 0. New gates: phone tap-through 17/17, touch UI 13/13 (no button over the HUD) |
 | 10 Ship | | |
 
 **Next action:** see the table.
@@ -75,4 +75,11 @@ stage not `done`.
 - hk2-hk4 content (maps, worlds, chapters) was written and Node-gated during stage 5 while another session held the GPU;
   it lands in the stage 6-8 commits.
 - The ink map's Admiralty labels are nudged off the page's exact coordinates so they don't overlap (marks stay put).
+- Open P2s (stage 9): KO'd officers kneel with a raised fist (frozen crowd kneelPose); interiors (LegCo lobby, Yuen Long
+  concourse) still bright on the mobile tier; the Musou copy column sits near the chain counter on phones; the title's name
+  tags crowd the banners at 844×390; hk3 is the shortest chapter (≈ 3.5 min for the bot); dead soldiers dissolve as dark
+  dither (upstream) which reads heavy against the dark riot palette; 41 Cantonese-only glyphs (㗎 嘅 喺 …) are not in Yuji
+  Boku and fall back to the system serif on non-Mac devices.
+- brush.woff2 re-subset from Yuji Boku (Google Fonts, OFL) to 830 glyphs (was 560 of the 871 used): ch1 scroll frames stay
+  pixel-identical on macOS (Xingkai first); all scroll refs re-saved once after the ink-map label moves (asset change).
 - Scroll-frame gate flaked twice on the first cold run in this clone (a different frame each time), then 4/4 clean.

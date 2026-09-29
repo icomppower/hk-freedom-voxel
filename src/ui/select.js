@@ -49,7 +49,7 @@ const KEYART = { dist: 4.3, eye: 1.35, aim: 1.3, screenX: 0.42 };
 export function createSelect(el, flow) {
   el.innerHTML = `
     <div class="s-veil"></div>
-    <header class="s-head"><h2>選擇武將</h2><small>Choose your officer</small><span class="s-mode"><b></b><small></small></span></header>
+    <header class="s-head"><h2>選擇角色</h2><small>Choose your fighter</small><span class="s-mode"><b></b><small></small></span></header>
     <aside class="s-roster">${roster()}</aside>
     <article class="s-info">
       <div class="s-name"><h1></h1><div><i class="s-seal"></i><p class="s-court"></p></div></div>

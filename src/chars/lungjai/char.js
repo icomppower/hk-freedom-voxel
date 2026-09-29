@@ -41,7 +41,7 @@ export const LUNGJAI = {
   stats: { atk: 4, def: 4, speed: 3, range: 4 }, musou: { zh: '龍拳', en: 'Dragon Fist' }, accent: '#ffd700',
   faction: { zh: '手足', en: 'Hong Kong, 2019' },
   lines: {
-    intro: { zh: '傘擑高！企埋一齊！', en: 'Umbrellas up! Stand together!' },
+    intro: { zh: '傘擎高！企埋一齊！', en: 'Umbrellas up! Stand together!' },
     musouEnd: { zh: '冇人企出嚟，就由我嚟！', en: 'If nobody stands up, then I will!' },
     copy: ['一枝竹棍', '企喺最前'],
   },

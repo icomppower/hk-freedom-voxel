@@ -22,6 +22,8 @@ echo "== Chrome: crowd, skins, UI";  g node bench/harness/crowdprobe.mjs ch1; g 
 g node bench/harness/ui-flow.mjs bench/out/ui; g node bench/harness/result-fit.mjs
 g node bench/harness/shots-scroll.mjs hk1 --char lungjai
 echo "== Chrome: ch1 checkpoints";   g node bench/harness/xcheck.mjs ch1-zhaoyun 3600; g node bench/harness/xcheck.mjs ch1-huangzhong 3600
-echo "== Chrome: touch hook";        g node bench/harness/touch-twin.mjs; g node bench/harness/touch-ui.mjs
-echo "== Chrome: mobile frame time"; g node bench/maps/perf-mobile.mjs ch1
+echo "== Chrome: touch hook";        g node bench/harness/touch-twin.mjs; g node bench/harness/touch-ui.mjs; g node bench/harness/phone-flow.mjs
+echo "== Chrome: ending flow";       g node bench/harness/scroll-flow.mjs hk4
+echo "== Chrome: frame time";        g node bench/maps/perfmap.mjs hk1 hk4
+echo "== Chrome: mobile frame time"; g node bench/maps/perf-mobile.mjs ch1 hk1 hk4
 echo "ALL GATES GREEN"

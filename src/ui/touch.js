@@ -5,7 +5,8 @@
 //   right side  攻 J attack · 蓄 K charge · 跳 Space jump · 閃 L dodge · 無雙 I musou (lit while the gauge can pay for one),
 //               pause (Esc); each button writes input.virt.key(action, down) — the same held / latch state a key does
 //   right half  a drag above the buttons turns the camera (virt.look, rad)
-// Portrait on a coarse pointer: a 請打橫手機 card asks for landscape. Render / DOM only — the sim sees input frames.
+// While the pad shows, body.pad moves the HUD pieces it would cover (K.O. count to the top centre, the Musou copy to the
+// left). Portrait on a coarse pointer: a 請打橫手機 card asks for landscape. Render / DOM only — the sim sees input frames.
 // createTouch(virt, game) → { root }
 import { on } from '../core/events.js';
 
@@ -84,7 +85,7 @@ export function createTouch(virt, game) {
   const tick = () => {
     requestAnimationFrame(tick);
     const show = coarse.matches && battle && menu.hidden && !kb;
-    if (show !== shown) { shown = show; root.hidden = !show; if (!show) release(); }
+    if (show !== shown) { shown = show; root.hidden = !show; document.body.classList.toggle('pad', show); if (!show) release(); }
     const r = coarse.matches && portrait.matches;
     if (r !== rotOn) { rotOn = r; rot.hidden = !r; }
     if (!show) return;
