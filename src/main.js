@@ -39,6 +39,7 @@ import { inkWipe, inkBoot, wiping, createNav, sfx, replay } from './ui/menu.js';
 import { createPrologue } from './story/prologue.js';
 import { createTouch } from './ui/touch.js';
 import { createCutscenes } from './story/cutscenes/player.js';
+import { createPreview } from './story/preview.js';
 import { createResult } from './story/result.js';
 import { difficulty, recordClear } from './core/difficulty.js';
 
@@ -263,6 +264,7 @@ const frame = (now) => {
   render();
 };
 
+if (params.has('preview')) createPreview(flow);                                    // ?preview: scene gallery on the title
 const dev = params.get('go');
 // the page opens under full ink (index.html): the first screen is built and compiled under it, then the ink sweeps off
 inkBoot(() => dev ? flow.go('battle', { mode: dev === 'story' ? 'story' : 'free', char: params.get('char') || 'zhaoyun', chapter: params.get('ch') || undefined }) : flow.go('title'));
