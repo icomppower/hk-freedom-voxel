@@ -8,6 +8,12 @@
 //   story.target                           {x, z} the HUD objective arrow points at, or null
 //   story.chapter                          the active chapter (story/chapters.js), set by reset
 //   story.modelOf(i)                       officer model key of crowd slot i (its OFF entry's `model`), or null (crowd view)
+//   story.fx                               the chapter script's render state (searchlights, lanterns…), or null
+// Chapter scripts (hook): a chapter may give `script(game, api)` → { step(), cue?(name), fx? } — created at reset, stepped
+// once per story step after the beats (sim, deterministic), for set pieces the beat list can't express (boss phases,
+// searchlights, escorts). api: t(), frac(key) officer HP fraction, officer(key) crowd slot, dead(key), pos(P) → [x, z],
+// squad({ at: P | [x, z], n, charge, cols }), say(line), banner(b), objective(o), flag(name[, v]) (beats wait on
+// `when: { flag }`); a beat's `set: name` raises a flag, `cue: name` calls script.cue(name).
 // Map gates (world/map.js GATES: 'pass' barricade, 'weiCamp' castle gate, 'summit' barricade) are sim state: story mode
 // closes all three at reset, a beat's `gate: id` opens one (clampWalk lets everyone through, world.js burns / swings it).
 // Emits story:say / story:banner / story:objective / story:end (payloads: core/events.js). The flow
@@ -81,6 +87,7 @@ export function createStory(game) {
     if (w.at && h.z < pos(w.at)[1]) return false;
     if (w.down && !S.dead[w.down]) return false;
     if (w.below && officerFrac(w.below[0]) >= w.below[1]) return false;
+    if (w.flag && !S.flags[w.flag]) return false;
     return true;
   };
 
@@ -105,17 +112,30 @@ export function createStory(game) {
     if (b.hush) S.q.length = 0;                                        // stage cleared: queued taunts are stale now
     if (b.obj) { emit('story:objective', { zh: b.obj.zh, en: b.obj.en }); S.go = b.obj.go; }
     for (const l of b.say || []) say(l);
+    if (b.set) S.flags[b.set] = true;
+    if (b.cue && S.script && S.script.cue) S.script.cue(b.cue);
   }
+  const api = {
+    t: () => S.t, frac: (k) => officerFrac(k), officer: (k) => (S.off[k] >= 0 ? S.off[k] : -1), dead: (k) => !!S.dead[k],
+    pos: (P) => (typeof P[0] === 'string' ? pos(P) : P),
+    squad: ({ at, n = 10, charge = true, cols }) => { const [x, z] = api.pos(at); game.crowd.spawnSquad({ x, z, n, cols, charge }); },
+    say: (l) => say(l), banner: (b) => emit('story:banner', { dur: 150, ...b }),
+    objective: (o) => { emit('story:objective', { zh: o.zh, en: o.en }); S.go = o.go; },
+    flag: (name, v) => { if (v !== undefined) S.flags[name] = v; return !!S.flags[name]; },
+  };
 
   st.reset = ({ mode = 'free', char = 'zhaoyun', chapter } = {}) => {
     const CH = resolveChapter(chapter, char);
     ({ BEATS, OFF, SPK } = CH);
     st.chapter = CH;
+    S.flags = {};
     Object.assign(S, { mode, char, ally: CH.cast.find((id) => id !== char) || CH.cast[0], t: 0, done: false, maxChain: 0,
       downT: -1, dmg: 0, beat: 0, beatT: 0, koBase: 0, off: {}, want: {}, dead: {}, q: [], sayUntil: 0, limit: Infinity, nag: null,
       nagT: -999, mBase: 0.4, won: -1, go: null, wantModel: {}, slotModel: {} });
     game.timeScale = 1;
     st.target = null;
+    S.script = mode === 'story' && CH.script ? CH.script(game, api) : null;
+    st.fx = S.script ? S.script.fx || null : null;
     if (mode === 'story') for (const id in GATES) setGate(id, false);   // spawnPoint() opened them all; the script opens each
     st.morale = mode === 'story' ? 0.4 : undefined;
     const c = game.crowd;
@@ -154,6 +174,8 @@ export function createStory(game) {
       const i = c.spawnOfficer(S.want[k]);
       if (i >= 0) { S.off[k] = i; S.slotModel[i] = S.wantModel[k]; delete S.want[k]; }
     }
+
+    if (S.script && S.won < 0) S.script.step();                     // the chapter's set pieces (hook)
 
     // stage gate: the hero can't run past the stage he is on (a nag line explains, at most every 10 s)
     if (h.z > S.limit) {
