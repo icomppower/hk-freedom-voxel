@@ -30,7 +30,7 @@ export function buildLegco(scene, root) {
   moon.shadow.bias = -0.0006; moon.shadow.normalBias = 0.03;
   root.add(moon, moon.target);
 
-  const PAVE = 0x5e5c58, MARBLE = 0x8a8680, CARPET = 0x3a4a5a, WOODF = 0x6a4e36;
+  const PAVE = 0x5e5c58, MARBLE = 0x74716c, CARPET = 0x3a4a5a, WOODF = 0x6a4e36;
   buildGround(root, {
     colorAt(x, z, y, inside) {
       if (inside < -0.6) return 0x303238;
@@ -55,8 +55,8 @@ export function buildLegco(scene, root) {
     boxes.push(bx([4, 0.5, 54], [sx * 17.5, 4.2, -48], 0x7a766e), bx([0.1, 1.1, 54], [sx * 15.5, 5, -48], 0x9aa0a8));   // mezzanine + rail
     for (const z of [-61, -39]) boxes.push(bx([2, 9, 2], [sx * 11, 4.5, z], 0xb0aca4));
   }
-  boxes.push(bx([40, 9, 1], [-0, 4.5, -19.5], 0x9a968e));                 // lobby / chamber wall with the door gap (carved by the door piece)
-  boxes.push(bx([8.4, 3.2, 1.2], [0, 7.3, -19.5], 0x8a867e));
+  for (const sx of [-1, 1]) boxes.push(bx([14, 9, 1], [sx * 13, 4.5, -19.5], 0x9a968e));   // lobby / chamber wall, 12 m opening
+  boxes.push(bx([12.4, 1.6, 1.2], [0, 11, -19.5], 0x8a867e));              // lintel, high (camera clearance)
   // chamber: curved rows of desks facing the dais, the dais itself, the gallery wall behind
   for (let r = 0; r < 4; r++) for (let k = -5; k <= 5; k++) {
     const a = k * 0.16, R = 22 - r * 4, x = Math.sin(a) * R, z = 46 - Math.cos(a) * R;
@@ -98,9 +98,9 @@ export function buildLegco(scene, root) {
   // ---- the chamber door (two leaves), the searchlights, lamps, escorts
   const doorGeo = merge([bx([4, 5, 0.3], [2, 2.5, 0], 0x5a3e2a), bx([3.4, 0.2, 0.34], [2, 2.5, 0], 0x3a2618)]);
   const doors = [-1, 1].map((sx) => { const g = new THREE.Group(); g.position.set(sx * 4, 0.2, -19.4); const m = new THREE.Mesh(doorGeo, propMat); m.scale.x = -sx; g.add(m); root.add(g); return g; });
-  const beamMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.5, 1.6), transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const beamMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.5, 1.6), transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
   const beams = [0, 1, 2].map(() => { const g = new THREE.Group(); const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 3.2, 40, 16, 1, true).translate(0, -20, 0), beamMat); g.add(cone);
-    const spot = new THREE.Mesh(new THREE.CircleGeometry(3.4, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 1.25, 1.3), transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const spot = new THREE.Mesh(new THREE.CircleGeometry(3.4, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.8, 0.85, 0.9), transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
     root.add(g, spot); return { g, spot }; });
   const lights = [0, 1, 2, 3].map(() => { const l = new THREE.PointLight(0xffd8a0, 0, 26, 1.6); root.add(l); return l; });
   const stageKey = new THREE.PointLight(0xffc080, 24, 14, 2); stageKey.position.set(-6, 3, -134); stageKey.name = 'stage-key'; root.add(stageKey);
@@ -136,7 +136,7 @@ export function buildLegco(scene, root) {
       // searchlights (fx.beams: where each one points; off-story: a slow idle sweep)
       beams.forEach((b, k) => {
         const B = fx && fx.beams && fx.beams[k], x = B ? B.x : Math.sin(t * 0.3 + k * 2) * 20, z = B ? B.z : -120 + Math.cos(t * 0.25 + k) * 25, on = !B || B.on;
-        b.g.visible = b.spot.visible = on; if (!on) return;
+        b.g.visible = false; b.spot.visible = on; if (!on) return;   // cones off: a cone near the lens blew out the frame (critic)
         const ox = (k - 1) * 30, oy = 36, oz = -60;
         b.g.position.set(ox, oy, oz); b.g.lookAt(x, 0, z); b.g.rotateX(-Math.PI / 2); b.g.scale.set(1, Math.hypot(x - ox, oy, z - oz) / 40, 1);
         b.spot.position.set(x, ground(x, z) + 0.05, z);

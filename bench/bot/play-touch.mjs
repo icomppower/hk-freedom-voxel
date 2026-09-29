@@ -46,14 +46,14 @@ await page.goto(srv.url + `?go=story&char=${char}&ch=${chapter}`);
 const t0 = Date.now(); let n = 0, res = null;
 while (Date.now() - t0 < minutes * 60000) {
   await page.waitForTimeout(2000);
-  res = await page.evaluate(() => ({ state: __vm.state, frame: __vm.game.frame, z: __vm.game.hero.z, kos: __vm.game.hero.kos, win: document.querySelector('#result')?.classList.contains('win'), ...window.__touch, enemies: __vm.game.crowd.grunts }));
+  res = await page.evaluate(() => ({ ch: __vm.game.chapter, who: __vm.game.hero.char.id, state: __vm.state, frame: __vm.game.frame, z: __vm.game.hero.z, kos: __vm.game.hero.kos, win: document.querySelector('#result')?.classList.contains('win'), ...window.__touch, enemies: __vm.game.crowd.grunts }));
   if (shots && Date.now() - t0 > (n + 1) * minutes * 60000 / (shots + 2) && res.state === 'battle' && n < shots) {
     await page.screenshot({ path: `${out}touch-${chapter}-${char}-${n++}.png`, timeout: 20000 }).catch(() => {});
   }
   if (res.state === 'result') break;
 }
 await page.screenshot({ path: `${out}touch-${chapter}-${char}-end.png` }).catch(() => {});
-const ok = res.state === 'result' && res.win && res.coarse && res.taps > 50;
+const ok = res.state === 'result' && res.win && res.coarse && res.taps > 50 && res.ch === chapter && res.who === char;   // the run played what was asked
 console.log(`${ok ? 'WIN' : res.state === 'result' ? 'LOSS' : 'TIMEOUT'} ${chapter} ${char} by touch (Pixel 7 landscape, mobile tier ${res.coarse}): frame ${res.frame}, KOs ${res.kos}, ${res.taps} taps, ${res.drags} stick drags, wall ${((Date.now() - t0) / 1000).toFixed(0)} s`, errors.length ? 'ERRORS ' + errors.slice(0, 3).join(' | ') : 'no page errors');
 await browser.close(); srv.close();
 process.exit(ok && !errors.length ? 0 : 1);
