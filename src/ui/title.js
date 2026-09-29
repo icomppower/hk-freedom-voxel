@@ -16,7 +16,7 @@
 // Mouse: hover highlights an item, click activates it.
 // Screen contract: createTitle(el, flow) → { enter(ctx), exit(), view } (src/main.js header).
 import * as THREE from 'three';
-import { CHARS, CHAR_ORDER } from '../chars/index.js';
+import { CHARS, CHAR_ORDER, DEV } from '../chars/index.js';
 import { CHAPTERS } from '../story/chapters.js';
 import { sampleClip, POSE_SIZE, CH } from '../hero/rig.js';
 import { heroLook } from '../hero/model.js';
@@ -48,7 +48,7 @@ export const CONTROLS = [   // also the pause menu's table (main.js)
   ['鎖定', 'Recenter', '<kbd>R</kbd> — behind you, or onto the nearest officer', '<kbd>L1</kbd> <kbd>L2</kbd>'],
   ['瞄準', 'Aim (黃忠, 定軍山 only)', 'hold <kbd>K</kbd> / right click (standing or running) — mouse or stick aims, release to loose', 'hold <kbd>Y</kbd> △'],
   ['暫停', 'Pause', '<kbd>Esc</kbd> (also frees the mouse)', ''],
-];
+].filter((r) => DEV || r[0] !== '瞄準');   // aim mode is 黃忠's (a ?dev officer)
 
 // ---- key-art stage. Frame: origin on the pass road, camera looks +Z (up the valley, into the low sun → rim light).
 // Cast offsets in metres (x + = world +X = screen-left), face = yaw (0 = facing +Z, π = facing the camera), pose = a held

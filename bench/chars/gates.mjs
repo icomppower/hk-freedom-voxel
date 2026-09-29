@@ -6,7 +6,7 @@
 //   feet     no planted foot slides: a foot on the ground (y < 0.12) on two consecutive frames moves ≤ 1 cm in the world
 //            (root carried by the move's lunge, turned by nothing: the feet are in the hero-facing frame when planted)
 //   musou    Musou KOs ≥ 25 of a packed ring of 40 grunts (seeded), and the hero ends it standing, back in control
-//   node --import ./bench/harness/register.mjs bench/chars/gates.mjs gok
+//   node --import ./bench/harness/register.mjs bench/chars/gates.mjs lungjai
 import * as THREE from 'three';
 import { createSim } from '../harness/sim.mjs';
 import { CHARS } from '../../src/chars/index.js';
@@ -16,10 +16,12 @@ import { ST } from '../../src/crowd/crowd.js';
 import { on } from '../../src/core/events.js';
 
 const TARGETS = {
+  siumei: { onsets: { n1: [8], n2: [8], n3: [12], c1: [14, 24, 34, 43] }, band: [16, 20], points: [[0, 0, -0.15], [0, 0, 0.88]], dual: true },
+  lungjai: { onsets: { n1: [11], n2: [12], n3: [12], c1: [22] }, band: [22, 26], points: [[0, 0, -0.6], [0, 0, 1.5]] },
   gok: { onsets: { n1: [13], n2: [16], n3: [14], c1: [18, 44] }, band: [26, 30], points: [[0, 0, -0.6], [0, 0, 1.46], [0, 0.18, 1.34]] },
   siume: { onsets: { n1: [8], n2: [8], n3: [12], c1: [14, 24, 34, 43] }, band: [16, 20], points: [[0, 0, -0.1], [0, 0, 0.45]], dual: true },
 };
-const id = process.argv[2] || 'gok', T = TARGETS[id], K = CHARS[id].kit;
+const id = process.argv[2] || 'lungjai', T = TARGETS[id], K = CHARS[id].kit;
 const res = [], ok = (n, v, x = '') => { res.push(v); console.log(`${v ? 'ok  ' : 'FAIL'} ${n}${x ? '  ' + x : ''}`); };
 
 // ---- moves

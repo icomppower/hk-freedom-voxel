@@ -36,6 +36,8 @@
 // }
 import { ZHAOYUN_KIT } from './zhaoyun/kit.js';
 import { HUANGZHONG_KIT } from './huangzhong/kit.js';
+import { LUNGJAI } from './lungjai/char.js';
+import { SIUMEI } from './siumei/char.js';
 
 const ZY_FACE = [
   '....................',
@@ -125,7 +127,7 @@ const HUANGZHONG = {
 /** ?dev: the 定軍山 pair (趙雲 / 黃忠) and chapter ch1 show on the menus (they stay registered for the hash gate). */
 export const DEV = typeof location !== 'undefined' && new URLSearchParams(location.search).has('dev');
 ZHAOYUN.dev = HUANGZHONG.dev = true;
-const LIST = [ZHAOYUN, HUANGZHONG];   // 香港自由戰士's officers first; the 定軍山 pair only with ?dev
+const LIST = [LUNGJAI, SIUMEI, ZHAOYUN, HUANGZHONG];   // 香港自由戰士's officers first; the 定軍山 pair only with ?dev
 export const CHARS = Object.fromEntries(LIST.map((c) => [c.id, c]));
 export const CHAR_ORDER = LIST.filter((c) => DEV || !c.dev).map((c) => c.id);
 
