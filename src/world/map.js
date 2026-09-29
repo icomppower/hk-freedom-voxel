@@ -21,15 +21,12 @@
 // The crowd's spatial grid spans ±240 m (crowd.js): every map must fit inside it.
 import { noise2, smooth, rectIn } from './mapkit.js';
 import DINGJUN from './maps/dingjun/map.js';
-import PASTURE from './maps/pasture/map.js';
-import LANTERN from './maps/lantern/map.js';
-import HARBOR from './maps/harbor/map.js';
 
 export { noise2, smooth };
 
 /** Every battlefield by id. New maps register with one import + one entry. */
-export const MAPS = { dingjun: DINGJUN, pasture: PASTURE, lantern: LANTERN, harbor: HARBOR };
-export const DEFAULT_MAP = 'pasture';                // boot / title field: 羊村 (定軍山 stays a chapter)
+export const MAPS = { dingjun: DINGJUN };
+export const DEFAULT_MAP = 'dingjun';                // boot / title field (香港自由戰士's first map takes over once it exists)
 
 // ---- live bindings onto the active map (setMap)
 export let MAP, WALL_Z, GATE_X, CAMP_H, SUMMIT_H, WATER_Y, riverZ, FORDS, ROUTE, GATES, PIECE_IDS, TERRAIN;

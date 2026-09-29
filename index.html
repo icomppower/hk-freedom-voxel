@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
-<title>羊村 · 霧港渡 Sheep Village: Fog Harbor Crossing</title>
+<title>香港自由戰士 HK Freedom Fighter</title>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
 </script>
@@ -784,14 +784,17 @@
     :is(#prologue, #ending).out :is(.pl-paper, .pl-rod) { scale: none; }
   }
 
-  /* scroll player (story lane): arrow sides of the 羊村 map, the tribute card after the ENDING scroll */
-  :is(#prologue, #ending) .pl-arw.sheep > path { stroke: var(--shu); }
-  :is(#prologue, #ending) .pl-arw.wolf > path { stroke: var(--wei); }
-  :is(#prologue, #ending) .pl-arw.sheep .hd { fill: var(--shu); }
-  :is(#prologue, #ending) .pl-arw.wolf .hd { fill: var(--wei); }
-  :is(#prologue, #ending) .pl-arw.sheep.dot.on > path.s { stroke-dasharray: .012 .018; stroke-dashoffset: 0; transition: none; }
-  :is(#prologue, #ending) .pl-labels .wolf text { fill: #8e2016; }
-  :is(#prologue, #ending) .pl-labels .sheep text { fill: #1d4f58; }
+  /* scroll player (story lane): arrow sides of the 香港 map (hk gold ink, riot indigo, white grey wash), the tribute card */
+  :is(#prologue, #ending) .pl-arw.hk > path { stroke: #c9a227; }
+  :is(#prologue, #ending) .pl-arw.riot > path { stroke: #2c3e6b; }
+  :is(#prologue, #ending) .pl-arw.white > path { stroke: #8a857c; }
+  :is(#prologue, #ending) .pl-arw.hk .hd { fill: #c9a227; }
+  :is(#prologue, #ending) .pl-arw.riot .hd { fill: #2c3e6b; }
+  :is(#prologue, #ending) .pl-arw.white .hd { fill: #8a857c; }
+  :is(#prologue, #ending) .pl-arw.hk.dot.on > path.s { stroke-dasharray: .012 .018; stroke-dashoffset: 0; transition: none; }
+  :is(#prologue, #ending) .pl-labels .riot text { fill: #2c3e6b; }
+  :is(#prologue, #ending) .pl-labels .white text { fill: #5e5a52; }
+  :is(#prologue, #ending) .pl-labels .hk text { fill: #7a5c0c; }
   #ending .pl-tribute { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; justify-content: center;
     padding: 0 14vw; gap: 1.6rem; color: var(--ink); background: rgba(216,193,151,.94); opacity: 0; pointer-events: none; }
   #ending.tribute .pl-tribute { opacity: 1; pointer-events: auto; transition: opacity .8s; }
@@ -809,7 +812,7 @@
 <div id="hud" hidden></div>
 <div id="menu" hidden>
   <div class="t">趙雲<i>常山</i></div>
-  <div class="en" style="--d:.04s">SHEEP VILLAGE</div>
+  <div class="en" style="--d:.04s">HK FREEDOM FIGHTER</div>
   <div class="sub" style="--d:.08s">戰局暫停<small>Battle paused</small></div>
   <button id="go" style="--d:.14s">繼續<small>Resume</small></button>
   <button id="quit" style="--d:.18s">撤退<small>Quit to title</small></button>

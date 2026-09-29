@@ -1,4 +1,4 @@
-// Title screen (#title, ui lane). 羊村 · 霧港渡 (reskin: logo, cast, the 致敬 tribute entry). DW-style key art over the live
+// Title screen (#title, ui lane). 香港自由戰士 (reskin: logo, cast, the 致敬 tribute entry). DW-style key art over the live
 // battlefield — upstream framed Zhao Yun in front (spear planted, free fist
 // thrown up) and Huang Zhong half a metre behind and to the right, drawing toward the lens-right and looking into it, on
 // their real voxel models (kit.model on their own rigs, cloth/hair chains), backlit by the low sun up the pass with the
@@ -16,7 +16,8 @@
 // Mouse: hover highlights an item, click activates it.
 // Screen contract: createTitle(el, flow) → { enter(ctx), exit(), view } (src/main.js header).
 import * as THREE from 'three';
-import { CHARS } from '../chars/index.js';
+import { CHARS, CHAR_ORDER } from '../chars/index.js';
+import { CHAPTERS } from '../story/chapters.js';
 import { sampleClip, POSE_SIZE, CH } from '../hero/rig.js';
 import { heroLook } from '../hero/model.js';
 import { createNav, sfx, inkWipe, wiping, afterWipe, stamp, clearStamp, replay } from './menu.js';
@@ -28,12 +29,14 @@ import { DIFFS, LOCK, unlocked, difficulty, setDifficulty } from '../core/diffic
 export const SWASH = `<svg class="swash" viewBox="0 0 400 26" preserveAspectRatio="none" aria-hidden="true"><path d="M3 15C40 7 118 4 214 8
   S352 11 397 5L395 9C368 15 330 17 280 18C226 19 170 17 128 19C84 21 38 22 3 15ZM300 20C330 19 360 17 384 14L382 16C356 20 326 22 300 20Z"/></svg>`;
 
+// 故事模式 / 自由演武 need a playable officer on the roster; 致敬 needs the chapter that carries the TRIBUTE card
+const TRIBUTE_CH = Object.values(CHAPTERS).find((c) => c.TRIBUTE && !c.dev);
 const ITEMS = [
   { go: 'story', zh: '故事模式', en: 'Story · choose your chapter' },
   { go: 'free', zh: '自由演武', en: 'Free battle · endless waves' },
   { go: 'controls', zh: '操作說明', en: 'Controls' },
-  { go: 'tribute', zh: '致敬', en: 'Tribute · the story behind 羊村' },
-];
+  { go: 'tribute', zh: '致敬', en: 'Tribute · Hong Kong, 2019' },
+].filter((it) => (it.go === 'tribute' ? TRIBUTE_CH : it.go === 'controls' || CHAR_ORDER.length));
 export const CONTROLS = [   // also the pause menu's table (main.js)
   ['移動', 'Move', '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows', 'left stick'],
   ['攻擊', 'Attack', '<kbd>J</kbd> / left click — tap for the full combo', '<kbd>X</kbd> □'],
@@ -63,12 +66,12 @@ export const STAGE = {
   // across his eyes), the arrow aimed toward the lens-right, head turned to the lens (root-space look override), his head
   // at Zhao Yun's shoulder line with air between them. x/z in metres; narrow = [x, z] on ≤ 4:3 windows (nk in view()).
   // tag = [x, y] rem from the head to the tag's bottom centre. banner = the surname standard behind its officer (DoF).
-  // 羊村 · 霧港渡 (reskin): 阿角 in front, the crook raised (his Musou's call, 24 / 210), 小咩 behind and right with both
-  // shears snapped open (N3's cut); their seal standards (角 / 咩) behind them
+  // 香港自由戰士 (reskin): 龍仔 in front with the bamboo pole raised (his Musou's call), 小美 behind and right with both
+  // umbrellas; their seal standards (龍 / 美) behind them. Until their kits exist the 定軍山 pair stands in (no name tags).
   cast: [
-    { id: 'gok', clip: 'mu_gok', u: 24 / 210, x: 0.2, z: 0, face: Math.PI + 0.1, look: [0.7, 1.8], tag: [-4.5, 6, 'L'], banner: [-0.2, 7.5], glyph: '角' },
-    { id: 'siume', clip: 'n3', u: 16 / 30, x: -1.0, z: 0.7, face: Math.PI + 0.35, look: [1.0, 2.0], tag: [-1.5, -6],
-      narrow: [-0.95, 0.5], banner: [-4.6, 10], glyph: '咩' },
+    { id: 'lungjai', clip: 'mu_lungjai', u: 24 / 210, x: 0.2, z: 0, face: Math.PI + 0.1, look: [0.7, 1.8], tag: [-4.5, 6, 'L'], banner: [-0.2, 7.5], glyph: '龍' },
+    { id: 'siumei', clip: 'n3', u: 16 / 30, x: -1.0, z: 0.7, face: Math.PI + 0.35, look: [1.0, 2.0], tag: [-1.5, -6],
+      narrow: [-0.95, 0.5], banner: [-4.6, 10], glyph: '美' },
   ],
 };
 
@@ -85,13 +88,18 @@ const GLOWS = [[1, 2.5, 30, 46, 16, 0.55, 0.24, 0.07], [-7, 1.2, 12, 9, 6, 0.9, 
 const SMOKE = [[-17, 16, 40, 38, 24, 0.2, 0.1, 0.06, 0.9], [-26, 22, 46, 44, 26, 0.24, 0.12, 0.07, 0.85], [-9, 12, 34, 22, 14, 0.26, 0.13, 0.07, 0.6],
   [-29, 25, 52, 42, 26, 0.22, 0.11, 0.07, 0.85]];
 
+// stand-ins while a cast officer isn't registered yet (stage 0-3): the 定軍山 pair's upstream key-art frames
+const STAND_IN = { lungjai: { id: 'zhaoyun', clip: 'mu_act', u: 1, arm: [-6, 0, 172, 8], glyph: '香' },
+  siumei: { id: 'huangzhong', clip: 'aim', u: 5 / 30, face: Math.PI + 0.25, head: [-4, -10, 0], glyph: '港' } };
+for (const [i, c] of STAGE.cast.entries()) if (!CHARS[c.id]) STAGE.cast[i] = { ...c, ...STAND_IN[c.id], standIn: true };
+
 export function createTitle(el, flow) {
   el.innerHTML = `
     <div class="t-veil"></div>
-    ${STAGE.cast.map(({ id }) => { const c = CHARS[id]; return `<div class="t-tag" data-id="${id}"><i>${c.seal}</i><b>${c.name.zh}</b><small>${c.name.en}</small></div>`; }).join('')}
+    ${STAGE.cast.map(({ id, standIn }) => { const c = CHARS[id]; return `<div class="t-tag" data-id="${id}"${standIn ? ' style="display:none"' : ''}><i>${c.seal}</i><b>${c.name.zh}</b><small>${c.name.en}</small></div>`; }).join('')}
     <div class="t-band">
-      <div class="t-logo"><i class="t-seal">羊村</i><h1 data-t="霧港渡"><span>霧港渡</span></h1>
-        <p class="t-en"><span>SHEEP VILLAGE · FOG HARBOR CROSSING</span></p></div>
+      <div class="t-logo"><i class="t-seal">香港</i><h1 data-t="自由戰士"><span>自由戰士</span></h1>
+        <p class="t-en"><span>HK FREEDOM FIGHTER</span></p></div>
       <div class="t-press"><b>按任意鍵開始</b><small><kbd>Enter</kbd> Press any key</small></div>
       <nav class="t-menu t-main">${ITEMS.map((it, i) => `<button data-i="${i}" style="--i:${i}"><b>${it.zh}</b><small>${it.en}</small>${SWASH}</button>`).join('')}</nav>
       <div class="t-dpanel"><nav class="t-menu t-dif">${DIFFS.map((d, i) => `<button data-d="${i}" style="--i:${i}"><b>${d.zh}<i class="t-lk">鎖</i></b><small>${d.en}</small>${SWASH}</button>`).join('')}</nav>
@@ -151,7 +159,7 @@ export function createTitle(el, flow) {
     }
     const it = ITEMS[cur];
     if (it.go === 'controls') { sfx('ok'); return setCtl(true); }
-    if (it.go === 'tribute') { sfx('ok'); busy = true; return inkWipe(() => flow.go('ending', { mode: 'story', char: 'gok', chapter: 'sheep3', tribute: true })); }
+    if (it.go === 'tribute') { sfx('ok'); busy = true; return inkWipe(() => flow.go('ending', { mode: 'story', char: TRIBUTE_CH.cast[0], chapter: TRIBUTE_CH.id, tribute: true })); }
     sfx('ok'); setDif(it.go);
   };
   const back = () => {
