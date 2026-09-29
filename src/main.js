@@ -123,7 +123,7 @@ function startBattle({ char = 'zhaoyun', mode = 'free', chapter } = {}) {
   game.story.reset({ mode, char: ch.id, chapter: CH.id });
   menu.querySelector('.t').innerHTML = `${ch.name.zh}<i>${ch.seal}</i>`;
   menu.querySelector('.sub').innerHTML = `戰局暫停・${game.diff.zh}<small>Battle paused · ${game.diff.en}</small>`;
-  document.title = `${ch.name.zh} — Voxel Musou`;
+  document.title = `${ch.name.zh} — 羊村 · 霧港渡`;
   emit('scenario', { mode, char: ch.id, chapter: CH.id });
 }
 

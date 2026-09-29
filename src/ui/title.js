@@ -1,4 +1,5 @@
-// Title screen (#title, ui lane). DW-style key art over the live battlefield: Zhao Yun in front (spear planted, free fist
+// Title screen (#title, ui lane). 羊村 · 霧港渡 (reskin: logo, cast, the 致敬 tribute entry). DW-style key art over the live
+// battlefield — upstream framed Zhao Yun in front (spear planted, free fist
 // thrown up) and Huang Zhong half a metre behind and to the right, drawing toward the lens-right and looking into it, on
 // their real voxel models (kit.model on their own rigs, cloth/hair chains), backlit by the low sun up the pass with the
 // burning Wei camp, smoke over the right cliff, their 趙 / 黃 standards and rising embers behind them in deep bokeh, low
@@ -31,6 +32,7 @@ const ITEMS = [
   { go: 'story', zh: '故事模式', en: 'Story · choose your chapter' },
   { go: 'free', zh: '自由演武', en: 'Free battle · endless waves' },
   { go: 'controls', zh: '操作說明', en: 'Controls' },
+  { go: 'tribute', zh: '致敬', en: 'Tribute · the story behind 羊村' },
 ];
 export const CONTROLS = [   // also the pause menu's table (main.js)
   ['移動', 'Move', '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows', 'left stick'],
@@ -61,10 +63,12 @@ export const STAGE = {
   // across his eyes), the arrow aimed toward the lens-right, head turned to the lens (root-space look override), his head
   // at Zhao Yun's shoulder line with air between them. x/z in metres; narrow = [x, z] on ≤ 4:3 windows (nk in view()).
   // tag = [x, y] rem from the head to the tag's bottom centre. banner = the surname standard behind its officer (DoF).
+  // 羊村 · 霧港渡 (reskin): 阿角 in front, the crook raised (his Musou's call, 24 / 210), 小咩 behind and right with both
+  // shears snapped open (N3's cut); their seal standards (角 / 咩) behind them
   cast: [
-    { id: 'zhaoyun', clip: 'mu_act', u: 1, x: 0.2, z: 0, face: Math.PI + 0.1, arm: [-6, 0, 172, 8], look: [0.7, 1.8], tag: [-4.5, 6, 'L'], banner: [-0.2, 7.5] },
-    { id: 'huangzhong', clip: 'aim', u: 5 / 30, x: -1.0, z: 0.7, face: Math.PI + 0.25, head: [-4, -10, 0], look: [1.0, 2.0], tag: [-1.5, -6],
-      narrow: [-0.95, 0.5], banner: [-4.6, 10] },
+    { id: 'gok', clip: 'mu_gok', u: 24 / 210, x: 0.2, z: 0, face: Math.PI + 0.1, look: [0.7, 1.8], tag: [-4.5, 6, 'L'], banner: [-0.2, 7.5], glyph: '角' },
+    { id: 'siume', clip: 'n3', u: 16 / 30, x: -1.0, z: 0.7, face: Math.PI + 0.35, look: [1.0, 2.0], tag: [-1.5, -6],
+      narrow: [-0.95, 0.5], banner: [-4.6, 10], glyph: '咩' },
   ],
 };
 
@@ -86,8 +90,8 @@ export function createTitle(el, flow) {
     <div class="t-veil"></div>
     ${STAGE.cast.map(({ id }) => { const c = CHARS[id]; return `<div class="t-tag" data-id="${id}"><i>${c.seal}</i><b>${c.name.zh}</b><small>${c.name.en}</small></div>`; }).join('')}
     <div class="t-band">
-      <div class="t-logo"><i class="t-seal">三國</i><h1 data-t="無雙"><span>無雙</span></h1>
-        <p class="t-en"><span>VOXEL MUSOU</span></p></div>
+      <div class="t-logo"><i class="t-seal">羊村</i><h1 data-t="霧港渡"><span>霧港渡</span></h1>
+        <p class="t-en"><span>SHEEP VILLAGE · FOG HARBOR CROSSING</span></p></div>
       <div class="t-press"><b>按任意鍵開始</b><small><kbd>Enter</kbd> Press any key</small></div>
       <nav class="t-menu t-main">${ITEMS.map((it, i) => `<button data-i="${i}" style="--i:${i}"><b>${it.zh}</b><small>${it.en}</small>${SWASH}</button>`).join('')}</nav>
       <div class="t-dpanel"><nav class="t-menu t-dif">${DIFFS.map((d, i) => `<button data-d="${i}" style="--i:${i}"><b>${d.zh}<i class="t-lk">鎖</i></b><small>${d.en}</small>${SWASH}</button>`).join('')}</nav>
@@ -147,6 +151,7 @@ export function createTitle(el, flow) {
     }
     const it = ITEMS[cur];
     if (it.go === 'controls') { sfx('ok'); return setCtl(true); }
+    if (it.go === 'tribute') { sfx('ok'); busy = true; return inkWipe(() => flow.go('ending', { mode: 'story', char: 'gok', chapter: 'sheep3', tribute: true })); }
     sfx('ok'); setDif(it.go);
   };
   const back = () => {
@@ -228,7 +233,7 @@ export function createTitle(el, flow) {
       o.root.traverse((e) => { if (e.isMesh && e.frustumCulled) parts.push(e); });
       cast.push(Object.assign(o, { c, parts }));
       // surname standard: pole + a nobori cloth (CPU wave on a 5 × 12 grid)
-      const tex = bannerTex(CHARS[c.id].name.zh[0]);
+      const tex = bannerTex(c.glyph || CHARS[c.id].name.zh[0]);
       const cloth = new THREE.PlaneGeometry(1.15, 3.1, 4, 12);
       // low warm emissive = the low sun glowing through the cloth from behind (the camera sees its shaded face)
       const mat = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffa060, emissiveIntensity: 0.3, side: THREE.DoubleSide,

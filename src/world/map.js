@@ -29,7 +29,7 @@ export { noise2, smooth };
 
 /** Every battlefield by id. New maps register with one import + one entry. */
 export const MAPS = { dingjun: DINGJUN, pasture: PASTURE, lantern: LANTERN, harbor: HARBOR };
-export const DEFAULT_MAP = 'dingjun';
+export const DEFAULT_MAP = 'pasture';                // boot / title field: 羊村 (定軍山 stays a chapter)
 
 // ---- live bindings onto the active map (setMap)
 export let MAP, WALL_Z, GATE_X, CAMP_H, SUMMIT_H, WATER_Y, riverZ, FORDS, ROUTE, GATES, PIECE_IDS, TERRAIN;

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
-<title>趙雲 — Voxel Musou</title>
+<title>羊村 · 霧港渡 Sheep Village: Fog Harbor Crossing</title>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
 </script>
@@ -624,7 +624,8 @@
   #loading.in .l-name h1 { animation: nameIn .6s cubic-bezier(.3,0,.2,1) .12s both; }
   #loading.in :is(.l-ch, .l-en, .l-line, .l-foot) { animation: fadeIn .5s ease .25s both; }
   @keyframes barSheen { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
-  #result .ui-foot { left: 8vw; right: 6rem; }
+  #result .ui-foot { left: 8vw; right: 6rem; pointer-events: none; }   /* critic (ui): it covered the buttons at 720p */
+  #result .rs { padding-bottom: 4.5rem; }
 
   /* story lane: :is(#prologue, #ending) / #result styles */
   /* prologue: a handscroll on dark brocade. The paper unrolls from the centre (clip-path) as the two rods slide out; the

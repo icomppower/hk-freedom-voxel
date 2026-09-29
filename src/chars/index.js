@@ -124,7 +124,7 @@ const HUANGZHONG = {
   kit: HUANGZHONG_KIT,
 };
 
-const LIST = [ZHAOYUN, HUANGZHONG, GOK, SIUME];
+const LIST = [GOK, SIUME, ZHAOYUN, HUANGZHONG];   // 羊村's officers first; the 定軍山 pair stays playable
 export const CHARS = Object.fromEntries(LIST.map((c) => [c.id, c]));
 export const CHAR_ORDER = LIST.map((c) => c.id);
 

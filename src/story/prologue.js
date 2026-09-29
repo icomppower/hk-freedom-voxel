@@ -135,6 +135,9 @@ export function createPrologue(el, flow, part = 'PROLOGUE') {
       void el.offsetWidth;
       el.classList.add('open');                             // the scroll unrolls (CSS), the first card follows
       addEventListener('keydown', key); addEventListener('keyup', key);
+      if (ending && c.tribute && CH.TRIBUTE) {             // the title menu's 致敬: straight to the tribute card
+        phase = 'tribute'; stampAt = performance.now(); el.classList.add('stamped', 'tribute'); later(go, 60); return;
+      }
       later(() => show(0), 1.1);
     },
     exit() {
