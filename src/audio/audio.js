@@ -41,6 +41,11 @@ const BED = [0.16, 0.4], DRUMS = [0.06, 0.7], MUSIC = [0.18, 0.46];
 // per extra victim, or up to the next tick of a multi-tick window (Musou flurry: 50 ms under each accented stab)
 const SIDE = [0.3, 0.5, 0.45, 0.5], SIDE_MU = [0.25, 0.4, 0.55, 0.4];
 
+/** Cutscene hook (香港自由戰士 cutscenes / ending, src/audio/cutsound.js): the one AudioContext and its buses once built —
+ *  ctx, mix (into the master EQ / compressor / clip ceiling), out (the clip stage, for peak metering), bed (the battle
+ *  bed's duck gain), revIn (reverb send). Empty until the first build (boot). */
+export const BUS = {};
+
 export function createAudio(game) {
   let ctx = null, mix, post, ceiling, sfx, vox, bedBus, bedDuck, revIn, bedG, drumG, musicG, live = 0;
   let underBus, sides = [];                   // sfx that yield to impacts (whooshes, body falls) + the sidechain gains
@@ -84,6 +89,7 @@ export function createAudio(game) {
     bedDuck = ctx.createGain(); bedDuck.connect(mix);
     bedBus = ctx.createGain(); bedBus.connect(sides[1]).connect(bedDuck);
     const bedSend = ctx.createGain(); bedSend.gain.value = 0.4; bedDuck.connect(bedSend).connect(revIn);
+    Object.assign(BUS, { ctx, mix, out: clip, bed: bedDuck, revIn });
     startBed();
   }
   addEventListener('pointerdown', start);

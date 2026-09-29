@@ -11,7 +11,8 @@
 // ctx in: { mode: 'story', char, chapter }. Prologue done → flow.go('battle', ctx); ending done → ink wipe → title.
 // Render-side DOM only (wall-clock timers); nothing here touches the sim.
 import { resolveChapter } from './chapters.js';
-import { inkWipe } from '../ui/menu.js';
+import { inkWipe, wiping, afterWipe } from '../ui/menu.js';
+import { createCutSound } from './cutscenes/sound.js';
 
 const NUM = ['壹', '貳', '參', '肆', '伍', '陸'];
 const HOLD = 0.8;                                  // s held to skip (index.html: the ring's .on transition)
@@ -41,7 +42,7 @@ export function createPrologue(el, flow, part = 'PROLOGUE') {
     const $ = (s) => el.querySelector(s);
     map = $('.pl-map'); card = $('.pl-card'); cols = $('.pl-cols'); en = $('.pl-en'); pips = $('.pl-pips'); ring = $('.pl-skip .p');
   }
-  let ctx = {}, k = -1, timer = 0, swapT = 0, holdTimer = 0, holdT0 = 0, phase = 'off', stampAt = 0, CH = null;
+  let ctx = {}, k = -1, timer = 0, swapT = 0, holdTimer = 0, holdT0 = 0, phase = 'off', stampAt = 0, CH = null, snd = null;   // snd: the ending scroll's sound
 
   const later = (fn, s) => { clearTimeout(timer); timer = setTimeout(fn, s * 1000); };
   function show(i) {
@@ -52,6 +53,7 @@ export function createPrologue(el, flow, part = 'PROLOGUE') {
     clearTimeout(swapT);
     swapT = setTimeout(() => {
       cols.innerHTML = v.cols.map((t, j) => `<span style="--i:${j}">${t}</span>`).join('');
+      if (snd) for (let j = 0; j < v.cols.length; j++) setTimeout(() => snd?.cue('brush'), 120 + j * 420);
       en.textContent = v.en;
       void card.offsetWidth;                                 // commit the masked start so the reveal transitions
       card.classList.add('on');
@@ -82,6 +84,7 @@ export function createPrologue(el, flow, part = 'PROLOGUE') {
   function stamp() {
     if (phase === 'stamp' || phase === 'tribute' || phase === 'out') return;
     phase = 'stamp'; k = CARDS.length; stampAt = performance.now(); clearTimeout(swapT);
+    snd?.cue('stamp');
     el.classList.add('stamped'); card.classList.remove('on');
     for (const m of el.querySelectorAll('[data-id]')) { m.classList.add('on'); m.classList.remove('hot'); }
     map.style.transform = 'translate(0, 0) scale(1.06)';
@@ -89,6 +92,13 @@ export function createPrologue(el, flow, part = 'PROLOGUE') {
   }
   function go() {
     if (phase === 'out') return;
+    if (wiping()) { afterWipe(go); return; }             // a tap while the ink is still coming off (the end scene's hand-over)
+    if (ending && CH.endScene && !ctx.sceneDone && phase !== 'tribute') {   // 香港自由戰士: the end scene, then the tribute
+      phase = 'out'; clearTimeout(timer); snd?.stop(0.5); snd = null;
+      const c = { ...ctx, tribute: true, sceneDone: true };
+      inkWipe(() => flow.go('cutscene', { id: CH.endScene, char: ctx.char, then: () => inkWipe(() => flow.go('ending', c)) }));
+      return;
+    }
     if (ending && CH.TRIBUTE && phase !== 'tribute') {   // the tribute card on the paper, until a tap (or 30 s)
       phase = 'tribute'; stampAt = performance.now(); clearTimeout(timer);
       el.classList.add('tribute');
@@ -138,9 +148,11 @@ export function createPrologue(el, flow, part = 'PROLOGUE') {
       if (ending && c.tribute && CH.TRIBUTE) {             // the title menu's 致敬: straight to the tribute card
         phase = 'tribute'; stampAt = performance.now(); el.classList.add('stamped', 'tribute'); later(go, 60); return;
       }
+      if (ending && CH.endScene && !c.tribute) snd = createCutSound('endscroll');   // wind, a brush swish per column, the stamp drum
       later(() => show(0), 1.1);
     },
     exit() {
+      snd?.stop(0.5); snd = null;
       phase = 'off'; clearTimeout(timer); clearTimeout(swapT); clearTimeout(holdTimer);
       removeEventListener('keydown', key); removeEventListener('keyup', key);
     },

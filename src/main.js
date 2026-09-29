@@ -38,6 +38,7 @@ import { createLoading } from './ui/loading.js';
 import { inkWipe, inkBoot, wiping, createNav, sfx, replay } from './ui/menu.js';
 import { createPrologue } from './story/prologue.js';
 import { createTouch } from './ui/touch.js';
+import { createCutscenes } from './story/cutscenes/player.js';
 import { createResult } from './story/result.js';
 import { difficulty, recordClear } from './core/difficulty.js';
 
@@ -98,7 +99,7 @@ let lastRenderFrame = 0;
 function render(real) {
   const dt = real ?? Math.min(10, Math.max(0, (game.frame - lastRenderFrame) / 60));
   lastRenderFrame = game.frame;
-  heroView.root.visible = state !== 'title' && state !== 'select';   // no officer chosen yet: the field stands empty
+  heroView.root.visible = state !== 'title' && state !== 'select' && state !== 'cutscene';   // no officer chosen yet / the cutscene's own actors
   heroView.update(Math.min(dt, 0.1));
   crowdView.update(dt, camRig.camera);
   vfx.update(dt);
@@ -233,6 +234,8 @@ const screens = {
   title: createTitle($('title'), flow), select: createSelect($('select'), flow), loading: createLoading($('loading')),
   prologue: createPrologue($('prologue'), flow), result: createResult($('result'), flow),
   ending: createPrologue($('ending'), flow, 'ENDING'),              // after the final chapter's win (result → ending → title)
+  // cutscene hook (香港自由戰士): between-chapter scenes and the end scene, played on the live field with their own actors
+  cutscene: createCutscenes($('cutscene'), flow, { scene, game, setMap: (id) => { setMap(id); world.sync(); }, clearField: () => game.crowd.reset() }),
 };
 // a win records the clear (上級 / 修羅 opens 修羅: unlock = the result screen announces it)
 on('story:end', (e) => {
