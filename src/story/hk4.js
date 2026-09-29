@@ -1,5 +1,6 @@
 // 第四章「理工大學」 PolyU Siege, November 2019 — chapter data (format: ./ch1.js header; registry: ./chapters.js). After its
-// win the result screen leads into the ENDING scroll (尾聲 天光) and the TRIBUTE card (story/prologue.js), then the title.
+// win the result screen leads into the ENDING scroll (尾聲 天光), the end scene (story/cutscenes/ending.js) and the TRIBUTE
+// card (story/prologue.js), then the title. The ENDING and the end scene are the game's fiction: Hong Kong wins its freedom.
 // Story (Story Bible, Scroll Cutscenes page): every exit sealed; they hold the podium; the water-cannon truck's blue-dye
 // jets sweep the footbridge with squads pushing behind them; the barricade burns and they fall back through the main gate;
 // 小美 finds the rope route off the far side — motorbikes waiting on the road below — and the escape group is brought to
@@ -83,10 +84,10 @@ export const BEATS = [
   {
     when: { down: 'bear' },
     win: true, waves: false, morale: 1,
-    banner: { html: '<em>面具</em>碎裂', en: 'The mask shatters', dur: 260, big: true },
+    banner: { html: '<em>圍城</em>解除', en: 'The siege is lifted', dur: 260, big: true },
     say: [
       { who: 'bear', zh: '歷史會還我清白！', en: 'History will clear my name!' },
-      { who: 'lungjai', zh: '歷史，我哋會記住。', en: 'History — we\'ll remember it.' },
+      { who: 'lungjai', zh: '完咗喇。我哋贏咗。', en: 'It\'s over. We won.' },
     ],
   },
 ];
@@ -109,20 +110,21 @@ export const EPILOGUE = {
 export const DEFEAT = { zh: '{name}倒下了⋯⋯包圍網收緊。', en: '{name} goes down... the net closes in.' };
 
 // ---- ENDING scroll (after the hk4 result) + the tribute card (title menu 致敬 too)
+// The game's fiction from here on (the chapter epilogues keep the real 2019 history): Hong Kong people win their freedom.
 export const ENDING = [
-  { cols: ['繩索落天橋', '電單車', '一架接一架'], en: 'Down the ropes to the road, where motorbikes came one after another.', show: ['ropes', 'bikes'], focus: [940, 500, 1.5] },
-  { cols: ['下水道入面', '手拉手', '行出去'], en: 'Through the sewers, hand in hand, and out.', show: ['sewer'], focus: [900, 480, 1.4] },
-  { cols: ['龍仔最後', '一個落繩', '回頭望校園'], en: 'Dragon went down the rope last, and looked back at the campus.', show: ['lungjai', 'polyu'], focus: [900, 470, 1.6] },
-  { cols: ['小美喺街口', '等佢', '一齊走'], en: 'Amy waited at the street corner. They left together.', show: ['siumei'], focus: [960, 510, 1.6] },
-  { cols: ['有啲人', '走唔甩', '我哋記得'], en: 'Some could not get out. We remember them.', show: [], focus: [800, 480, 1.0] },
-  { cols: ['天光', '雨傘', '仲喺度'], en: 'Daybreak. The umbrellas are still here.', show: ['city', 'harbour'], focus: [800, 520, 0.95] },
+  { cols: ['面具碎咗', '維尼熊', '再冇人怕'], en: 'The mask shattered, and no one feared the Bear any more.', show: ['bear', 'polyu'], focus: [900, 470, 1.5] },
+  { cols: ['防線一條條', '放低盾牌', '收隊返屋企'], en: 'Line by line, the riot squads lowered their shields and went home.', show: ['siege'], focus: [880, 480, 1.2] },
+  { cols: ['百萬人', '行返夏慤道', '雨傘全開'], en: 'A million people walked back onto Harcourt Road, every umbrella open.', show: ['march', 'harcourt'], focus: [800, 645, 1.3] },
+  { cols: ['香港人', '自己話事', '自己揀路'], en: 'Hong Kong people would decide for themselves, and choose their own road.', show: ['admiralty', 'legco'], focus: [840, 630, 1.2] },
+  { cols: ['自由', '獨立', '由今日開始'], en: 'Freedom. Independence. Starting today.', show: ['harbour', 'city'], focus: [800, 540, 1.0] },
+  { cols: ['龍仔除低口罩', '小美', '笑住喊'], en: 'Dragon took off his mask. Amy laughed and cried at once.', show: ['lungjai', 'siumei'], focus: [820, 640, 1.6] },
 ];
-export const ENDING_STAMP = { small: '尾聲', big: '天光', seal: '記得', en: 'EPILOGUE · DAYBREAK' };
+export const ENDING_STAMP = { small: '尾聲', big: '天光', seal: '自由', en: 'EPILOGUE · DAYBREAK' };
 // Scroll Cutscenes page wording; the link is an open decision (Story Bible): TBD, no names on screen
 export const TRIBUTE = {
   title: { zh: '致敬', en: 'TRIBUTE' },
-  zh: ['2019年，數以百萬計的香港人走上街頭。這個遊戲獻給每一位曾經企出來的人。角色是虛構的，地方與日子是真實的。', '連結：待定'],
-  en: ['In 2019, millions of Hong Kong people took to the streets. This game is for everyone who stood. The characters are fictional; the places and dates are real.', 'Link: TBD'],
+  zh: ['2019年，數以百萬計的香港人走上街頭。這個遊戲獻給每一位曾經企出來的人。角色與結局是虛構的，地方與日子是真實的。', '連結：待定'],
+  en: ['In 2019, millions of Hong Kong people took to the streets. This game is for everyone who stood. The characters and this ending are fiction; the places and dates are real.', 'Link: TBD'],
 };
 
 // ---- script: the water cannon, the rope route, the Bear
