@@ -12,4 +12,6 @@ echo "== ch1 bot (?dev chapter)";    g $N bench/bot/run.mjs --char zhaoyun --qui
 echo "== Chrome: boot, scrolls";     g node bench/harness/smoke.mjs "?x" 4; g node bench/harness/shots-scroll.mjs ch1
 echo "== Chrome: crowd";             g node bench/harness/crowdprobe.mjs ch1
 echo "== Chrome: ch1 checkpoints";   g node bench/harness/xcheck.mjs ch1-zhaoyun 3600; g node bench/harness/xcheck.mjs ch1-huangzhong 3600
+echo "== Chrome: touch hook";        g node bench/harness/touch-twin.mjs; g node bench/harness/touch-ui.mjs
+echo "== Chrome: mobile frame time"; g node bench/maps/perf-mobile.mjs ch1
 echo "ALL GATES GREEN"

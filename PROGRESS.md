@@ -7,7 +7,7 @@ stage not `done`.
 |---|---|---|
 | 0 Fork + strip | done (local) | Node 6/6 logs identical (finals 90a1a382 64989ea8 6c41979e 2c32ffdc 6a95e25b b7fe682c); bot WIN ch1 zhaoyun 普通 (4:41, S); rig 54/54, dual PASS; Chrome: title 香港自由戰士 only, 0 errors; ch1 scroll 6/6, crowd 94/94, checkpoints 6/6 × 2 |
 | 0 Vercel deploy | done (CLI) | project `hk-freedom-voxel` (sharkgundams-projects), static, no build; production https://hk-freedom-voxel.vercel.app READY, loads 200, title screen, 0 console errors. Git link + per-branch previews wait for the GitHub repo |
-| 1 Touch hook | | |
+| 1 Touch hook | done | ch1 Node 6/6 identical, Chrome checkpoints 6/6 × 2, crowd 94/94, scroll 6/6; touch twin 7/7 (1 500-frame plan as keys vs touch: input logs identical, in-page hashes 5/5, Node replay finals b08625f0 = b08625f0); touch UI 12/12 at 844×390 (6 buttons hit-testable, ≥ 44 px, no overlap, drag turns camera, stick moves hero, 無雙 lit, key hides pad, portrait 請打橫手機); Pixel 7 + 4× CPU ch1 p95 20.5–30.3 ms (budget 33; was 33.4–34.6 before dropping shadows / rays on the tier) |
 | 2 龍仔 lungjai | | |
 | 3 小美 siumei | | |
 | 4 Enemy side | | |
@@ -51,4 +51,9 @@ stage not `done`.
   bring their own. scroll-refs.json keeps only the ch1 entries.
 - The Scroll Cutscenes page text has a few mis-encoded characters (夥慨道 → 夏慤道, 交俱我 → 交俾我, ㌗ → 㗎,
   走唔畉 → 走唔甩, 熌滅 → 熄滅); the game uses the intended characters.
+- Touch hook: input.js `virt` (key / stick / look) — touch writes the same held / latch / move state keys do; audio.js
+  one line (`touchend` → the existing unlock, iOS); post.js `mobile` tier = no MSAA, DoF replaced by a copy pass, bloom at
+  half its desktop size, and (added to pass the perf gate) no shadow map and no god rays; main.js: 150 enemies on
+  `(pointer: coarse)` unless `?hq`/`?enemies`. The canvas already renders at CSS pixels (DPR 1), inside the 1.5 cap.
+- perf-mobile: headless Chrome keeps rAF near 60 Hz even with vsync flags, so p50 reads ≈ 13-16 ms; p95 is the gate.
 - Scroll-frame gate flaked twice on the first cold run in this clone (a different frame each time), then 4/4 clean.

@@ -88,6 +88,7 @@ export function createAudio(game) {
   }
   addEventListener('pointerdown', start);
   addEventListener('keydown', start);
+  addEventListener('touchend', start);        // iOS unlocks audio only from touchend (touch hook: the pad eats pointerdown)
   // musou part r3: build the context + graph at boot (it stays 'suspended' until the first key/pointer gesture resumes
   // it). Building it inside the first keydown stalled that frame 0.2-1 s (the first Musou of a session hitched when I
   // was the first key pressed).

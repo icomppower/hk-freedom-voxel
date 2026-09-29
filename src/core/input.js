@@ -7,6 +7,8 @@
 //   Q / E   yaw with a short ramp: 0.9 rad/s on the tap (fine nudge) → 2.6 rad/s after ≈0.35 s held (DW8 pad feel)
 //   pad     right stick yaw + pitch, cubic response, rate eased over ≈4 steps (no twitch off the deadzone)
 //   R / L1 / L2   'target': recenter behind the hero, or onto the nearest officer (camera.js)
+//   touch   (stage-1 hook) src/ui/touch.js drives `virt`: key(action, down) = the same held / latch a key sets,
+//           stick = [x, y] added to the move vector like the keys, look(yaw, pitch) = rad added to this step's look
 import { on } from './events.js';
 
 const ACTIONS = ['attack', 'charge', 'jump', 'dodge', 'musou', 'target'];
@@ -28,7 +30,12 @@ const LOOK = {
 };
 
 export function createInput() {
-  const dev = { held: {}, latch: {}, keys: new Set(), lookX: 0, lookY: 0, pad: {}, keyT: 0, padYaw: 0, padPitch: 0 };
+  const dev = { held: {}, latch: {}, keys: new Set(), lookX: 0, lookY: 0, pad: {}, keyT: 0, padYaw: 0, padPitch: 0, tYaw: 0, tPitch: 0 };
+  const virt = {                                                    // touch hook: writes the device state keys write
+    stick: [0, 0],
+    key(a, down) { if (down && !dev.held[a]) dev.latch[a] = true; dev.held[a] = down; },
+    look(yaw, pitch) { dev.tYaw += yaw; dev.tPitch += pitch; },
+  };
   const out = { mx: 0, my: 0, orbit: 0, tilt: 0, pressed: {}, held: {} };
   const canvas = document.getElementById('c'), menu = document.getElementById('menu');
   // noLock: a click's lock request was refused (sandboxed frame, lock cooldown): clicks attack until the next battle /
@@ -99,6 +106,7 @@ export function createInput() {
     let mx = 0, my = 0, orbit = 0, tilt = 0;
     const pad = pollPad();
     for (const k of dev.keys) { const m = MOVEKEYS[k]; if (m) { mx += m[0]; my += m[1]; } }
+    if (virt.stick[0] || virt.stick[1]) { mx += virt.stick[0]; my += virt.stick[1]; }
     let wantYaw = 0, wantPitch = 0;
     if (pad) {
       const dz = (v) => (Math.abs(v) < LOOK.padDead ? 0 : v);
@@ -118,6 +126,7 @@ export function createInput() {
     dev.keyT = q ? dev.keyT + 1 : 0;
     orbit += q * (LOOK.keyRate[0] + (LOOK.keyRate[1] - LOOK.keyRate[0]) * Math.min(1, dev.keyT / LOOK.keyRamp)) / 60;
     orbit -= dev.lookX * LOOK.mouseYaw; tilt += dev.lookY * LOOK.mousePitch; dev.lookX = dev.lookY = 0;
+    if (dev.tYaw || dev.tPitch) { orbit += dev.tYaw; tilt += dev.tPitch; dev.tYaw = dev.tPitch = 0; }
     for (const a of ACTIONS) {
       out.pressed[a] = !!dev.latch[a];
       out.held[a] = !!dev.held[a];
@@ -129,5 +138,5 @@ export function createInput() {
     return out;
   }
 
-  return { sample };
+  return { sample, virt };
 }

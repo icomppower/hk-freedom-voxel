@@ -10,6 +10,8 @@
 //                     shoulder (fire stays orange/yellow, white armour keeps its shading), bottom darkening,
 //                     vignette, grain, 2 px ordered dither + palette quantisation (retro).
 // Quality tier: a sustained frame time over budget drops the scene MSAA 4× → 2× → off (?hq pins it).
+// Mobile tier (stage-1 hook, createPost({ mobile })): no MSAA, no DoF (a plain copy fills dofRT, CoC forced to 0), bloom
+// at half its desktop resolution, no shadow map, no god rays. main.js picks it on coarse pointers unless ?hq.
 // Render-only: reads camera/focus, never touches sim state.
 import * as THREE from 'three';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -201,12 +203,15 @@ const FinalShader = /* glsl */`
 const mat = (fragmentShader, uniforms) => new THREE.ShaderMaterial({ vertexShader: quadVS, fragmentShader, uniforms: { ...pUniforms(), ...uniforms }, depthTest: false, depthWrite: false, toneMapped: false });
 const v3 = (a) => new THREE.Vector3(...a);
 
-export function createPost({ canvas, width, height }) {
+// mobile tier: dofRT gets the scene straight (no gather), alpha 0 = no foreground spill
+const CopyShader = /* glsl */`uniform sampler2D tAtmos; varying vec2 vUv; void main() { gl_FragColor = vec4(texture2D(tAtmos, vUv).rgb, 0.0); }`;
+
+export function createPost({ canvas, width, height, mobile = false }) {
   const renderer = new THREE.WebGLRenderer({ canvas, powerPreference: 'high-performance' });
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !mobile;             // mobile tier: no shadow pass (half the draw calls)
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
-  const sceneRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4, depthTexture: new THREE.DepthTexture(4, 4) });
+  const sceneRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: mobile ? 0 : 4, depthTexture: new THREE.DepthTexture(4, 4) });
   // nearest: the half-res DoF must not average a hero-plane distance with the background behind it
   const atmosRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
   const dofRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: false });
@@ -237,7 +242,7 @@ export function createPost({ canvas, width, height }) {
     uProjInv: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
     uSunDir: { value: SUN_DIR }, uCamPos: { value: new THREE.Vector3() },
   }));
-  const dof = new FullScreenQuad(mat(DofShader, { tAtmos: { value: atmosRT.texture }, uTexel: { value: new THREE.Vector2() }, ...dofU }));
+  const dof = new FullScreenQuad(mat(mobile ? CopyShader : DofShader, { tAtmos: { value: atmosRT.texture }, uTexel: { value: new THREE.Vector2() }, ...dofU }));
   const rays = new FullScreenQuad(mat(RaysShader, { tAtmos: { value: atmosRT.texture }, uSunUv: { value: new THREE.Vector2() }, uAspect: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 } }));
   const sunNdc = new THREE.Vector3(), camFwd = new THREE.Vector3();
   // Lottes curve constants: tmMidIn → tmMidOut and tmMax → 1
@@ -253,7 +258,7 @@ export function createPost({ canvas, width, height }) {
     const hw = Math.round(w / 2), hh = Math.round(h / 2);
     sceneRT.setSize(w, h); atmosRT.setSize(w, h); dofRT.setSize(hw, hh); raysRT.setSize(hw, hh);
     rays.material.uniforms.uAspect.value.set(w / h, 1);
-    bloom.setSize(hw, hh);
+    bloom.setSize(mobile ? Math.round(hw / 2) : hw, mobile ? Math.round(hh / 2) : hh);
     fin.material.uniforms.uRes.value.set(w, h);
     dof.material.uniforms.uTexel.value.set(1 / hw, 1 / hh);
   }
@@ -300,6 +305,7 @@ export function createPost({ canvas, width, height }) {
       u.uFarScale.value = THREE.MathUtils.clamp(7 / f, 1, 3);   // close-ups: stronger background bokeh
       u.uNearScale.value = THREE.MathUtils.clamp(8 / f, 0.25, 1);   // wide/high shots: no tilt-shift miniature at the bottom
       u.uFocus.value = f; u.uBandN.value = Math.max(P.bandNear, f * 0.22); u.uBandF.value = Math.max(P.bandFar, f * 0.6);
+      if (mobile) u.uNearScale.value = u.uFarScale.value = 0;      // mobile tier: CoC 0 everywhere (all sharp)
       renderer.setRenderTarget(dofRT); dof.render(renderer);
 
       bloom.render(renderer, null, dofRT, 1 / 60, false);
@@ -309,7 +315,7 @@ export function createPost({ canvas, width, height }) {
       sunNdc.copy(SUN_DIR).multiplyScalar(800).add(camera.position).project(camera);
       const facing = camera.getWorldDirection(camFwd).dot(SUN_DIR);
       const off = Math.max(Math.abs(sunNdc.x), Math.abs(sunNdc.y));
-      const rg = facing > 0 ? P.rays * THREE.MathUtils.smoothstep(facing, 0.2, 0.6) * (1 - THREE.MathUtils.smoothstep(off, 1.0, 1.8)) : 0;
+      const rg = !mobile && facing > 0 ? P.rays * THREE.MathUtils.smoothstep(facing, 0.2, 0.6) * (1 - THREE.MathUtils.smoothstep(off, 1.0, 1.8)) : 0;
       g.uRayGain.value = rg;
       if (rg > 0) {
         const ru = rays.material.uniforms;

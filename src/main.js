@@ -37,16 +37,20 @@ import { createSelect } from './ui/select.js';
 import { createLoading } from './ui/loading.js';
 import { inkWipe, inkBoot, wiping, createNav, sfx, replay } from './ui/menu.js';
 import { createPrologue } from './story/prologue.js';
+import { createTouch } from './ui/touch.js';
 import { createResult } from './story/result.js';
 import { difficulty, recordClear } from './core/difficulty.js';
 
 const params = new URLSearchParams(location.search);
-const ENEMIES = Math.max(0, Math.min(2000, params.get('enemies') ? Number(params.get('enemies')) | 0 : 300));
+// mobile quality tier (touch hook): coarse pointers get 150 enemies, no MSAA / DoF, half-res bloom; ?hq forces full.
+// The canvas renders at CSS-pixel resolution (DPR 1), inside the tier's DPR ≤ 1.5 cap.
+const MOBILE = !params.has('hq') && matchMedia('(pointer: coarse)').matches;
+const ENEMIES = Math.max(0, Math.min(2000, params.get('enemies') ? Number(params.get('enemies')) | 0 : MOBILE ? 150 : 300));
 
 const canvas = document.getElementById('c');
 let vw = innerWidth, vh = innerHeight;
 
-const post = createPost({ canvas, width: vw, height: vh });
+const post = createPost({ canvas, width: vw, height: vh, mobile: MOBILE });
 const scene = new THREE.Scene();
 const world = createWorld(scene);
 
@@ -60,6 +64,7 @@ game.combat = createCombat(game);
 game.musou = game.hero.kit.createMusou(game);     // the character's Musou (rebuilt with the kit in startBattle)
 game.story = createStory(game);
 const input = createInput();
+createTouch(input.virt, game, MOBILE);
 
 // ---- render side
 const crowdView = createCrowdView(scene, game);

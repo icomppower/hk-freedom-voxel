@@ -805,6 +805,35 @@
   #ending .pl-tribute p small { display: block; font: 500 max(13px, 1.45rem)/1.45 var(--sans); color: #3a2818; margin-top: .3rem; }
   #ending .pl-tribute a { align-self: flex-start; margin-top: 1rem; font: 700 2rem/1 var(--kai); color: #6e1a12; text-decoration: underline; }
   #ending .pl-tribute a small { margin-left: .8rem; font: 600 max(13px, 1.3rem)/1 var(--sans); letter-spacing: .08em; }
+
+  /* touch controls (stage-1 hook, src/ui/touch.js): coarse pointers only, battle only. Sizes in px / vmin (1rem is
+     1/72 of the viewport height: too small on a phone held sideways). */
+  #touch { position: fixed; inset: 0; z-index: 5; touch-action: none; user-select: none; -webkit-user-select: none;
+    -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  #touch[hidden], #touch-rot[hidden] { display: none; }
+  #touch .t-stick { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .15s; }
+  #touch .t-stick.on { opacity: 1; }
+  #touch .t-base, #touch .t-knob { position: absolute; border-radius: 50%; translate: -50% -50%; }
+  #touch .t-base { width: 112px; height: 112px; border: 2px solid rgba(255,215,0,.55); background: rgba(10,10,10,.35); }
+  #touch .t-knob { width: 50px; height: 50px; background: rgba(255,215,0,.8); box-shadow: 0 0 10px rgba(0,0,0,.6); }
+  #touch .t-btn { position: absolute; display: grid; place-content: center; border-radius: 50%; padding: 0; margin: 0;
+    width: 58px; height: 58px; right: var(--r); bottom: var(--b); border: 2px solid rgba(255,215,0,.75);
+    background: rgba(10,10,10,.55); color: #ffd700; font: 700 22px/1 var(--kai); touch-action: none; }
+  #touch .t-btn small { font: 700 9px/1 var(--sans); letter-spacing: .06em; color: rgba(255,255,255,.7); margin-top: 3px; }
+  #touch .t-btn.down { background: rgba(255,215,0,.85); color: #0a0a0a; }
+  #touch .t-btn.down small { color: #0a0a0a; }
+  #touch .b-atk { --r: 22px; --b: 26px; width: 78px; height: 78px; font-size: 30px; }
+  #touch .b-chg { --r: 112px; --b: 18px; }
+  #touch .b-jmp { --r: 104px; --b: 92px; }
+  #touch .b-ddg { --r: 30px; --b: 120px; }
+  #touch .b-mu { --r: 176px; --b: 30px; font-size: 17px; border-color: rgba(255,255,255,.3); color: rgba(255,215,0,.45); }
+  #touch .b-mu.lit { border-color: #ffd700; color: #0a0a0a; background: #ffd700; box-shadow: 0 0 16px #ffd700; }
+  #touch .b-mu.lit small { color: #0a0a0a; }
+  #touch .b-pause { right: auto; bottom: auto; left: 50%; top: 8px; translate: -50% 0; width: 44px; height: 44px; font-size: 18px; }
+  #touch-rot { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px; background: #0a0a0a; color: #ffd700; text-align: center; }
+  #touch-rot b { font: 700 34px/1.2 var(--brush); letter-spacing: .2em; }
+  #touch-rot small { font: 600 13px/1 var(--sans); letter-spacing: .12em; color: #fff; }
 </style>
 </head>
 <body class="inkhold">
