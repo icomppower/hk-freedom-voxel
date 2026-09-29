@@ -14,6 +14,7 @@
 import * as ch1 from './ch1.js';
 import * as sheep1 from './sheep1.js';
 import * as sheep2 from './sheep2.js';
+import * as sheep3 from './sheep3.js';
 
 const LIST = [
   {
@@ -36,6 +37,13 @@ const LIST = [
     sides: { us: '羊', them: '狼', names: { us: { zh: '羊群', en: 'The flock' }, them: { zh: '狼群', en: 'Wolf' } } },
     skin: { foe: 'wolf', ally: 'sheep' },
     allies: [-1, 1].map((sx) => ({ x: sx * 5, z: -104, n: 6, cols: 3, hold: true })),   // the villagers who came out to help
+  },
+  {
+    ...sheep3, id: 'sheep3', map: 'harbor', cast: ['gok', 'siume'],
+    title: { small: '第三章', zh: '霧港', en: 'CHAPTER III · THE FOG HARBOR' },
+    sides: { us: '羊', them: '狼', names: { us: { zh: '羊群', en: 'The flock' }, them: { zh: '狼群', en: 'Wolf' } } },
+    skin: { foe: 'wolf', ally: 'sheep' },
+    allies: [-1, 1].map((sx) => ({ x: sx * 5, z: -118, n: 6, cols: 3, hold: true })),   // fishers of 羊村 on the beach
   },
 ];
 

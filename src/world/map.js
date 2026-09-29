@@ -23,11 +23,12 @@ import { noise2, smooth, rectIn } from './mapkit.js';
 import DINGJUN from './maps/dingjun/map.js';
 import PASTURE from './maps/pasture/map.js';
 import LANTERN from './maps/lantern/map.js';
+import HARBOR from './maps/harbor/map.js';
 
 export { noise2, smooth };
 
 /** Every battlefield by id. New maps register with one import + one entry. */
-export const MAPS = { dingjun: DINGJUN, pasture: PASTURE, lantern: LANTERN };
+export const MAPS = { dingjun: DINGJUN, pasture: PASTURE, lantern: LANTERN, harbor: HARBOR };
 export const DEFAULT_MAP = 'dingjun';
 
 // ---- live bindings onto the active map (setMap)

@@ -15,11 +15,11 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 5 小咩 siume | done | gates 6/6 (moves 15/15, onsets = Box Moveset, N-string 18 sf apart live, blades ≥ 0.45 m, feet slide ≤ 0.70 cm, Musou 39/40); 60 fps through the Musou at 600 enemies; model critic 2 rounds → P1 0 (headband tails were a rigid plank); bot clears ch1 as siume (7:27, rank S); ch1 Node 6/6 |
 | 6 Chapter I pasture / sheep1 | done | bot WIN 6/6 (gok + siume × steady / rush / back: no soft-lock); map gate 6/6 per officer (no NaN, standing soldiers ≥ −1.25 m, no teleport > 3 m/step, barnLane + villageGate reached, won); scroll columns ≤ 7; ch1 prologue 6/6, crowd 94/94, Node 6/6 |
 | 7 Chapter II lantern / sheep2 | done | bot WIN 6/6 (gok + siume × steady / rush / back); map gate 5/5 per officer; WIN in the real page (gok); night lighting critic → readable |
-| 8 Chapter III harbor / sheep3 + ENDING + TRIBUTE | todo | |
+| 8 Chapter III harbor / sheep3 + ENDING + TRIBUTE | done | bot WIN 6/6 (both officers × 3 styles, 2 300–4 200 KOs); map gate 6/6 per officer (boom + lighthouse reached); scroll-flow 11/11 on the real ending (result → ENDING → tribute → title only after the Ch. III win); tribute card: original wording, no names, link minjian-danganguan.org/archive/3429 (verified) |
 | 9 Critic rounds | todo | |
 | 10 Ship | todo | |
 
-**Next action:** stage 7 Chapter II — map `lantern` (market / stairs / checkpoint / lookout, gate checkpoint) + sheep2.js.
+**Next action:** stage 9 critic rounds (fx / scene / ui / chars / perf). Known P1: title screen is still upstream's 三國無雙 branding with Zhao Yun / Huang Zhong; result footer covers the buttons at 720p; title menu needs the tribute entry.
 
 ## Contract ids (Divide & Conquer page)
 
