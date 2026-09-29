@@ -11,7 +11,7 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 2c Crowd skin + officer hook | done | Wei/Shu crowd 94/94 meshes geometry+texture identical; skin-test 4/4 (wolf + sheep skins render, keyed officer model, broken weapon on KO, ch1 back to Wei after); Node 4/4 |
 | 2d Bot autoplay | done | bot clears ch1 on 普通 as zhaoyun (6:21, S) and huangzhong (8:24, A), styles steady / rush / back all WIN (no soft-lock); zhaoyun also 初級 / 上級; both full clears added to the hash gate (Node 6/6) |
 | 3 阿角 gok | done | gates 6/6 (moves 15/15, onsets = Box Moveset, N-string 28 sf apart live, weapon ≥ 0.29 m, feet slide ≤ 0.66 cm, Musou 39/40 of a packed ring); 60 fps held through the Musou at 600 enemies (p95 16.8 ms = Zhao Yun); model critic 3 rounds → P1 0; bot clears ch1 as gok (rank S); ch1 Node 6/6 |
-| 4 狼督 + grey / shadow / iron | todo | |
+| 4 狼督 + grey / shadow / iron | done | boss gate 6/6 (phase 2 at 49.8 % HP, phase 3 at 19.8 %, banners on the phase frames, searchlight squads drop, KO → win, slot keeps the warden model) as gok + zhaoyun; officer lineup critic 3 rounds → P1 0; KO = kneel + raised horn + broken glaive; ch1 crowd 94/94, Node 6/6 |
 | 5 小咩 siume | todo | |
 | 6 Chapter I pasture / sheep1 | todo | |
 | 7 Chapter II lantern / sheep2 | todo | |
@@ -19,7 +19,7 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 9 Critic rounds | todo | |
 | 10 Ship | todo | |
 
-**Next action:** stage 4 狼督 warden + 灰牙 grey / 影爪 shadow / 鐵吻 iron officer models; boss phases 50 % / 20 %, glaive breaks on KO.
+**Next action:** stage 5 小咩 siume — model (row 2), moves (moves.js + anims.js written, untested), Musou on the dual-wield rig.
 
 ## Contract ids (Divide & Conquer page)
 
@@ -59,3 +59,9 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
   (src/chars/gok/musou.js). Shared clip kit: src/chars/shared/clipkit.js (upstream's clipF / bakeFeet, per kit).
 - select.js: courtesy.label (default 字) so 阿角 reads 人稱角叔. story say(): a hero without a branch in a line takes its
   first branch (an officer playing outside his chapter's cast).
+- Officers (stage 4): crowd officer models in src/chars/officers/ (wolfkit.js builder; warden/model.js + warden/boss.js).
+  Boss phases run from a chapter script (story hook `script`), banners from `below` beats. Not done (frozen combat / crowd
+  AI): 狼督's super armour on heavy swings and the phase-3 leap; phase 3 = officer cooldown clipped (more swings).
+- The crowd material dissolves anything within ≈ 3 m of the lens (upstream DW-style): officer close-ups are long-lens.
+- 小咩 C1 = 旋風剪 tornado (Box Moveset frame data, the gate) and C3 = twin upward snip launcher; the Character Sheet
+  lists them the other way round.

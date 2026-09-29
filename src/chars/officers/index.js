@@ -3,6 +3,10 @@
 // models register here with one import + one entry.
 import { WOLF } from './wolf.js';
 import { SHEEP } from './sheep.js';
+import { GREY } from './grey.js';
+import { SHADOW } from './shadow.js';
+import { IRON } from './iron.js';
+import { WARDEN } from './warden/model.js';
 
 export const SKINS = { wolf: WOLF, sheep: SHEEP };
-export const OFFICER_MODELS = {};
+export const OFFICER_MODELS = { grey: GREY, shadow: SHADOW, iron: IRON, warden: WARDEN };
