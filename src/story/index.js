@@ -15,13 +15,15 @@
 // Both modes field live Shu allies (crowd.spawnAllies; columns via crowd.setAllies): story — the van drawn up either side
 // of the road inside the 本陣 gate, holding rank until the hero marches past; free — a block behind him.
 // Morale also moves with the duels (Wei grunts the allies KO'd minus allies lost).
-// Story mode: ch1.js BEATS = a beat list (format: header of ./ch1.js), run strictly in order — beat k fires once
+// Story mode: the active chapter's BEATS (chapters.js registry; format: header of ./ch1.js), run strictly in order — beat k fires once
 // its trigger holds and beat k-1 has fired; a `limit` keeps the hero from running past the stage he is on (DW8's
 // barred gates), so the script can't be skipped or soft-locked by running ahead, and going back is always free.
 import { emit, on } from '../core/events.js';
-import { zone, setGate, GATES, WALL_Z, GATE_X } from '../world/map.js';
+import { zone, setGate, GATES, WALL_Z, GATE_X, MAP } from '../world/map.js';
 import { CHARS } from '../chars/index.js';
-import { BEATS, OFF, SPK } from './ch1.js';
+import { resolveChapter } from './chapters.js';
+
+let BEATS, OFF, SPK;                            // the active chapter's script (story.reset)
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
@@ -98,8 +100,11 @@ export function createStory(game) {
     for (const l of b.say || []) say(l);
   }
 
-  st.reset = ({ mode = 'free', char = 'zhaoyun' } = {}) => {
-    Object.assign(S, { mode, char, ally: char === 'huangzhong' ? 'zhaoyun' : 'huangzhong', t: 0, done: false, maxChain: 0,
+  st.reset = ({ mode = 'free', char = 'zhaoyun', chapter } = {}) => {
+    const CH = resolveChapter(chapter, char);
+    ({ BEATS, OFF, SPK } = CH);
+    st.chapter = CH;
+    Object.assign(S, { mode, char, ally: CH.cast.find((id) => id !== char) || CH.cast[0], t: 0, done: false, maxChain: 0,
       downT: -1, dmg: 0, beat: 0, beatT: 0, koBase: 0, off: {}, want: {}, dead: {}, q: [], sayUntil: 0, limit: Infinity, nag: null,
       nagT: -999, mBase: 0.4, won: -1, go: null });
     game.timeScale = 1;
@@ -107,8 +112,8 @@ export function createStory(game) {
     if (mode === 'story') for (const id in GATES) setGate(id, false);   // spawnPoint() opened them all; the script opens each
     st.morale = mode === 'story' ? 0.4 : undefined;
     const c = game.crowd;
-    if (mode === 'free') { c.spawnArmy(); c.spawnAllies({ x: 0, z: -9, n: 24, cols: 6 }); }
-    else for (const sx of [-1, 1]) c.spawnAllies({ x: sx * 5.575, z: -121.6, n: 12, cols: 4, hold: true });
+    if (mode === 'free') { c.spawnArmy(); c.spawnAllies({ ...MAP.freeAllies }); }
+    else for (const a of CH.allies || []) c.spawnAllies({ ...a });
     c.setAllies(true);
     // story: the first beat spawns the field on step 1 — after main.js's 'scenario' reset of the HUD, so its objective sticks
   };

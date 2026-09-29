@@ -10,27 +10,28 @@
 import { Vector3 } from 'three';
 import { on } from '../core/events.js';
 import { ST } from '../crowd/crowd.js';
-import { ground, zoneAt, GATES, MAP, TERRAIN as G, ROUTE, riverZ, walkIn, WALL_Z, GATE_X, FORDS } from '../world/map.js';
+import { ground, zoneAt, GATES, MAP, TERRAIN, ROUTE, walkIn } from '../world/map.js';
 import { CHARS, paintPortrait } from '../chars/index.js';
 
 // render-only seam: crowd view skips its 3D officer ▼ where the floating tags below take over
 export const HUD_TAG_R = 44.7;
 
-// Minimap layer: the whole 定軍山 field drawn once, in the minimap's orientation (map up = +Z, up the valley; +X is
-// map-left, as the camera sees it at yaw 0), blitted around the hero every frame. Walkable ground pale with a bright rim
-// where the cliffs / palisades stop you, the Han River, the castle wall with its gate passage, the road dotted in gold.
+// Minimap layer: the active map's whole field drawn once per map, in the minimap's orientation (map up = +Z, up the field;
+// +X is map-left, as the camera sees it at yaw 0), blitted around the hero every frame. Walkable ground pale with a bright
+// rim where the cliffs / palisades stop you, wet ground tinted (MAP.wet: 定軍山's Han River), the road dotted in gold, and
+// the map's own overlays (MAP.minimap before the road: 定軍山's castle wall; MAP.minimapAfter: its ford crossings).
 // Gates, units and labels are drawn live over it.
 const PPM = 2;                        // px per metre
-let layer = null;
-/** { canvas, x1, z1, ppm }: canvas pixel (u, v) ↔ world (x1 - u / ppm, z1 - v / ppm). Built on first use. */
+const layers = {};
+/** { canvas, x1, z1, ppm }: canvas pixel (u, v) ↔ world (x1 - u / ppm, z1 - v / ppm). Built on first use per map. */
 function minimapLayer() {
-  if (layer) return layer;
-  const W = (G.x1 - G.x0) * PPM, H = (G.z1 - G.z0) * PPM;
+  if (layers[MAP.id]) return layers[MAP.id];
+  const G = TERRAIN, W = (G.x1 - G.x0) * PPM, H = (G.z1 - G.z0) * PPM;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const g = cv.getContext('2d'), img = g.createImageData(W, H), d = img.data;
   for (let v = 0; v < H; v++) for (let u = 0; u < W; u++) {
     const x = G.x1 - (u + 0.5) / PPM, z = G.z1 - (v + 0.5) / PPM, s = walkIn(x, z), o = (u + v * W) * 4;
-    const wet = Math.abs(z - riverZ(x)) < 6.5;
+    const wet = MAP.wet ? MAP.wet(x, z) : false;
     if (s > 0) {                                                         // field: pale, bright rim at the edge
       const rim = s < 1.2;
       d[o] = 214; d[o + 1] = 184; d[o + 2] = 130; d[o + 3] = rim ? 190 : 96;
@@ -40,20 +41,13 @@ function minimapLayer() {
   }
   g.putImageData(img, 0, 0);
   const X = (x) => (G.x1 - x) * PPM, Y = (z) => (G.z1 - z) * PPM;
-  // castle wall (-64 … corner tower) + flank wall, gate passage left open
-  g.fillStyle = 'rgba(236,214,172,0.8)';
-  g.fillRect(X(16.5), Y(WALL_Z + 9), (16.5 + 64) * PPM, 9 * PPM);
-  g.fillRect(X(16.5), Y(150), 9 * PPM, 40 * PPM);
-  g.clearRect(X(GATE_X + 3.6), Y(WALL_Z + 9), 7.2 * PPM, 9 * PPM);
-  g.fillStyle = 'rgba(214,184,130,0.2)'; g.fillRect(X(GATE_X + 3.6), Y(WALL_Z + 9), 7.2 * PPM, 9 * PPM);
-  // the road, dotted gold; the ford crossings marked
+  MAP.minimap?.(g, X, Y, PPM);
+  // the road, dotted gold
   g.strokeStyle = 'rgba(208,160,64,0.55)'; g.lineWidth = 1.5; g.setLineDash([4, 5]);
   g.beginPath(); ROUTE.forEach(([x, z], i) => (i ? g.lineTo(X(x), Y(z)) : g.moveTo(X(x), Y(z)))); g.stroke();
   g.setLineDash([]);
-  g.fillStyle = 'rgba(236,214,172,0.5)';
-  for (const [a, b] of FORDS) for (let x = a + 1; x < b; x += 2.5) g.fillRect(X(x) - 1, Y(riverZ(x)) - 1, 2, 2);
-  layer = { canvas: cv, x1: G.x1, z1: G.z1, ppm: PPM };
-  return layer;
+  MAP.minimapAfter?.(g, X, Y, PPM);
+  return (layers[MAP.id] = { canvas: cv, x1: G.x1, z1: G.z1, ppm: PPM });
 }
 
 export function createHud(root, game, camera) {
@@ -64,7 +58,7 @@ export function createHud(root, game, camera) {
       <div class="sub"></div>
       <div class="keys"></div></div>
     <div class="h-target"><i class="seal">將</i><b></b><span></span><div class="bar"><em></em><i></i></div><strong>擊破</strong></div>
-    <div class="h-map"><div class="morale"><i></i><span>蜀</span><span>魏</span></div><canvas width="200" height="200"></canvas><i class="seal">${MAP.name.zh}</i></div>
+    <div class="h-map"><div class="morale"><i></i><span class="us">蜀</span><span class="them">魏</span></div><canvas width="200" height="200"></canvas><i class="seal">${MAP.name.zh}</i></div>
     <div class="h-offs">${'<div class="off"><i class="ld"></i><div class="mk">▼▼</div><div class="bd"><b></b><span></span><div class="bar"><em></em><i></i></div></div></div>'.repeat(nOff)}</div>
     <div class="h-chain"><div class="num"><b class="dig" data-t="0"><span>0</span></b><u></u><u></u><u></u></div><small><em>連擊</em>CHAIN</small></div>
     <div class="h-mile"><b class="dig" data-t="50"><span>50</span></b><i class="seal">擊破</i></div>
@@ -109,6 +103,9 @@ export function createHud(root, game, camera) {
       ? '<kbd>K</kbd> 長按瞄準 hold to aim · 連擊中 蓄力 mid-combo charge' : '<kbd>K</kbd> 蓄力 charge'}<br>
       <kbd>Space</kbd> 跳躍 jump · <kbd>L</kbd> 閃避 dodge · <kbd>I</kbd> 無雙 musou · <kbd>R</kbd> 鎖定 recenter · <kbd>H</kbd> 說明`;
     paintPortrait($('.h-player canvas'), ch);
+    // the battlefield: map seal, morale factions (the active chapter's sides; story/chapters.js)
+    const sides = game.story.chapter?.sides || { us: '蜀', them: '魏' };
+    text($('.h-map > .seal'), MAP.name.zh); text($('.morale .us'), sides.us); text($('.morale .them'), sides.them);
     for (const g of chainG) g.f = -99;
     for (const o of offs) o.lag = 1;
   };
@@ -424,7 +421,7 @@ export function createHud(root, game, camera) {
         const g = GATES[id].rect;
         if (!GATES[id].open) map.fillRect(X(g[2]), Y(g[3]), (g[2] - g[0]) * s, Math.max(3, (g[3] - g[1]) * s));
       }
-      const hqX = X(4), hqY = Y(208);
+      const hqX = X(MAP.hq[0]), hqY = Y(MAP.hq[1]), hqName = MAP.hqName || '本陣';   // the map's enemy HQ
       map.font = '700 15px "Xingkai SC", "Kaiti SC", "HudBrush", serif'; map.textAlign = 'center';
       if (hqX < 8 || hqX > 192 || hqY < 8 || hqY > 192) {           // enemy HQ beyond the map: pin it to the rim
         const dx = hqX - 100, dy = hqY - 100, k = 90 / Math.max(Math.abs(dx), Math.abs(dy)), px = 100 + dx * k, py = 100 + dy * k, a = Math.atan2(dx, -dy);
@@ -432,10 +429,10 @@ export function createHud(root, game, camera) {
         map.fillStyle = '#d0a040'; map.beginPath(); map.moveTo(0, -7); map.lineTo(-5, 1); map.lineTo(5, 1); map.fill();
         map.restore();
         map.fillStyle = 'rgba(236,214,172,0.9)';
-        map.fillText('本陣', Math.max(18, Math.min(182, px - dx * 0.16)), Math.max(18, Math.min(186, py - dy * 0.16 + 5)));
+        map.fillText(hqName, Math.max(18, Math.min(182, px - dx * 0.16)), Math.max(18, Math.min(186, py - dy * 0.16 + 5)));
       } else {
         map.fillStyle = '#d0a040'; map.fillRect(hqX - 4, hqY - 4, 8, 8);
-        map.fillStyle = 'rgba(236,214,172,0.9)'; map.fillText('本陣', hqX, hqY - 8);
+        map.fillStyle = 'rgba(236,214,172,0.9)'; map.fillText(hqName, hqX, hqY - 8);
       }
       const zn = zoneAt(h.x, h.z);
       if (zn) S.zone = zn;

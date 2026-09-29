@@ -5,7 +5,7 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | Stage | Status | Gate numbers |
 |---|---|---|
 | 0 Harness | done | 4 Node logs replay identical (ch1 × zhaoyun / huangzhong, 7 200 + 36 000 f); Chrome 6/6 checkpoints stable run to run |
-| 1 Seam | todo | |
+| 1 Seam | done | Node 4/4 logs identical (finals 90a1a382 64989ea8 6c41979e 2c32ffdc), Chrome 2/2 × 6/6 checkpoints; menus → chapter pick → prologue → battle, 0 errors |
 | 2a Scroll player | todo | |
 | 2b Dual-wield rig | todo | |
 | 2c Crowd skin + officer hook | todo | |
@@ -19,7 +19,7 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 | 9 Critic rounds | todo | |
 | 10 Ship | todo | |
 
-**Next action:** stage 1 seam — chapter / map / character registries + chapter pick on select.
+**Next action:** stage 2a scroll player (gate: `shots-scroll.mjs ch1` 6/6 identical for both officers; refs saved before the change).
 
 ## Contract ids (Divide & Conquer page)
 
@@ -37,3 +37,10 @@ One-shot build of 羊村 · 霧港渡 (Notion: "One-Shot Build Prompt — 羊村
 - Node and Chrome hashes differ (V8 trig last-ulp); Node is the primary gate, Chrome checkpoints are a second gate.
 - Some state leaks between battles within one page (upstream): logs replay only from a cold start (one per process).
 - The scripted driver does not finish ch1 (stalls after 張郃 appears); the stage-2d bot is what clears chapters.
+- Seam registries: `src/world/map.js` MAPS (+ `maps/<id>/map.js`), `src/world/world.js` WORLDS (+ `maps/<id>/world.js`),
+  `src/story/chapters.js` CHAPTERS (map, cast, title, sides, allies), `src/chars/index.js` LIST. Map exports are live
+  bindings onto the active map. Chapter pick opens after 出陣 on an officer and lists the chapters whose cast has him.
+- Reading of the rules: the frozen list is hard; other upstream files (ui/, story/index.js, world/, hud, main.js) change
+  only in the seam / stage-2 hook commits, or later in a small separately committed hook gated on unchanged ch1 hashes.
+- Title menu item renamed 故事模式 (the chapter is chosen on select); loading card names the picked chapter.
+- `src/ui/brush.woff2` is a glyph subset: new HUD / menu glyphs fall back to system fonts until it is re-subset (ship).

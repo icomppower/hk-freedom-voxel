@@ -12,7 +12,8 @@
 // (the bar tracks those real stages), a minimum dwell, then ink on into the prologue / battle — the officer on the field
 // is the chosen one before anything of the field is seen again, and his kit's first draws never stall on screen.
 // Select → loading also snaps the select stage's key-art frame of the officer (snapArt) for the loading card and result.
-// Dev shortcut: ?go=free|story[&char=id] skips the screens straight into a battle.
+// Dev shortcut: ?go=free|story[&char=id][&ch=chapter id] skips the screens straight into a battle.
+// Seam: the battle's chapter (story/chapters.js) picks the map (world/map.js setMap) and its world (world.js sync).
 import * as THREE from 'three';
 import { vrng, rng } from './core/rng.js';
 import { emit, on, collect } from './core/events.js';
@@ -28,7 +29,8 @@ import { createVfx } from './vfx/vfx.js';
 import { createHud } from './ui/hud.js';
 import { createAudio } from './audio/audio.js';
 import { CHARS } from './chars/index.js';
-import { spawnPoint } from './world/map.js';
+import { spawnPoint, setMap } from './world/map.js';
+import { resolveChapter } from './story/chapters.js';
 import { createStory } from './story/index.js';
 import { createTitle, CONTROLS } from './ui/title.js';
 import { createSelect } from './ui/select.js';
@@ -103,11 +105,14 @@ function render(real) {
   hud.update();
 }
 
-/** New battle: { char: CHARS id, mode: 'story' | 'free' }. Resets every sim module (deterministic from
- *  here: both RNGs reseeded, frame 0), rebuilds the kit views on a character change, lets the story spawn the field. */
-function startBattle({ char = 'zhaoyun', mode = 'free' } = {}) {
-  const ch = CHARS[char] || CHARS.zhaoyun, p = spawnPoint(mode), newKit = ch.kit !== game.hero.kit;
-  Object.assign(game, { mode, frame: 0, hitstop: 0, freeze: 0, diff: difficulty() });
+/** New battle: { char: CHARS id, mode: 'story' | 'free', chapter?: CHAPTERS id }. Makes the chapter's map active (its
+ *  world rebuilt if another map was on screen), resets every sim module (deterministic from here: both RNGs reseeded,
+ *  frame 0), rebuilds the kit views on a character change, lets the story spawn the field. */
+function startBattle({ char = 'zhaoyun', mode = 'free', chapter } = {}) {
+  const ch = CHARS[char] || CHARS.zhaoyun, CH = resolveChapter(chapter, ch.id);
+  setMap(CH.map); world.sync();
+  const p = spawnPoint(mode), newKit = ch.kit !== game.hero.kit;
+  Object.assign(game, { mode, chapter: CH.id, frame: 0, hitstop: 0, freeze: 0, diff: difficulty() });
   lastRenderFrame = 0;
   vrng.seed(7936); rng.seed(1);
   game.hero.reset({ ...p, char: ch });
@@ -115,11 +120,11 @@ function startBattle({ char = 'zhaoyun', mode = 'free' } = {}) {
   game.crowd.reset(); game.combat.reset(); game.musou.reset(); game.cam.reset(p.yaw); game.cam.tilt = p.tilt || 0;
   if (newKit) buildViews();
   heroView.reset();
-  game.story.reset({ mode, char: ch.id });
+  game.story.reset({ mode, char: ch.id, chapter: CH.id });
   menu.querySelector('.t').innerHTML = `${ch.name.zh}<i>${ch.seal}</i>`;
   menu.querySelector('.sub').innerHTML = `戰局暫停・${game.diff.zh}<small>Battle paused · ${game.diff.en}</small>`;
   document.title = `${ch.name.zh} — Voxel Musou`;
-  emit('scenario', { mode, char: ch.id });
+  emit('scenario', { mode, char: ch.id, chapter: CH.id });
 }
 
 addEventListener('resize', () => {
@@ -250,5 +255,5 @@ const frame = (now) => {
 
 const dev = params.get('go');
 // the page opens under full ink (index.html): the first screen is built and compiled under it, then the ink sweeps off
-inkBoot(() => dev ? flow.go('battle', { mode: dev === 'story' ? 'story' : 'free', char: params.get('char') || 'zhaoyun' }) : flow.go('title'));
+inkBoot(() => dev ? flow.go('battle', { mode: dev === 'story' ? 'story' : 'free', char: params.get('char') || 'zhaoyun', chapter: params.get('ch') || undefined }) : flow.go('title'));
 requestAnimationFrame(frame);

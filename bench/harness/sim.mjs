@@ -9,7 +9,8 @@
 // checks: { frame: hash } } — the raw per-step input as input.sample() returned it (before the camera rotates the stick).
 import { rng, vrng } from '../../src/core/rng.js';
 import { on, emit } from '../../src/core/events.js';
-import * as MAPMOD from '../../src/world/map.js';
+import { spawnPoint, setMap } from '../../src/world/map.js';
+import { resolveChapter } from '../../src/story/chapters.js';
 import { createHero } from '../../src/hero/hero.js';
 import { createCrowd } from '../../src/crowd/crowd.js';
 import { createCombat } from '../../src/combat/combat.js';
@@ -34,16 +35,16 @@ export async function createSim({ enemies = 300 } = {}) {
     on(n, (e) => { if (sim.trace) sim.events.push([game.frame, n, n === 'ko' ? e.officer : n === 'story:objective' ? e.en : n === 'story:banner' ? e.en : null]); });
 
   sim.start = ({ char = 'zhaoyun', mode = 'story', chapter } = {}) => {
-    const ch = CHARS[char] || CHARS.zhaoyun, newKit = ch.kit !== game.hero.kit;
-    if (chapter !== undefined && MAPMOD.useChapterMap) MAPMOD.useChapterMap(chapter);   // seam: registries (stage 1+)
-    const p = MAPMOD.spawnPoint(mode);
-    Object.assign(game, { mode, frame: 0, hitstop: 0, freeze: 0, diff: difficulty(), chapter });
+    const ch = CHARS[char] || CHARS.zhaoyun, CH = resolveChapter(chapter, ch.id);
+    setMap(CH.map);
+    const p = spawnPoint(mode), newKit = ch.kit !== game.hero.kit;
+    Object.assign(game, { mode, chapter: CH.id, frame: 0, hitstop: 0, freeze: 0, diff: difficulty() });
     vrng.seed(7936); rng.seed(1);
     game.hero.reset({ ...p, char: ch });
     if (newKit) game.musou = ch.kit.createMusou(game);
     game.crowd.reset(); game.combat.reset(); game.musou.reset(); game.cam.reset(p.yaw); game.cam.tilt = p.tilt || 0;
-    game.story.reset({ mode, char: ch.id, chapter });
-    emit('scenario', { mode, char: ch.id, chapter });
+    game.story.reset({ mode, char: ch.id, chapter: CH.id });
+    emit('scenario', { mode, char: ch.id, chapter: CH.id });
     sim.end = null; sim.events.length = 0;
   };
 

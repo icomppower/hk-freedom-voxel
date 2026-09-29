@@ -1297,10 +1297,10 @@ export function createVfx(scene, game, world) {
   }
 
   // ---- ambient embers: from the fires, and drifting through the fight around the hero
-  const fires = world.fires;
   let emberAcc = 0, driftAcc = 0, moteAcc = 0;
 
   vfx.update = (dt) => {
+    const fires = world.fires;                    // read live: the world manager swaps them with the map
     emberAcc += dt * 30;
     while (emberAcc > 1 && fires.length) {
       emberAcc--;

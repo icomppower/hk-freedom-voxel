@@ -6,12 +6,13 @@
 // with a slow push-in and rising embers, an ink band on the left with the chapter band, brush name + red seal, the intro
 // line; a tip (心得) and a gold brush-stroke progress bar with the current set-up stage along the bottom. No art (dev
 // entry): the plain background.
-// ctx in: { mode, char, art? }. main.js drives progress(p, zh?, en?) and ready(); nothing here touches the sim.
+// ctx in: { mode, char, chapter?, art? } (story: the chapter band names the chapter, story/chapters.js). main.js drives progress(p, zh?, en?) and ready(); nothing here touches the sim.
 import { CHARS } from '../chars/index.js';
 import { replay } from './menu.js';
 import { difficulty } from '../core/difficulty.js';
+import { resolveChapter } from '../story/chapters.js';
 
-export const MODE = { story: ['第一章「定軍山」', 'Story · Chapter I · Mount Dingjun'], free: ['自由演武', 'Free battle · endless waves'] };
+export const MODE = { story: ['故事模式', 'Story'], free: ['自由演武', 'Free battle · endless waves'] };
 // [zh, en, char id | undefined = any officer] — keep in step with the controls table (title.js CONTROLS)
 const TIPS = [
   ['連按 J 打出完整連擊，連擊中按 K 接蓄力技。', 'Tap J for the full combo; press K mid-combo for a charge attack.'],
@@ -41,7 +42,8 @@ export function createLoading(el) {
   const state = (zh, en) => { $('.l-state b').textContent = zh; $('.l-state small').textContent = en; };
   return {
     enter(c) {
-      const ch = CHARS[c.char] || CHARS.zhaoyun, [zh, en] = MODE[c.mode] || MODE.free;
+      const ch = CHARS[c.char] || CHARS.zhaoyun, C = resolveChapter(c.chapter, ch.id);
+      const [zh, en] = c.mode === 'story' ? [`${C.title.small}「${C.title.zh}」`, `Story · ${C.title.en}`] : MODE.free;
       el.style.setProperty('--acc', ch.accent);
       $('.l-art').style.backgroundImage = c.art ? `url("${c.art}")` : 'none';
       el.classList.remove('ready'); replay(el, 'in');

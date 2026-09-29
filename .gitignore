@@ -1,8 +1,9 @@
 .DS_Store
-.vscode/
-.idea/
-*.swp
-.vercel
 .env*
-node_modules/
+.idea/
+.vercel
+.vscode/
+*.swp
+bench/harness/ref/
 bench/out/
+node_modules/

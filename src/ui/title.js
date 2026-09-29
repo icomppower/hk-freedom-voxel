@@ -9,7 +9,7 @@
 // 2D: ink scrim band on the left carrying the logo (三國 seal + gold-leaf 無雙 + VOXEL MUSOU) and the menu, brush name
 // tags projected beside each officer's head (hidden at ≤ 4:3), key/pad prompts along the bottom. First boot shows a
 // "press any key" card (also unlocks audio); returns go straight to the menu.
-// Menu: 第一章「定軍山」 / 自由演武 → the difficulty panel in place of the menu (初級 普通 上級 修羅 + a card: the tier's line and
+// Menu: 故事模式 (chapter picked on the select screen) / 自由演武 → the difficulty panel in place of the menu (初級 普通 上級 修羅 + a card: the tier's line and
 // 敵勢 / 敵將 / 傷害 pips; 修羅 shows its unlock rule while locked, core/difficulty.js), confirm → select {mode}, Esc back to
 // the menu · 操作說明 → controls panel (Esc back).
 // Mouse: hover highlights an item, click activates it.
@@ -28,7 +28,7 @@ export const SWASH = `<svg class="swash" viewBox="0 0 400 26" preserveAspectRati
   S352 11 397 5L395 9C368 15 330 17 280 18C226 19 170 17 128 19C84 21 38 22 3 15ZM300 20C330 19 360 17 384 14L382 16C356 20 326 22 300 20Z"/></svg>`;
 
 const ITEMS = [
-  { go: 'story', zh: '第一章「定軍山」', en: 'Story · Chapter I, Mount Dingjun' },
+  { go: 'story', zh: '故事模式', en: 'Story · choose your chapter' },
   { go: 'free', zh: '自由演武', en: 'Free battle · endless waves' },
   { go: 'controls', zh: '操作說明', en: 'Controls' },
 ];

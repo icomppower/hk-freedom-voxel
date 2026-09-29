@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { CHARS } from '../chars/index.js';
 import { createRig, HERO_SCALE } from '../hero/rig.js';
-import { ground, zone } from '../world/map.js';
+import { ground, zone, MAP } from '../world/map.js';
 
 /** Soft round dot sprite (32 px): white core, alpha a at radius fraction r, clear at the rim. */
 export function dotTex(r, a) {
@@ -18,9 +18,10 @@ export function dotTex(r, a) {
 /** n fixed pseudo-random values in (-1, 1) (render-only scatter, never the sim RNG). */
 export const scatter = (n, off = 0) => Float32Array.from({ length: n }, (_, i) => (Math.sin(i * 12.9898 + off) * 43758.5453) % 1);
 
-/** Point on the pass road: `at` of the way up the pass zone (0 = its south edge) plus dz metres, on the ground. */
+/** Point on the stage road: `at` of the way up the active map's stage zone (MAP.stage; 定軍山: the pass, 0 = its south
+ *  edge) plus dz metres, on the ground. */
 export function passPoint(v, at, dz = 0) {
-  const q = zone('pass'), z = q.z - q.d / 2 + q.d * at + dz;
+  const q = zone(MAP.stage), z = q.z - q.d / 2 + q.d * at + dz;
   return v.set(q.x, ground(q.x, z), z);
 }
 
