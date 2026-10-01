@@ -1,6 +1,7 @@
 // Touch controls (stage-1 hook, ui lane). Shown on coarse pointers (phones, tablets) during a battle while the pause menu
 // is closed; a real key press hides them (a keyboard is in use) until the next touch.
-//   left half   floating stick: the base lands where the thumb goes down, the knob follows (radius R px); the vector goes
+//   bottom-left fixed D-pad (上下左右, always shown): a thumb on or near it steers from its centre
+//   left half   floating stick elsewhere: the base lands where the thumb goes down, the knob follows (radius R px); the vector goes
 //               to input.virt.stick (full deflection = unit length, like the keys)
 //   right side  攻 J attack · 蓄 K charge · 跳 Space jump · 閃 L dodge · 無雙 I musou (lit while the gauge can pay for one),
 //               pause (Esc); each button writes input.virt.key(action, down) — the same held / latch state a key does
@@ -21,7 +22,8 @@ const BTNS = [                                                      // [action, 
 export function createTouch(virt, game) {
   const coarse = matchMedia('(pointer: coarse)'), portrait = matchMedia('(orientation: portrait)');
   const root = document.createElement('div'); root.id = 'touch'; root.hidden = true;
-  root.innerHTML = `<div class="t-stick"><i class="t-base"></i><i class="t-knob"></i></div>
+  root.innerHTML = `<div class="t-home" aria-hidden="true"><i class="a-up"></i><i class="a-dn"></i><i class="a-lt"></i><i class="a-rt"></i></div>
+    <div class="t-stick"><i class="t-base"></i><i class="t-knob"></i></div>
     ${BTNS.map(([a, g, k, c]) => `<button class="t-btn ${c}" data-a="${a}" aria-label="${a}"><b>${g}</b><small>${k}</small></button>`).join('')}
     <button class="t-btn b-pause" data-a="pause" aria-label="pause"><b>Ⅱ</b></button>`;
   const rot = document.createElement('div'); rot.id = 'touch-rot'; rot.hidden = true;
@@ -29,6 +31,10 @@ export function createTouch(virt, game) {
   document.body.append(root, rot);
   const menu = document.getElementById('menu'), stick = root.querySelector('.t-stick');
   const base = root.querySelector('.t-base'), knob = root.querySelector('.t-knob'), muBtn = root.querySelector('.b-mu');
+  // fixed D-pad (上下左右) in the bottom-left corner, always visible: a thumb on or near it steers from its centre;
+  // a thumb anywhere else on the left still gets the floating stick
+  const home = root.querySelector('.t-home');
+  const homeAt = () => { const r = home.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2 }; };
   let battle = false, kb = false;
   on('flow', (e) => { battle = e.state === 'battle'; if (!battle) release(); });
   addEventListener('keydown', (e) => { if (e.isTrusted) kb = true; }, true);
@@ -46,7 +52,7 @@ export function createTouch(virt, game) {
   };
   function release() {
     for (const [, p] of ptrs) if (p.kind !== 'stick' && p.kind !== 'look' && p.kind !== 'pause') virt.key(p.kind, false);
-    ptrs.clear(); virt.stick[0] = virt.stick[1] = 0; stick.classList.remove('on');
+    ptrs.clear(); virt.stick[0] = virt.stick[1] = 0; stick.classList.remove('on'); home.classList.remove('on');
   }
   root.addEventListener('pointerdown', (e) => {
     e.preventDefault(); e.stopPropagation();                        // the pad owns the touch (input.js would attack)
@@ -58,9 +64,11 @@ export function createTouch(virt, game) {
       if (a === 'pause') { dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape' })); return; }
       ptrs.set(e.pointerId, { kind: a, b }); virt.key(a, true);
     } else if (e.clientX < innerWidth * 0.45) {
-      ptrs.set(e.pointerId, { kind: 'stick', x: e.clientX, y: e.clientY });
-      base.style.left = knob.style.left = `${e.clientX}px`; base.style.top = knob.style.top = `${e.clientY}px`;
-      stick.classList.add('on'); setStick(0, 0);
+      const h = homeAt(), onHome = Math.hypot(e.clientX - h.x, e.clientY - h.y) < h.r * 1.5;
+      const cx = onHome ? h.x : e.clientX, cy = onHome ? h.y : e.clientY;
+      ptrs.set(e.pointerId, { kind: 'stick', x: cx, y: cy });
+      base.style.left = knob.style.left = `${cx}px`; base.style.top = knob.style.top = `${cy}px`;
+      stick.classList.add('on'); home.classList.add('on'); setStick(e.clientX - cx, e.clientY - cy);
     } else ptrs.set(e.pointerId, { kind: 'look', x: e.clientX, y: e.clientY });
   });
   root.addEventListener('pointermove', (e) => {
@@ -74,7 +82,7 @@ export function createTouch(virt, game) {
     root.querySelectorAll('.t-btn.down').forEach((b) => { if (!p || b === p.b || b.dataset.a === 'pause') b.classList.remove('down'); });
     if (!p) return;
     e.stopPropagation(); ptrs.delete(e.pointerId);
-    if (p.kind === 'stick') { setStick(0, 0); stick.classList.remove('on'); }
+    if (p.kind === 'stick') { setStick(0, 0); stick.classList.remove('on'); home.classList.remove('on'); }
     else if (p.kind !== 'look') virt.key(p.kind, false);
   };
   root.addEventListener('pointerup', up); root.addEventListener('pointercancel', up);
