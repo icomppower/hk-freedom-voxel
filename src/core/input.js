@@ -44,7 +44,12 @@ export function createInput() {
   const locked = () => document.pointerLockElement === canvas;
   const live = () => battle && menu && menu.hidden;                 // battle running, pause menu closed
   // requestPointerLock returns a promise in current browsers (rejects without a user gesture, e.g. the ?go= shortcut)
-  const lock = (click = false) => { clickLock = click; if (live() && !locked() && !noLock) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { noLock = true; } } };
+  // touch hook: never take pointer lock on a touch device (Android Chrome grants it on a tap: every later touch then goes
+  // to the canvas instead of the touch pad, and a "to show your cursor" banner covers the screen). touchLast follows
+  // the last pointer used, so a phone or tablet with a mouse attached still locks once the mouse is used.
+  let touchLast = matchMedia('(pointer: coarse)').matches;
+  addEventListener('pointerdown', (e) => { touchLast = e.pointerType === 'touch'; }, true);
+  const lock = (click = false) => { clickLock = click; if (touchLast) return; if (live() && !locked() && !noLock) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { noLock = true; } } };
 
   on('flow', (e) => {
     battle = e.state === 'battle';
