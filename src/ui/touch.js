@@ -79,6 +79,11 @@ export function createTouch(virt, game) {
   };
   root.addEventListener('pointerup', up); root.addEventListener('pointercancel', up);
   root.addEventListener('contextmenu', (e) => e.preventDefault());
+  // iOS Safari: preventDefault on pointer events does not stop the page's own pan / pinch / double-tap gestures, and when
+  // one starts the browser cancels the pointer (pointercancel → the stick lets go, the hero stops). Non-passive touch
+  // listeners claim every touch that lands on the pad; pointer events still fire, so the handlers above are unchanged.
+  for (const t of ['touchstart', 'touchmove', 'touchend']) root.addEventListener(t, (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  document.addEventListener('gesturestart', (e) => { if (!root.hidden) e.preventDefault(); });
 
   // visibility + the lit Musou button, once per animation frame (DOM writes only when something changed)
   let shown = null, lit = null, rotOn = null;
