@@ -40,6 +40,11 @@ export function createTouch(virt, game) {
   addEventListener('keydown', (e) => { if (e.isTrusted) kb = true; }, true);
   addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') kb = false; }, true);
 
+  // ?touchdebug: a small live readout (event counts, stick, hero state) for checking a real phone from a screenshot
+  const dbg = { ts: 0, tm: 0, te: 0, pd: 0, pm: 0 };
+  const dbgEl = new URLSearchParams(location.search).has('touchdebug') ? document.createElement('pre') : null;
+  if (dbgEl) { dbgEl.id = 'touch-dbg'; dbgEl.style.cssText = 'position:fixed;left:50%;top:4px;translate:-50% 0;z-index:60;margin:0;padding:4px 8px;font:11px/1.3 monospace;color:#0f0;background:rgba(0,0,0,.7);pointer-events:none;white-space:pre'; document.body.append(dbgEl); }
+
   // pointers: id → { kind: 'stick' | 'look' | action, x, y }
   const ptrs = new Map();
   const setStick = (dx, dy) => {
@@ -54,43 +59,69 @@ export function createTouch(virt, game) {
     for (const [, p] of ptrs) if (p.kind !== 'stick' && p.kind !== 'look' && p.kind !== 'pause') virt.key(p.kind, false);
     ptrs.clear(); virt.stick[0] = virt.stick[1] = 0; stick.classList.remove('on'); home.classList.remove('on');
   }
-  root.addEventListener('pointerdown', (e) => {
-    e.preventDefault(); e.stopPropagation();                        // the pad owns the touch (input.js would attack)
-    const b = e.target.closest('.t-btn');
-    try { root.setPointerCapture(e.pointerId); } catch { /* synthetic / already gone */ }
+  // One set of handlers, fed by touch events where the browser has them (phones, tablets, in-app web views — some of
+  // which deliver no pointer events for touches at all) and by pointer events otherwise (pen, mouse-emulated touch).
+  // While touch events drive the pad, pointer events with pointerType 'touch' are ignored so nothing fires twice.
+  const press = (id, x, y, target) => {
+    const b = target && target.closest ? target.closest('.t-btn') : null;
     if (b) {
       const a = b.dataset.a;
       b.classList.add('down');
-      if (a === 'pause') { dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape' })); return; }
-      ptrs.set(e.pointerId, { kind: a, b }); virt.key(a, true);
-    } else if (e.clientX < innerWidth * 0.45) {
-      const h = homeAt(), onHome = Math.hypot(e.clientX - h.x, e.clientY - h.y) < h.r * 1.5;
-      const cx = onHome ? h.x : e.clientX, cy = onHome ? h.y : e.clientY;
-      ptrs.set(e.pointerId, { kind: 'stick', x: cx, y: cy });
+      if (a === 'pause') { dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape' })); ptrs.set(id, { kind: 'pause', b }); return; }
+      ptrs.set(id, { kind: a, b }); virt.key(a, true);
+    } else if (x < innerWidth * 0.45) {
+      const h = homeAt(), onHome = Math.hypot(x - h.x, y - h.y) < h.r * 1.5;
+      const cx = onHome ? h.x : x, cy = onHome ? h.y : y;
+      ptrs.set(id, { kind: 'stick', x: cx, y: cy });
       base.style.left = knob.style.left = `${cx}px`; base.style.top = knob.style.top = `${cy}px`;
-      stick.classList.add('on'); home.classList.add('on'); setStick(e.clientX - cx, e.clientY - cy);
-    } else ptrs.set(e.pointerId, { kind: 'look', x: e.clientX, y: e.clientY });
+      stick.classList.add('on'); home.classList.add('on'); setStick(x - cx, y - cy);
+    } else ptrs.set(id, { kind: 'look', x, y });
+  };
+  const drag = (id, x, y) => {
+    const p = ptrs.get(id); if (!p) return;
+    if (p.kind === 'stick') setStick(x - p.x, y - p.y);
+    else if (p.kind === 'look') { virt.look(-(x - p.x) * LOOK.yaw, (y - p.y) * LOOK.pitch); p.x = x; p.y = y; }
+  };
+  const lift = (id) => {
+    const p = ptrs.get(id); if (!p) return;
+    ptrs.delete(id);
+    if (p.b) p.b.classList.remove('down');
+    if (p.kind === 'stick') { setStick(0, 0); stick.classList.remove('on'); home.classList.remove('on'); }
+    else if (p.kind !== 'look' && p.kind !== 'pause') virt.key(p.kind, false);
+  };
+  let touchDriven = false;
+  const T = 't';                                                      // touch ids live apart from pointer ids
+  root.addEventListener('touchstart', (e) => {
+    touchDriven = true; kb = false; dbg.ts++;
+    if (e.cancelable) e.preventDefault();                             // no scroll / zoom / double-tap / synthetic mouse
+    e.stopPropagation();
+    for (const t of e.changedTouches) press(T + t.identifier, t.clientX, t.clientY, document.elementFromPoint(t.clientX, t.clientY) || t.target);
+  }, { passive: false });
+  root.addEventListener('touchmove', (e) => {
+    dbg.tm++;
+    if (e.cancelable) e.preventDefault();
+    for (const t of e.changedTouches) drag(T + t.identifier, t.clientX, t.clientY);
+  }, { passive: false });
+  const touchEnd = (e) => { dbg.te++; if (e.cancelable) e.preventDefault(); for (const t of e.changedTouches) lift(T + t.identifier); };
+  root.addEventListener('touchend', touchEnd, { passive: false });
+  root.addEventListener('touchcancel', touchEnd, { passive: false });
+
+  root.addEventListener('pointerdown', (e) => {
+    dbg.pd++;
+    e.preventDefault(); e.stopPropagation();                        // the pad owns the touch (input.js would attack)
+    if (touchDriven && e.pointerType === 'touch') return;
+    try { root.setPointerCapture(e.pointerId); } catch { /* synthetic / already gone */ }
+    press(e.pointerId, e.clientX, e.clientY, e.target);
   });
   root.addEventListener('pointermove', (e) => {
-    const p = ptrs.get(e.pointerId); if (!p) return;
-    e.preventDefault(); e.stopPropagation();
-    if (p.kind === 'stick') setStick(e.clientX - p.x, e.clientY - p.y);
-    else if (p.kind === 'look') { virt.look(-(e.clientX - p.x) * LOOK.yaw, (e.clientY - p.y) * LOOK.pitch); p.x = e.clientX; p.y = e.clientY; }
+    if (touchDriven && e.pointerType === 'touch') return;
+    if (!ptrs.has(e.pointerId)) return;
+    e.preventDefault(); e.stopPropagation(); dbg.pm++;
+    drag(e.pointerId, e.clientX, e.clientY);
   });
-  const up = (e) => {
-    const p = ptrs.get(e.pointerId);
-    root.querySelectorAll('.t-btn.down').forEach((b) => { if (!p || b === p.b || b.dataset.a === 'pause') b.classList.remove('down'); });
-    if (!p) return;
-    e.stopPropagation(); ptrs.delete(e.pointerId);
-    if (p.kind === 'stick') { setStick(0, 0); stick.classList.remove('on'); home.classList.remove('on'); }
-    else if (p.kind !== 'look') virt.key(p.kind, false);
-  };
+  const up = (e) => { if (touchDriven && e.pointerType === 'touch') return; if (ptrs.has(e.pointerId)) { e.stopPropagation(); lift(e.pointerId); } };
   root.addEventListener('pointerup', up); root.addEventListener('pointercancel', up);
   root.addEventListener('contextmenu', (e) => e.preventDefault());
-  // iOS Safari: preventDefault on pointer events does not stop the page's own pan / pinch / double-tap gestures, and when
-  // one starts the browser cancels the pointer (pointercancel → the stick lets go, the hero stops). Non-passive touch
-  // listeners claim every touch that lands on the pad; pointer events still fire, so the handlers above are unchanged.
-  for (const t of ['touchstart', 'touchmove', 'touchend']) root.addEventListener(t, (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
   document.addEventListener('gesturestart', (e) => { if (!root.hidden) e.preventDefault(); });
 
   // visibility + the lit Musou button, once per animation frame (DOM writes only when something changed)
@@ -101,6 +132,7 @@ export function createTouch(virt, game) {
     if (show !== shown) { shown = show; root.hidden = !show; document.body.classList.toggle('pad', show); if (!show) release(); }
     const r = coarse.matches && portrait.matches;
     if (r !== rotOn) { rotOn = r; rot.hidden = !r; }
+    if (dbgEl) { const h = game.hero || {}; dbgEl.textContent = `touch s/m/e ${dbg.ts}/${dbg.tm}/${dbg.te} · ptr d/m ${dbg.pd}/${dbg.pm} · PE ${'PointerEvent' in window ? 1 : 0} TE ${'ontouchstart' in window ? 1 : 0}\nstick ${virt.stick[0].toFixed(2)},${virt.stick[1].toFixed(2)} · show ${show} battle ${battle} kb ${kb} menu ${menu.hidden ? 'closed' : 'open'} · hero ${h.state} ${(+h.x || 0).toFixed(1)},${(+h.z || 0).toFixed(1)}`; }
     if (!show) return;
     const l = !!(game.musou?.ready?.() && game.hero.state !== 'musou');
     if (l !== lit) { lit = l; muBtn.classList.toggle('lit', l); }
