@@ -1,4 +1,5 @@
-// 第三章「元朗」 Yuen Long, 21 July 2019 — chapter data (format: ./ch1.js header; registry: ./chapters.js).
+// 第三章「元朗」 Yuen Long, 21 July 2019 — chapter data (format: ./ch1.js header; registry: ./chapters.js). A win chains
+// straight into 機場 hk5 (chapters.js `chain`).
 // Story (Story Bible, Scroll Cutscenes page): 22:45, passengers heading home; white shirts pour in with rattan canes; a
 // reporter livestreams, passengers call 999 and nobody comes; 龍仔 and 小美 get the passengers through the fare gates; on
 // the platform a train pulls in and they hold the doors for 45 s while the passengers board; then 強哥 The Fixer.

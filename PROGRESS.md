@@ -18,8 +18,10 @@ stage not `done`.
 | 9 Critic rounds | done | 2 rounds (bench/shots/9/r1, r2; 1280×720 + 844×390, all four chapters, battle + Musou, title / select / scroll / result / ending). r1 P1s: mobile 3 (pad over the K.O. count and Musou copy, pause over the objective, keyboard footer over the select stats) → 0; scene 2 (hk3 empty opening, camera inside canopy slabs) → 0; fx 2 (龍拳 dragon rendered dark, LegCo searchlight blow-out) → 0; ui 1 (三國 aim row / 選擇武將) → 0; chars 0; perf 0 (desktop p95 ≤ 16.8 ms at 600 enemies on hk1-4; Pixel 7 + 4× CPU p95 6.7-8.0 ms). r2: P1 0. New gates: phone tap-through 17/17, touch UI 13/13 (no button over the HUD) |
 | Cutscenes + Ending 天光 | done (branch cutscenes-ending) | 3 between-stage cutscenes (雨後 · 尾班車 · 竹枝, 20 s each) + new ENDING scroll + end scene (40 s) + tribute line, one shared player; flow 15/15 (hk1→between1→hk2 scroll, hk2→between2→hk3, hk3→between3→hk4, hk4 win → ENDING → end scene → TRIBUTE → title, losses / free wins: no cutscene, Esc at every step); look 9/9 (actors = the shipped models, P1 0 after 2 visual rounds); desktop p95 4.5-5.9 ms, Pixel 7 + 4× CPU p95 3.3-4.0 ms; audio peaks −12.1 … −2.0 dBFS, skip hands over in 0.53-0.72 s; ENDING cols ≤ 7, fits 14/14 cards at both sizes; subtitles fit at both sizes |
 | 10 Ship | done | verify.sh ALL GATES GREEN; README credits (upstream MIT, sheep-village, three.js, Yuji Boku, the Phaser original); production deploy READY at https://hk-freedom-voxel.vercel.app (200, 0 console errors desktop + 844×390, hk4 deep link); Notion: Live Projects Bookmark row + project Status ticked. Repo pushed to github.com/icomppower/hk-freedom-voxel and git-connected to Vercel |
+| C2 777 is a woman | done (branch stage/airport) | stamp-model gate 3/10 → 10/10 (knee skirt, silver bob to the chin, 6 pearls each wider than tall = never a cross, no tie / chain, scale 1.26 + hammer / crack / split states unchanged); boss gate 4/4 as lungjai + 4/4 as siumei unchanged (stamp phases 59.77 / 24.80 %, 59.80 / 24.80 %); ch1 Node 6/6 identical; shots bench/shots/airport/777-*.png |
+| 11 Ch 8·12 hk5 airport | done (branch stage/airport) | bot WIN 6/6 (lungjai 5:55 / 5:39 / 5:04, siumei 5:18 / 5:18 / 5:23 sim; steady / rush / back); map gate 6/6 each (securityLine + deckEscalator crossed, 0 NaN / off-field / teleport); touch-only real-page run WIN as 小美 (Pixel 7 landscape, mobile tier, 1 194 taps, 17 653 frames, 0 errors); airport look 10/10 desktop (#debug: board top row = live objective 626/626 settled samples, 6/6 rows → 取消 only after the cancellation, plane outside the glass 631 samples, climb-out, 8 travellers + 4 stranded drawn, stanchions / shutter 1.0, boss rings); boss gate 5/5 (commander: P2 49.74 %, P3 24.80 %, 48 pepper impacts, 2 速龍 called); result card fits 10/10 (hk1-5 × 1280×720 / 844×390); scroll cols 24 → 29/29 cards; cut flow 15 → 16/16; preview 22 → 24/24; airport look 10/10 on Pixel 7 mobile tier too (siumei); desktop p95 16.7-16.8 ms at 300 / 600 enemies; Pixel 7 + 4× CPU p95 7.0-7.4 ms; ch1 Node 6/6 identical, ch1 Chrome checkpoints 6/6 × 2; touch-twin 7/7, touch UI 13/13, phone flow 17/17, scroll flow 12/12, cut shots 4/4 × 3, ending fit pass |
 
-**Next action:** none — all stages done; open P2s below.
+**Next action:** none — all stages done (stage/airport PR open: C2 + 8·12 機場); open P2s below.
 
 **MILESTONE — Ch I playable** (2026-09-29): hk1 金鐘 plays start to finish (bot + touch). Preview: https://hk-freedom-voxel-dtpn479sy-sharkgundams-projects.vercel.app (READY; Vercel Authentication — log in to view).
 
@@ -28,9 +30,12 @@ stage not `done`.
 - chars `lungjai` `siumei` · officers `raptor` `plain` · bosses `stamp` `shocker` `fixer` `bear` `clone`
 - crowd skins: foe `riot` `white` · ally `blackbloc` `civil`
 - chapters `hk1` `hk2` `hk3` `hk4` · maps `admiralty` `legco` `yuenlong` `polyu`
+- **contract additions (stage 11, 8·12 airport):** chapter `hk5` · map `airport` · boss / officer model `commander`
+  (速龍指揮官 Raptor Commander, phases 50 / 25 %) · SPK keys `traveller` `commander`
 - zones — admiralty: `harcourt` `footbridge` `hqgate` `lawn` (gates `policeLine` `hqGate`) · legco: `plaza` `glass`
   `lobby` `chamber` (gates `glassWall` `chamberDoor`) · yuenlong: `street` `concourse` `faregates` `platform` (gates
-  `fareGates` `platformStairs`) · polyu: `podium` `bridge` `maingate` `rooftop` (gates `barricade` `mainGate`)
+  `fareGates` `platformStairs`) · polyu: `podium` `bridge` `maingate` `rooftop` (gates `barricade` `mainGate`) ·
+  airport: `arrivals` `carousels` `departures` `deck` (gates `securityLine` `deckEscalator`)
 - SPK keys `lungjai` `siumei` `raptor` `plain` `stamp` `shocker` `fixer` `bear` `sauzuk` `medic` `reporter` `passenger`
 
 ## Decisions / notes
@@ -93,3 +98,36 @@ stage not `done`.
   The brief's '夥慨道' is written 夏慤道 (same fix as the Scroll Cutscenes page).
 - 龍仔's hat-off head is the shipped head minus the hat boxes, so the crown shows skin where the hat sat (no new hair).
 - Scroll-frame gate flaked twice on the first cold run in this clone (a different frame each time), then 4/4 clean.
+
+- 2026-10-03 C2: 777 (`stamp`) is a woman — a female senior official, original archetype: grey-blue skirt suit, ivory
+  blouse, silver bob, pearls (no tie). New hkkit options skirt / legs / pearls / bob / lips (default off). Lines were
+  already gender-neutral.
+- 2026-10-03 8·12 機場 (stage 11): chapter id `hk5`, map `airport` (ids hk1–hk4 keep their meaning; no saves depend on
+  chapter order — only the 修羅 unlock and the difficulty are stored). Campaign order 金鐘 hk1 → 立法會 hk2 → 元朗 hk3 →
+  機場 hk5 → 理工 hk4 (LIST order in chapters.js = menus + the 繼續 chain). Flow: hk3's win now chains straight into hk5
+  (new chapter field `chain`, result.js: 繼續 → next chapter's loading card, no cutscene); 竹枝 between3 (a PolyU scene)
+  moved to after hk5, so it still leads into hk4; ENDING / end scene / tribute untouched. Chapter numbers on screen: 機場
+  第四章 · CHAPTER IV, 理工 renumbered 第五章 · CHAPTER V (title + stamp); 銅鑼灣 / 中大 will renumber again when they land.
+- hk5 stage: 接機大堂 hold the sit-in 60 s → 行李帶 walk eight travellers through the centre lane and the security line
+  (hk3's passenger escort; > 3 lost = defeat) → 離境閘口 the flights are cancelled (boards flip to 取消), bring four
+  stranded travellers to the escalator (hk2 / hk4 followers) and down the 速龍 → 觀景台 速龍指揮官 (new boss `commander`
+  on the 速龍 kit: charges, pepper-ball volleys < 50 %, calls 速龍 < 25 %). The departure boards (canvas, three in the
+  world) show the live objective on their top row and cities only below (no airline names or codes). The fights are the
+  game's fiction. Bot 5:04-5:55 sim (hk1-4: 3.5-7.5); a human run is longer. In-play dialogue ≈ 33 s (11 lines), banners
+  1-4 words; prologue 5 cards, skippable.
+- hk5 epilogue: the Phaser game has no airport chapter, so the CLAUDE.md "epilogue verbatim from story.js" rule can't
+  apply; the text is new, plainly worded and sourced (Al Jazeera "Hong Kong airport cancels Monday flights amid sit-in
+  protest", 12 Aug 2019; Hong Kong Free Press, 12 Aug 2019, quoting the Airport Authority: "other than the departure
+  flights that have completed the check-in process and the arrival flights that are already heading to Hong Kong, all
+  other flights have been cancelled for the rest of today"; the sit-in began Friday 9 Aug). Sources also in hk5.js.
+- Ink map: hk5 uses HK_MAP plus Lantau / the airport island, two marks and a sit-in arrow added by string replace in
+  hk5.js — every other chapter's scroll SVG is byte-identical.
+- bench/bot/play-touch.mjs: since PR #2 a stick press near the fixed D-pad re-centres on the pad, so the harness's drag
+  (relative to its own press point) carried a constant bias and could walk the hero backwards (first hk5 touch run:
+  TIMEOUT at the arrival-hall wall). The harness now steers from where the stick base actually landed.
+  bench/harness/touch-twin.mjs had the same bias and failed 4/7 on main (dbd6603) as well; same fix → 7/7 (input logs
+  identical, in-page hashes 5/5, Node final b08625f0 = b08625f0).
+- verify.sh on stage/airport (2026-10-03): every gate green except the two scroll-frame reference gates (shots-scroll ch1
+  / hk1), which flake on this machine on main too (main dbd6603, eight runs: 6/6 twice, else 4/6 or 5/6, a different
+  frame failing from run to run; branch: 3/6-5/6 in ten runs while the machine sat at load ≈ 5). Nothing on the branch touches ch1.js, hkmap.js,
+  prologue.js or index.html; hk5's map is a string copy of HK_MAP.

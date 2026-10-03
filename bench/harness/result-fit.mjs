@@ -11,7 +11,7 @@ for (const [w, h, touch] of [[1280, 720, false], [844, 390, true]]) {
   const page = await ctx.newPage(), errors = [];
   page.on('pageerror', (e) => errors.push(String(e))); page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto(srv.url + '?x'); await page.waitForFunction(() => window.__vm?.state === 'title', null, { timeout: 60000 }); await page.waitForTimeout(1500);
-  for (const ch of ['hk1', 'hk2', 'hk3', 'hk4']) {
+  for (const ch of ['hk1', 'hk2', 'hk3', 'hk5', 'hk4']) {
     await page.evaluate((ch) => __vm.flow.go('result', { mode: 'story', char: 'lungjai', chapter: ch, win: true, stats: { kos: 1500, time: 300, hpMax: 400, maxChain: 120, dmg: 60, rank: 'A' } }), ch);
     await page.waitForTimeout(4200);
     const r = await page.evaluate(() => {
@@ -34,5 +34,5 @@ for (const [w, h, touch] of [[1280, 720, false], [844, 390, true]]) {
   await ctx.close();
 }
 await browser.close(); srv.close();
-console.log(bad ? `RESULT FIT FAIL ${bad}` : 'RESULT FIT PASS 8/8');
+console.log(bad ? `RESULT FIT FAIL ${bad}` : 'RESULT FIT PASS 10/10');
 process.exit(bad ? 1 : 0);
