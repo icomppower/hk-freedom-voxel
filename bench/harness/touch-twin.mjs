@@ -59,7 +59,11 @@ async function run(mode) {
       if (kind === 'btn') {
         const b = root.querySelector(`.t-btn[data-a="${arg}"]`), r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
         ptr(down ? b : root, down ? 'pointerdown' : 'pointerup', PID[arg], x, y);
-      } else if (down) { ptr(root, 'pointerdown', 1, 150, 250); ptr(root, 'pointermove', 1, 150 + arg[0] * 90, 250 - arg[1] * 90); }
+      } else if (down) {                                             // steer from where the stick base landed (since PR #2 a
+        ptr(root, 'pointerdown', 1, 150, 250);                         // press near the fixed D-pad re-centres on the pad)
+        const bs = root.querySelector('.t-base').style, cx = parseFloat(bs.left) || 150, cy = parseFloat(bs.top) || 250;
+        ptr(root, 'pointermove', 1, cx + arg[0] * 90, cy - arg[1] * 90);
+      }
       else ptr(root, 'pointerup', 1, 150, 250);
     }
     window.__onStep = (inp) => {
