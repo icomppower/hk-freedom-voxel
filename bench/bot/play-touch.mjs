@@ -22,7 +22,7 @@ await page.addInitScript(() => {
   window.__touch = T;
   const ev = (el, type, id, x, y) => el.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', isPrimary: id === 1, clientX: x, clientY: y, bubbles: true, cancelable: true }));
   let stickDown = false; const down = {};
-  const BX = 140, BY = 250, R = 56;
+  const BX = 140, BY = 250, R = 56, C = [BX, BY];
   import('/bench/bot/bot.mjs').then((m) => {
     const bot = m.createBot();
     window.__onStep = () => {
@@ -31,9 +31,12 @@ await page.addInitScript(() => {
       const w = bot(G);                                                // wanted input → pad events for the next sample
       const mag = Math.hypot(w.mx, w.my);
       if (mag > 0.13) {
-        if (!stickDown) { ev(root, 'pointerdown', 1, BX, BY); stickDown = true; T.drags++; }
-        ev(root, 'pointermove', 1, BX + w.mx * R, BY - w.my * R);
-      } else if (stickDown) { ev(root, 'pointerup', 1, BX, BY); stickDown = false; }
+        if (!stickDown) {                                              // the pad may re-centre the stick (the fixed D-pad):
+          ev(root, 'pointerdown', 1, BX, BY); stickDown = true; T.drags++;  // steer from where its base actually landed
+          const bs = root.querySelector('.t-base').style; C[0] = parseFloat(bs.left) || BX; C[1] = parseFloat(bs.top) || BY;
+        }
+        ev(root, 'pointermove', 1, C[0] + w.mx * R, C[1] - w.my * R);
+      } else if (stickDown) { ev(root, 'pointerup', 1, C[0], C[1]); stickDown = false; }
       for (const a of A) {
         const b = root.querySelector(`.t-btn[data-a="${a}"]`), r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
         if (down[a]) { ev(root, 'pointerup', PID[a], x, y); down[a] = false; }

@@ -19,6 +19,19 @@ export const RAPTOR = {
   scale: 1.22, tip: 0.95, voxel: 0.03, kneel: true,
 };
 
+// ---------------------------------------------------------------- 速龍指揮官 Raptor Commander (8·12 airport boss): 1.13×, the
+// 速龍 kit heavier — charcoal vest over the all-black kit, shin guards, gas-mask helmet with the clear visor raised, a
+// shoulder radio, a longer baton and a bigger plain shield. Original archetype; no badge, rank mark or number.
+const CMD = { ...RAP, shirt: hex('#14141f'), pants: hex('#14141f') };
+export const COMMANDER = {
+  parts: { ...humanBody(CMD, { bulk: 1.16, vest: 0x2c303c, patch: true, pads: 0x2c303c }),
+    head: humanHead(CMD, { helmet: { c: 0x10121a, visor: 0x8aa4b8, snout: true } }) },
+  weapon: [...stick(0x121212, { butt: -0.3, tip: 1.15, w: 0.05 }), box([0.07, 0.07, 0.12], [0, 0, -0.2], 0x2a2a2a)],
+  offhand: roundShield(0x5a6e80, 0x101216, 0.42),
+  scale: 1.3, tip: 1.15, voxel: 0.028, kneel: true,
+};
+COMMANDER.parts.torso = [...COMMANDER.parts.torso, b([0.1, 0.36, 0.12], [0.16, 0.44, 0.15], 0x1a1a1a), b([0.13, 0.44, 0.13], [0.145, 0.52, 0.145], 0x1a1a1a)];   // radio + aerial
+
 // ---------------------------------------------------------------- 便衣 plainclothes: grey jacket, cap, pepper-ball launcher
 const PLN = { ...SKIN, shirt: 0x3a3a44, pants: 0x2e2e36, boot: 0x1a1a1a, belt: 0x1a1a1a };
 export const PLAIN = {
@@ -29,14 +42,16 @@ export const PLAIN = {
   scale: 1.18, tip: 0.8, voxel: 0.03, kneel: true,
 };
 
-// ---------------------------------------------------------------- 777 The Rubber Stamp: 1.1×, grey suit, silver hair, gold
-// tie-chain; giant rubber-stamp hammer 1.8 m — the stamp head cracks under 25 % and splits on the KO
-const STP = { ...SKIN, shirt: 0xe8e8e8, pants: hex('#455A64'), boot: 0x1a1a1a, belt: 0x1a1a1a };
+// ---------------------------------------------------------------- 777 The Rubber Stamp: 1.1×, a woman — a senior official in a
+// grey-blue skirt suit (fitted jacket, knee skirt, ivory blouse), silver bob, a short string of pearls (no tie), low black
+// shoes; giant rubber-stamp hammer 1.8 m — the stamp head cracks under 25 % and splits on the KO. Original archetype.
+const STP = { ...SKIN, shirt: 0xf0ebe0, pants: hex('#455A64'), boot: 0x161616, belt: hex('#3c4f58'), buckle: hex('#3c4f58') };
 const STAMP_HANDLE = [box([0.06, 0.06, 1.35], [0, 0, 0.4], 0x5a3a24), box([0.1, 0.1, 0.16], [0, 0, -0.3], 0x3a2416), box([0.08, 0.08, 0.05], [0, 0, 1.05], 0xc8a040)];
 const stampHead = (z) => [box([0.36, 0.3, 0.3], [0, 0, z], 0x6a4a30), box([0.38, 0.06, 0.32], [0, 0.18, z], 0xb3261e),   // block + red pad (striking face)
   box([0.38, 0.03, 0.32], [0, -0.165, z], 0x4a3220)];
 export const STAMP = {
-  parts: { ...humanBody(STP, { bulk: 1.15, jacket: hex('#455A64'), tie: 0x3a2a2e, chain: true }), head: humanHead(STP, { silver: 0xc8ccd0, brows: true }) },
+  parts: { ...humanBody(STP, { bulk: 1.06, jacket: hex('#455A64'), skirt: hex('#455A64'), legs: 0xc4977a, pearls: 0xf2eee4 }),
+    head: humanHead(STP, { bob: 0xc8ccd0, brows: true, lips: 0x9a4a52 }) },
   weapon: [...STAMP_HANDLE, ...stampHead(1.28)],
   cracked: [...STAMP_HANDLE, ...stampHead(1.28), box([0.39, 0.012, 0.012], [0, 0.04, 1.28], 0x0a0a0a), box([0.012, 0.2, 0.012], [0.05, 0, 1.28], 0x0a0a0a),
     box([0.16, 0.04, 0.33], [0, 0.22, 1.28], 0xff3a2a)],                               // cracks + the pad glowing red on rage
