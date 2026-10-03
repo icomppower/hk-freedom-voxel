@@ -29,14 +29,16 @@ export const PLAIN = {
   scale: 1.18, tip: 0.8, voxel: 0.03, kneel: true,
 };
 
-// ---------------------------------------------------------------- 777 The Rubber Stamp: 1.1×, grey suit, silver hair, gold
-// tie-chain; giant rubber-stamp hammer 1.8 m — the stamp head cracks under 25 % and splits on the KO
-const STP = { ...SKIN, shirt: 0xe8e8e8, pants: hex('#455A64'), boot: 0x1a1a1a, belt: 0x1a1a1a };
+// ---------------------------------------------------------------- 777 The Rubber Stamp: 1.1×, a woman — a senior official in a
+// grey-blue skirt suit (fitted jacket, knee skirt, ivory blouse), silver bob, a short string of pearls (no tie), low black
+// shoes; giant rubber-stamp hammer 1.8 m — the stamp head cracks under 25 % and splits on the KO. Original archetype.
+const STP = { ...SKIN, shirt: 0xf0ebe0, pants: hex('#455A64'), boot: 0x161616, belt: hex('#3c4f58'), buckle: hex('#3c4f58') };
 const STAMP_HANDLE = [box([0.06, 0.06, 1.35], [0, 0, 0.4], 0x5a3a24), box([0.1, 0.1, 0.16], [0, 0, -0.3], 0x3a2416), box([0.08, 0.08, 0.05], [0, 0, 1.05], 0xc8a040)];
 const stampHead = (z) => [box([0.36, 0.3, 0.3], [0, 0, z], 0x6a4a30), box([0.38, 0.06, 0.32], [0, 0.18, z], 0xb3261e),   // block + red pad (striking face)
   box([0.38, 0.03, 0.32], [0, -0.165, z], 0x4a3220)];
 export const STAMP = {
-  parts: { ...humanBody(STP, { bulk: 1.15, jacket: hex('#455A64'), tie: 0x3a2a2e, chain: true }), head: humanHead(STP, { silver: 0xc8ccd0, brows: true }) },
+  parts: { ...humanBody(STP, { bulk: 1.06, jacket: hex('#455A64'), skirt: hex('#455A64'), legs: 0xc4977a, pearls: 0xf2eee4 }),
+    head: humanHead(STP, { bob: 0xc8ccd0, brows: true, lips: 0x9a4a52 }) },
   weapon: [...STAMP_HANDLE, ...stampHead(1.28)],
   cracked: [...STAMP_HANDLE, ...stampHead(1.28), box([0.39, 0.012, 0.012], [0, 0.04, 1.28], 0x0a0a0a), box([0.012, 0.2, 0.012], [0.05, 0, 1.28], 0x0a0a0a),
     box([0.16, 0.04, 0.33], [0, 0.22, 1.28], 0xff3a2a)],                               // cracks + the pad glowing red on rage

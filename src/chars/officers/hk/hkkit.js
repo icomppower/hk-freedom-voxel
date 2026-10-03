@@ -12,7 +12,8 @@ export const box = (s, p, c, r) => ({ s, p, c, r });
 
 /** Human head (neck at y 0, crown ≈ 0.3, face toward +Z). opts: hair (colour | null = bald / covered), helmet {c, visor,
  *  snout} (riot helmet: raised clear visor, gas-mask snout), cap (colour: a peaked cap), brows (heavy), mask (colour: a
- *  lacquered full-face mask with narrow eye slits), silver (hair colour override). */
+ *  lacquered full-face mask with narrow eye slits), silver (hair colour override), bob (colour: a chin-length bob with a
+ *  side-swept fringe, instead of the short crop), lips (colour of the mouth line). */
 export function humanHead(C, o = {}) {
   const h = [
     b([-0.095, 0.02, -0.09], [0.095, 0.25, 0.1], C.skin),                               // skull
@@ -21,10 +22,13 @@ export function humanHead(C, o = {}) {
     b([-0.075, 0.16, 0.095], [-0.02, 0.18 + (o.brows ? 0.015 : 0), 0.11], C.brow ?? 0x241c18, true),
     b([0.02, 0.16, 0.095], [0.075, 0.18 + (o.brows ? 0.015 : 0), 0.11], C.brow ?? 0x241c18, true),
     b([-0.015, 0.08, 0.1], [0.02, 0.13, 0.125], C.skinD),                                // nose
-    b([-0.03, 0.05, 0.1], [0.03, 0.06, 0.105], shade(C.skinD, 0.8), true),              // mouth
+    b([-0.03, 0.05, 0.1], [0.03, 0.06, 0.105], o.lips ?? shade(C.skinD, 0.8), true),     // mouth
   ];
   const hair = o.silver ?? o.hair;
-  if (hair != null) h.push(b([-0.105, 0.18, -0.105], [0.105, 0.29, 0.085], hair), b([-0.105, 0.06, -0.105], [0.105, 0.2, -0.05], hair),
+  if (o.bob != null) h.push(b([-0.11, 0.19, -0.11], [0.11, 0.3, 0.09], o.bob), b([-0.115, 0.03, -0.115], [0.115, 0.22, -0.05], o.bob),   // crown, back
+    b([-0.118, 0.03, -0.06], [-0.092, 0.22, 0.075], o.bob), b([0.092, 0.03, -0.06], [0.118, 0.22, 0.075], o.bob),             // sides to the chin
+    b([-0.1, 0.195, 0.08], [0.04, 0.24, 0.112], shade(o.bob, 0.92)));                    // side-swept fringe, above the brows
+  else if (hair != null) h.push(b([-0.105, 0.18, -0.105], [0.105, 0.29, 0.085], hair), b([-0.105, 0.06, -0.105], [0.105, 0.2, -0.05], hair),
     b([-0.108, 0.12, -0.05], [-0.09, 0.22, 0.05], hair), b([0.09, 0.12, -0.05], [0.108, 0.22, 0.05], hair));
   if (o.cap != null) h.push(b([-0.11, 0.2, -0.11], [0.11, 0.3, 0.1], o.cap), b([-0.1, 0.2, 0.08], [0.1, 0.225, 0.2], shade(o.cap, 0.8)));
   if (o.helmet) {
@@ -46,7 +50,8 @@ export function humanHead(C, o = {}) {
  *  over the shirt), vest (colour, riot / body-armour vest), bands (colour: reflective bands on the torso + arms), robe
  *  (colour: ankle-length court robe), mantle (colour: a pelt over the shoulders), trim (robe edge colour), chain (gold
  *  chain round the neck), tie (colour), patch (true: a blank shoulder patch), sleeves (colour, else shirt), bare (arms:
- *  short sleeves, skin forearms). */
+ *  short sleeves, skin forearms), skirt (colour: a knee-length straight skirt over the hips; thighs take C.pants), legs
+ *  (colour of the lower leg above the shoe, else C.pants), pearls (colour: a U of beads round the collar). */
 export function humanBody(C, o = {}) {
   const w = (v) => v * (o.bulk ?? 1), vest = o.vest, S = o.sleeves ?? C.shirt;
   const p = {};
@@ -66,6 +71,9 @@ export function humanBody(C, o = {}) {
   if (o.tie != null) p.torso.push(b([-0.02, 0.12, 0.1], [0.02, 0.44, 0.125], o.tie));
   if (o.chain) p.torso.push(b([-0.085, 0.38, 0.1], [-0.03, 0.4, 0.132], 0xd8b040), b([-0.035, 0.34, 0.1], [0.035, 0.37, 0.132], 0xd8b040),   // a V of gold
     b([0.03, 0.38, 0.1], [0.085, 0.4, 0.132], 0xd8b040));                              // chain (no vertical bar: never a cross)
+  if (o.pearls != null) for (const [x, y] of [[-0.085, 0.405], [-0.055, 0.38], [-0.02, 0.368], [0.02, 0.368], [0.055, 0.38], [0.085, 0.405]])
+    p.torso.push(b([x - 0.016, y - 0.012, 0.1], [x + 0.016, y + 0.012, 0.134], o.pearls));   // beads in a U (no vertical bar: never a cross)
+  if (o.skirt != null) p.hips.push(b([-w(0.185), -0.5, -0.135], [w(0.185), 0.05, 0.135], (x, y, z, i, j) => (y > 0.0 ? shade(o.skirt, 0.85) : o.skirt)));   // waistband + skirt to the knee
   if (o.bands != null) p.torso.push(b([-w(0.17), 0.12, -0.13], [w(0.17), 0.16, 0.135], o.bands), b([-w(0.17), 0.3, -0.13], [w(0.17), 0.34, 0.135], o.bands));
   if (o.robe != null) {
     p.torso.push(b([-w(0.2), -0.06, -0.13], [w(0.2), 0.47, 0.13], o.robe), b([-0.1, 0.4, -0.14], [0.1, 0.52, 0.14], o.trim ?? 0xc8a040),   // high collar
@@ -84,7 +92,7 @@ export function humanBody(C, o = {}) {
   if (o.robe != null) p.arm = [b([-0.07, -0.44, -0.07], [0.07, 0.03, 0.07], o.robe), b([-0.075, -0.46, -0.075], [0.075, -0.42, 0.075], o.trim ?? 0xc8a040),
     b([-0.045, -0.56, -0.05], [0.045, -0.46, 0.05], C.glove ?? C.skin)];
   p.thigh = [b([-0.068, -0.43, -0.072], [0.068, 0.02, 0.072], C.pants)];
-  p.shin = [b([-0.062, -0.3, -0.066], [0.062, 0.02, 0.066], C.pants), b([-0.07, -0.42, -0.078], [0.07, -0.29, 0.13], C.boot)];
+  p.shin = [b([-0.062, -0.3, -0.066], [0.062, 0.02, 0.066], o.legs ?? C.pants), b([-0.07, -0.42, -0.078], [0.07, -0.29, 0.13], C.boot)];
   if (o.pads) p.shin.push(b([-0.07, -0.26, 0.05], [0.07, 0.04, 0.1], o.pads));           // riot shin guards
   return p;
 }
