@@ -11,11 +11,13 @@
 //   fixer  強哥 The Fixer          P1 cane sweeps · P2 < 50 % chilli-powder throw (cloud, flinch) · P3 < 25 % bottle volleys
 //   bear   維尼熊 The Bear         P1 100–75 % triple stab · P2 75–50 % 分身 ×3 · P3 50–25 % lights out · P4 25–0 % mask
 //                                 off, enraged (faster, leap slams)
+//   commander 速龍指揮官 Raptor     P1 baton + shield charges · P2 < 50 % pepper-ball volleys (four impacts round the hero,
+//             Commander (8·12)     staggered) · P3 < 25 % calls two 速龍 + squads, charges twice as often
 import { clampWalk } from '../../../world/map.js';
 import { ST } from '../../../crowd/crowd.js';
 
 export const BOSS_PHASES = {
-  stamp: [0.6, 0.25], shocker: [0.5, 0.25], fixer: [0.5, 0.25], bear: [0.75, 0.5, 0.25],
+  stamp: [0.6, 0.25], shocker: [0.5, 0.25], fixer: [0.5, 0.25], bear: [0.75, 0.5, 0.25], commander: [0.5, 0.25],
 };
 
 /** script(game, api) for boss `kind` spawned under officer key `key` (OFF entry). opts: calls [[x, z], …] spawn spots for
@@ -71,7 +73,7 @@ export function bossScript(kind, { key = kind, calls = [], clone = 'clone', on =
         if (p >= 3) fx.dark = true;
         if (p === 4) api.model(key, 'bear_unmasked');
       }
-      if (kind === 'shocker' && p === 3) {
+      if ((kind === 'shocker' || kind === 'commander') && p === 3) {
         calls.forEach(([x, z], n) => { api.squad({ at: [x, z], n: 8 }); api.fire({ officers: { ['raptor' + (n + 1)]: { like: 'raptor', at: [x, z], engaged: true } } }); });
       }
     }
@@ -80,7 +82,7 @@ export function bossScript(kind, { key = kind, calls = [], clone = 'clone', on =
       // timed hazards resolve even while he is staggered (the powder / bottles are already in the air)
       for (const cl of fx.clouds) if (api.t() === cl.t) { hurtIn(cl.x, cl.z, cl.r, 6); ring(cl.x, cl.z, cl.r, 'chilli'); }
       fx.clouds = fx.clouds.filter((cl) => api.t() - cl.t < 150);
-      for (const q of fx.drops) if (api.t() === q.t) { hurtIn(q.x, q.z, 1.1, 8); ring(q.x, q.z, 1.1, 'bottle'); }
+      for (const q of fx.drops) if (api.t() === q.t) { hurtIn(q.x, q.z, 1.1, 8); ring(q.x, q.z, 1.1, q.kind || 'bottle'); }
       fx.drops = fx.drops.filter((q) => api.t() - q.t < 30);
       const sr = fx.rings.find((q) => q.kind === 'shock');             // the shock ring: a band sweeping out 1 → 6 m over 40 f
       if (sr) { const e = api.t() - sr.t, R = 1 + 5 * e / 40; if (e <= 40 && Math.abs(Math.hypot(h.x - sr.x, h.z - sr.z) - R) < 0.6) hurtIn(sr.x, sr.z, 99, 10); }
@@ -89,6 +91,9 @@ export function bossScript(kind, { key = kind, calls = [], clone = 'clone', on =
       if (kind === 'stamp' && p === 3 && !slam && due('slam', k, 20, 240)) slam = { at: api.t(), n: 3 };   // three slams 22 f apart, 4 m
       if (kind === 'fixer' && p === 3 && due('bottles', k, 30, 240)) {  // bottle volley: five round the hero, landing staggered
         for (let n = 0; n < 5; n++) { const a = n * 1.2566 + k * 0.01; fx.drops.push({ x: h.x + Math.sin(a) * (n ? 1.6 : 0), z: h.z + Math.cos(a) * (n ? 1.6 : 0), t: api.t() + 24 + n * 6, x0: c.x[i], z0: c.z[i] }); }
+      }
+      if (kind === 'commander' && p >= 2 && due('pepper', k, 40, 260)) {   // pepper-ball volley: four impacts round the hero
+        for (let n = 0; n < 4; n++) { const a = n * 1.5708 + k * 0.013; fx.drops.push({ x: h.x + Math.sin(a) * (n ? 1.4 : 0), z: h.z + Math.cos(a) * (n ? 1.4 : 0), t: api.t() + 20 + n * 5, x0: c.x[i], z0: c.z[i], kind: 'pepper' }); }
       }
       if (!standing(i) || lunge) return;
       const d = dist(i), ang = Math.atan2(h.x - c.x[i], h.z - c.z[i]);
@@ -99,6 +104,8 @@ export function bossScript(kind, { key = kind, calls = [], clone = 'clone', on =
       } else if (kind === 'shocker') {
         if (d < 10 && d > 2 && due('charge', k, 120, 240)) { const [x, z] = toward(5); go(i, x, z, 16, () => { hurtIn(c.x[i], c.z[i], 1.8, 14); ring(c.x[i], c.z[i], 1.8, 'bash'); }); }
         if (p >= 2 && due('shock', k, 60, 300)) ring(c.x[i], c.z[i], 6, 'shock');
+      } else if (kind === 'commander') {
+        if (d < 10 && d > 2 && due('charge', k, 100, p === 3 ? 120 : 240)) { const [x, z] = toward(5); go(i, x, z, 16, () => { hurtIn(c.x[i], c.z[i], 1.8, 14); ring(c.x[i], c.z[i], 1.8, 'bash'); }); }
       } else if (kind === 'fixer') {
         if (p >= 2 && d < 14 && due('chilli', k, 90, 300)) fx.clouds.push({ x: h.x, z: h.z, t: api.t() + 30, r: 2.4 });   // lands 30 f later
       } else if (kind === 'bear') {

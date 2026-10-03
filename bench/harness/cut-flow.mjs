@@ -1,5 +1,5 @@
-// Cutscene flow gate: in the real page, from each hk result screen — hk1 / hk2 / hk3 WIN → 繼續 → betweenN (Esc skips) →
-// the next chapter's loading card → its prologue scroll; hk4 WIN → 繼續 → the ENDING scroll (Esc → stamp, Esc) → the end
+// Cutscene flow gate: in the real page, from each hk result screen — hk1 / hk2 / hk5 WIN → 繼續 → betweenN (Esc skips) →
+// the next chapter's loading card → its prologue scroll; hk3 WIN → 繼續 → straight to hk5's scroll (chain, no cutscene); hk4 WIN → 繼續 → the ENDING scroll (Esc → stamp, Esc) → the end
 // scene (Esc) → the TRIBUTE card → a tap → the title; a LOSS (and a free-battle win) offers no cutscene. Exit 1 on any miss.
 import { openGame } from './browser.mjs';
 const g = await openGame({ args: ['--autoplay-policy=no-user-gesture-required'] }), P = g.page, wait = (ms) => P.waitForTimeout(ms);
@@ -10,7 +10,11 @@ const result = (chapter, win, mode = 'story') => P.evaluate(([chapter, win, mode
   stats: { kos: 900, time: 300, hpMax: 400, maxChain: 80, dmg: 50, rank: 'A' } }), [chapter, win, mode]);
 const cont = async () => { await wait(1500); await P.evaluate(() => document.querySelector('#result .rs-btns button').click()); };
 await until(() => __vm.state === 'title', null, 60000); await wait(1500);
-for (const [ch, next, cut] of [['hk1', 'hk2', 'between1'], ['hk2', 'hk3', 'between2'], ['hk3', 'hk4', 'between3']]) {
+// hk3 chains straight into 機場 hk5 (no cutscene)
+await result('hk3', true); await cont();
+ok('hk3 win → hk5 scroll (no cutscene)', await until(() => __vm.state === 'prologue' && __vm.game.chapter === 'hk5', null, 40000) && !(await P.evaluate(() => window.__cut?.id)), JSON.stringify(await state()));
+await P.evaluate(() => __vm.flow.go('title')); await until(() => __vm.state === 'title');
+for (const [ch, next, cut] of [['hk1', 'hk2', 'between1'], ['hk2', 'hk3', 'between2'], ['hk5', 'hk4', 'between3']]) {
   await result(ch, true); await cont();
   const inCut = await until((id) => __vm.state === 'cutscene' && window.__cut?.id === id, cut);
   ok(`${ch} win → ${cut}`, inCut, JSON.stringify(await state()));
