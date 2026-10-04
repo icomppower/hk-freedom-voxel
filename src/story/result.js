@@ -28,6 +28,7 @@ export function createResult(el, flow) {
       const id = resolveChapter(ctx.chapter, ctx.char).after;       // a `chain` chapter: straight on, no cutscene
       leave(() => (id ? flow.go('cutscene', { id, char: ctx.char, then: () => inkWipe(() => flow.go(next ? 'loading' : 'title', c)) }) : flow.go(next ? 'loading' : 'title', c)));
     }
+    else if (b.dataset.act === 'room') leave(() => flow.go('coop'));   // online co-op (src/net/page.js): the room's lobby
     else leave(() => flow.go('title'));
   });
   const nav = createNav({
@@ -63,7 +64,7 @@ export function createResult(el, flow) {
         <div class="rs-epi">${win
           ? epi.zh.map((z, i) => `<p>${z}<small>${epi.en[i]}</small></p>`).join('')
           : `<p>${loseZh}<small>${loseEn}</small></p>`}</div>
-        <div class="rs-btns">${win
+        <div class="rs-btns">${c.coop ? '<button data-act="room">返回房間<small>BACK TO THE ROOM</small></button>' : win
           ? `<button data-act="${end ? 'ending' : cut ? 'cut' : 'title'}">繼續<small>CONTINUE</small></button>`
           : '<button data-act="retry">再戰<small>RETRY</small></button><button data-act="title" class="sub">返回<small>TITLE</small></button>'}</div>
       </div>

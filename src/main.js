@@ -42,12 +42,13 @@ import { createCutscenes } from './story/cutscenes/player.js';
 import { createPreview } from './story/preview.js';
 import { createResult } from './story/result.js';
 import { difficulty, recordClear } from './core/difficulty.js';
+import { createCoopPage, COOP_ON, COOP_ENEMIES } from './net/page.js';   // online co-op hook (only with ?coop)
 
 const params = new URLSearchParams(location.search);
 // mobile quality tier (touch hook): coarse pointers get 150 enemies, no MSAA / DoF, half-res bloom; ?hq forces full.
 // The canvas renders at CSS-pixel resolution (DPR 1), inside the tier's DPR ≤ 1.5 cap.
 const MOBILE = !params.has('hq') && matchMedia('(pointer: coarse)').matches;
-const ENEMIES = Math.max(0, Math.min(2000, params.get('enemies') ? Number(params.get('enemies')) | 0 : MOBILE ? 150 : 300));
+const ENEMIES = COOP_ON ? COOP_ENEMIES : Math.max(0, Math.min(2000, params.get('enemies') ? Number(params.get('enemies')) | 0 : MOBILE ? 150 : 300));   // co-op: same crowd on both peers
 
 const canvas = document.getElementById('c');
 let vw = innerWidth, vh = innerHeight;
@@ -82,6 +83,8 @@ buildViews();
 // hud part: camera passed so officer name/HP tags can be projected over their heads (read-only)
 const hud = createHud(document.getElementById('hud'), game, camRig.camera);
 createAudio(game);
+// online co-op hook (src/net/page.js, null without ?coop): the room's lockstep clock steps the battle, two heroes
+const coop = createCoopPage({ game, input, scene, camera: camRig.camera, afterStep: () => vfx.afterStep(), isPaused: () => paused });
 
 function step() {
   const inp = input.sample();
@@ -100,6 +103,7 @@ let lastRenderFrame = 0;
 function render(real) {
   const dt = real ?? Math.min(10, Math.max(0, (game.frame - lastRenderFrame) / 60));
   lastRenderFrame = game.frame;
+  coop?.beforeRender(dt);                                          // co-op: this player's hero bound, the partner drawn
   heroView.root.visible = state !== 'title' && state !== 'select' && state !== 'cutscene';   // no officer chosen yet / the cutscene's own actors
   heroView.update(Math.min(dt, 0.1));
   crowdView.update(dt, camRig.camera);
@@ -115,7 +119,8 @@ function render(real) {
 /** New battle: { char: CHARS id, mode: 'story' | 'free', chapter?: CHAPTERS id }. Makes the chapter's map active (its
  *  world rebuilt if another map was on screen), resets every sim module (deterministic from here: both RNGs reseeded,
  *  frame 0), rebuilds the kit views on a character change, lets the story spawn the field. */
-function startBattle({ char = 'zhaoyun', mode = 'free', chapter } = {}) {
+function startBattle(c = {}) {
+  const { char = 'zhaoyun', mode = 'free', chapter } = c;
   const ch = CHARS[char] || CHARS.zhaoyun, CH = resolveChapter(chapter, ch.id);
   setMap(CH.map); world.sync();
   const p = spawnPoint(mode), newKit = ch.kit !== game.hero.kit;
@@ -125,7 +130,8 @@ function startBattle({ char = 'zhaoyun', mode = 'free', chapter } = {}) {
   game.hero.reset({ ...p, char: ch });
   if (newKit) game.musou = ch.kit.createMusou(game);
   game.crowd.reset(); game.combat.reset(); game.musou.reset(); game.cam.reset(p.yaw); game.cam.tilt = p.tilt || 0;
-  if (newKit) buildViews();
+  if (c.coop) coop.start(c);                                         // co-op: both heroes from the room's seed; game.hero = mine
+  if (newKit || c.coop) buildViews();
   heroView.reset();
   game.story.reset({ mode, char: ch.id, chapter: CH.id });
   menu.querySelector('.t').innerHTML = `${ch.name.zh}<i>${ch.seal}</i>`;
@@ -236,18 +242,20 @@ const screens = {
   prologue: createPrologue($('prologue'), flow), result: createResult($('result'), flow),
   ending: createPrologue($('ending'), flow, 'ENDING'),              // after the final chapter's win (result → ending → title)
   // cutscene hook (香港自由戰士): between-chapter scenes and the end scene, played on the live field with their own actors
+  ...(coop ? { coop: coop.lobbyScreen(coopEl(), flow) } : {}),    // co-op lobby (src/ui/coop-lobby.js)
   cutscene: createCutscenes($('cutscene'), flow, { scene, game, setMap: (id) => { setMap(id); world.sync(); }, clearField: () => game.crowd.reset() }),
 };
 // a win records the clear (上級 / 修羅 opens 修羅: unlock = the result screen announces it)
 on('story:end', (e) => {
   const unlock = e.win && recordClear(game.diff);
+  if (ctx.coop) coop.ended(e);                                       // co-op: the room goes back to its lobby
   inkWipe(() => flow.go('result', { ...ctx, win: e.win, stats: e.stats, diff: game.diff, unlock }));
 });
 addEventListener('keydown', (e) => {
   // opens; the menu's own nav (registered first) closes it and marks the key handled
   if (state === 'battle' && !paused && e.code === 'Escape' && !e.defaultPrevented) setPaused(true);
 });
-addEventListener('blur', () => { if (state === 'battle') setPaused(true); });
+addEventListener('blur', (e) => { if (state === 'battle' && !(coop?.C.inBattle && e.isTrusted)) setPaused(true); });   // co-op: a window switch doesn't pause both
 
 // ---- loop
 let acc = 0, last = performance.now();
@@ -256,6 +264,7 @@ const frame = (now) => {
   // clamp at 0 too: the first rAF timestamp can precede the performance.now() taken at module init
   const d = Math.min(0.1, Math.max(0, (now - last) / 1000));
   acc += d * (game.timeScale ?? 1); last = now;                                  // story: victory slow-mo
+  if (state === 'battle' && coop?.C.inBattle) { coop.frame(d); render(); return; }   // co-op: the room's clock (pause = an input flag)
   if (paused) { acc = 0; input.sample(); return; }
   if (state !== 'battle') { acc = 0; input.sample(); if (!hold) render(d); return; }     // screens: the field idles behind them
   let n = 0;
@@ -267,5 +276,6 @@ const frame = (now) => {
 if (params.has('preview')) createPreview(flow);                                    // ?preview: scene gallery on the title
 const dev = params.get('go');
 // the page opens under full ink (index.html): the first screen is built and compiled under it, then the ink sweeps off
-inkBoot(() => dev ? flow.go('battle', { mode: dev === 'story' ? 'story' : 'free', char: params.get('char') || 'zhaoyun', chapter: params.get('ch') || undefined }) : flow.go('title'));
+function coopEl() { const e = document.createElement('div'); e.id = 'coop'; e.className = 'scr'; e.hidden = true; document.body.append(e); return e; }
+inkBoot(() => dev ? flow.go('battle', { mode: dev === 'story' ? 'story' : 'free', char: params.get('char') || 'zhaoyun', chapter: params.get('ch') || undefined }) : coop?.boot(flow) || flow.go('title'));
 requestAnimationFrame(frame);
