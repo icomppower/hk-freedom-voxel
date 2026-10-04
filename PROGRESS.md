@@ -20,6 +20,7 @@ stage not `done`.
 | 10 Ship | done | verify.sh ALL GATES GREEN; README credits (upstream MIT, sheep-village, three.js, Yuji Boku, the Phaser original); production deploy READY at https://hk-freedom-voxel.vercel.app (200, 0 console errors desktop + 844×390, hk4 deep link); Notion: Live Projects Bookmark row + project Status ticked. Repo pushed to github.com/icomppower/hk-freedom-voxel and git-connected to Vercel |
 | C2 777 is a woman | done (branch stage/airport) | stamp-model gate 3/10 → 10/10 (knee skirt, silver bob to the chin, 6 pearls each wider than tall = never a cross, no tie / chain, scale 1.26 + hammer / crack / split states unchanged); boss gate 4/4 as lungjai + 4/4 as siumei unchanged (stamp phases 59.77 / 24.80 %, 59.80 / 24.80 %); ch1 Node 6/6 identical; shots bench/shots/airport/777-*.png |
 | 11 Ch 8·12 hk5 airport | done (branch stage/airport) | bot WIN 6/6 (lungjai 5:55 / 5:39 / 5:04, siumei 5:18 / 5:18 / 5:23 sim; steady / rush / back); map gate 6/6 each (securityLine + deckEscalator crossed, 0 NaN / off-field / teleport); touch-only real-page run WIN as 小美 (Pixel 7 landscape, mobile tier, 1 194 taps, 17 653 frames, 0 errors); airport look 10/10 desktop (#debug: board top row = live objective 626/626 settled samples, 6/6 rows → 取消 only after the cancellation, plane outside the glass 631 samples, climb-out, 8 travellers + 4 stranded drawn, stanchions / shutter 1.0, boss rings); boss gate 5/5 (commander: P2 49.74 %, P3 24.80 %, 48 pepper impacts, 2 速龍 called); result card fits 10/10 (hk1-5 × 1280×720 / 844×390); scroll cols 24 → 29/29 cards; cut flow 15 → 16/16; preview 22 → 24/24; airport look 10/10 on Pixel 7 mobile tier too (siumei); desktop p95 16.7-16.8 ms at 300 / 600 enemies; Pixel 7 + 4× CPU p95 7.0-7.4 ms; ch1 Node 6/6 identical, ch1 Chrome checkpoints 6/6 × 2; touch-twin 7/7, touch UI 13/13, phone flow 17/17, scroll flow 12/12, cut shots 4/4 × 3, ending fit pass |
+| Online co-op 2P (?coop) | done (branch coop-online, PR #5; device matrix pending) | engine exception 0e3105c: ch1 Node 6/6 identical before → after (finals 90a1a382 64989ea8 6c41979e 2c32ffdc 6a95e25b b7fe682c), re-measured on this machine vs main 271276a; online gate vs wrangler dev: Quick Match + private room hk1 WIN 0 desyncs (48a82857 = 48a82857, c95b6178 = c95b6178), room full ok, pause 301/301 paused frames, ?coopbot WIN, reconnect (kill @3000 → re-sim + drop @6000) 3fe5f539 = 3fe5f539, 60 s bot takeover + rejoin 1fb767fa = 1fb767fa, netsim 150,30 paced 0 desyncs (D 8: stall 34.5 %; fixed D 12: 0 %); deployed worker quick + room WIN 0 desyncs rtt 16-17 ms; cross-engine full hk1 dmath Node = Chrome = WebKit 26/26 (native Math splits ≤ frame 600); real pages Chrome × Chrome 30/30 hashes, Chrome × WebKit 15/15 local + 20/20 deployed; lobby 844×390 + 390×844 all buttons ≥ 44 px hit-testable; 2P rules 5/5; boss 1300 → 2080, officer 360 → 468; messages ≈ 4.3 k / client / hk1 (≈ 650-1 060 / min); verify.sh green except shots-scroll ch1 / hk1 (fail on main too: main 4-5/6 + 5-6/7, branch 3-6/6 + 4-6/7 over 3 runs) |
 
 **Next action:** none — all stages done (stage/airport PR open: C2 + 8·12 機場); open P2s below.
 
@@ -131,3 +132,17 @@ stage not `done`.
   / hk1), which flake on this machine on main too (main dbd6603, eight runs: 6/6 twice, else 4/6 or 5/6, a different
   frame failing from run to run; branch: 3/6-5/6 in ten runs while the machine sat at load ≈ 5). Nothing on the branch touches ch1.js, hkmap.js,
   prologue.js or index.html; hk5's map is a string copy of HK_MAP.
+
+- 2026-10-04 Online co-op 2P (Notion "CLI Brief — Online Co-op 2P", branch coop-online, PR #5): everything behind `?coop`.
+  Worker `hk-freedom-coop` deployed at https://hk-freedom-coop.icomppower.workers.dev (`cd coop-server && npm run
+  coop:deploy`, token in the gitignored .env) — the brief said Johnny deploys by hand; the resume run was told to deploy.
+  The server uses plain `DurableObject` classes (Viking Row's structure), not the PartyServer lib.
+  Simplest readings: scrolls — each player reads / skips their own prologue, the lockstep clock only runs once both are
+  in the battle (= the battle starts when both are done); between-chapter cutscenes are skipped in co-op (result →
+  返回房間 → the room's lobby). Co-op is pinned to 普通 Normal and a 300-strong crowd on every device (the sims must
+  match). Boss projectiles (frozen code) still aim at the lead hero. The input-delay cap stays at the brief's 8 ticks
+  (`?coopdmax=` overrides for testing). Message budget: input runs (only changed ticks, ≤ 1 msg / 3 ticks, idle
+  heartbeat ≈ 250 ms promising "no change" ahead — up to 250 ms extra delay on the first input after a quiet spell).
+  Gotchas found: workerd at this compatibility date doesn't answer a client's close frame (the server must `close()`,
+  else the client's onclose never fires and it never reconnects); per-message setTimeout netsim reordered messages
+  (truncated ms) → FIFO queue; .vercelignore must ship bench/bot (src/net/coopbot.js imports the bot policy).
