@@ -11,6 +11,7 @@
 import { CHARS, paintPortrait } from '../chars/index.js';
 import { resolveChapter, CHAPTER_ORDER } from './chapters.js';
 import { inkWipe, afterWipe, createNav } from '../ui/menu.js';
+import { resultParts, newSeed } from '../fenghuo/ui.js';
 
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
@@ -21,7 +22,8 @@ export function createResult(el, flow) {
   el.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.act === 'retry') leave(() => flow.go('loading', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter, art: ctx.art, retry: true }));
+    if (b.dataset.act === 'retry') leave(() => flow.go('loading', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter, art: ctx.art, retry: true, seed: ctx.seed }));
+    else if (b.dataset.act === 'again') leave(() => flow.go('loading', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter, art: ctx.art, retry: true, seed: newSeed() }));   // 烽火戰: new draw
     else if (b.dataset.act === 'ending') leave(() => flow.go('ending', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter }));
     else if (b.dataset.act === 'cut') {                             // 香港自由戰士: the between-chapter cutscene, then the next chapter
       const next = CHAPTER_ORDER[CHAPTER_ORDER.indexOf(ctx.chapter) + 1], c = { mode: 'story', char: ctx.char, chapter: next };
@@ -40,8 +42,9 @@ export function createResult(el, flow) {
     enter(c) {
       ctx = c; gone = false;
       const { win, stats: s } = c, ch = CHARS[c.char] || CHARS.zhaoyun, CH = resolveChapter(c.chapter, ch.id), E = CH.EPILOGUE;
-      const epi = E[ch.id] || (E.zh ? E : Object.values(E)[0]), T = CH.title;
-      const lose = CH.DEFEAT || { zh: '{name}力戰不支，蜀軍攻勢受挫……', en: '{name} falls at last, and the Shu assault falters...' };
+      const F = c.mode === 'fenghuo' && s.fenghuo ? resultParts(c) : null;   // 烽火戰: cards for the epilogue, its own band
+      const epi = E[ch.id] || (E.zh ? E : Object.values(E)[0]), T = F ? F.T : CH.title;
+      const lose = F ? F.lose : CH.DEFEAT || { zh: '{name}力戰不支，蜀軍攻勢受挫……', en: '{name} falls at last, and the Shu assault falters...' };
       const loseZh = lose.zh.replace('{name}', ch.name.zh), loseEn = lose.en.replace('{name}', ch.name.en), end = win && CH.ENDING;
       const cut = win && c.mode === 'story' && (CH.after || CH.chain);  // a story win with a cutscene (or the next chapter) after it
       const rows = [
@@ -60,10 +63,12 @@ export function createResult(el, flow) {
           ${win && s.rank ? `<div class="rs-rank r${s.rank}"><span>評價<small>RANK</small></span><b>${s.rank}</b></div>` : ''}
         </div>
         ${c.unlock ? '<p class="rs-unlock">修羅難度已解鎖<small>Chaos difficulty unlocked</small></p>' : ''}
-        <div class="rs-epi">${win
+        <div class="rs-epi">${F && win ? F.epiHtml : win
           ? epi.zh.map((z, i) => `<p>${z}<small>${epi.en[i]}</small></p>`).join('')
           : `<p>${loseZh}<small>${loseEn}</small></p>`}</div>
-        <div class="rs-btns">${win
+        <div class="rs-btns">${F
+          ? `${win ? '' : '<button data-act="retry">再戰<small>RETRY · SAME CARDS</small></button>'}<button data-act="again">再燃烽火<small>NEW DRAW</small></button><button data-act="title" class="sub">返回<small>TITLE</small></button>`
+          : win
           ? `<button data-act="${end ? 'ending' : cut ? 'cut' : 'title'}">繼續<small>CONTINUE</small></button>`
           : '<button data-act="retry">再戰<small>RETRY</small></button><button data-act="title" class="sub">返回<small>TITLE</small></button>'}</div>
       </div>

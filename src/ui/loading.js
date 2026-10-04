@@ -11,8 +11,9 @@ import { CHARS } from '../chars/index.js';
 import { replay } from './menu.js';
 import { difficulty } from '../core/difficulty.js';
 import { resolveChapter } from '../story/chapters.js';
+import { MODE_FH, loadingCards } from '../fenghuo/ui.js';
 
-export const MODE = { story: ['故事模式', 'Story'], free: ['自由演武', 'Free battle · endless waves'] };
+export const MODE = { story: ['故事模式', 'Story'], free: ['自由演武', 'Free battle · endless waves'], fenghuo: MODE_FH };
 // [zh, en, char id | undefined = any officer] — keep in step with the controls table (title.js CONTROLS)
 const TIPS = [
   ['連按 J 打出完整連擊，連擊中按 K 接蓄力技。', 'Tap J for the full combo; press K mid-combo for a charge attack.'],
@@ -43,7 +44,8 @@ export function createLoading(el) {
   return {
     enter(c) {
       const ch = CHARS[c.char] || CHARS.zhaoyun, C = resolveChapter(c.chapter, ch.id);
-      const [zh, en] = c.mode === 'story' ? [`${C.title.small}「${C.title.zh}」`, `Story · ${C.title.en}`] : MODE.free;
+      const [zh, en] = c.mode === 'story' ? [`${C.title.small}「${C.title.zh}」`, `Story · ${C.title.en}`] : MODE[c.mode] || MODE.free;
+      loadingCards(el, c);                                  // 烽火戰: today's cards
       el.style.setProperty('--acc', ch.accent);
       $('.l-art').style.backgroundImage = c.art ? `url("${c.art}")` : 'none';
       el.classList.remove('ready'); replay(el, 'in');

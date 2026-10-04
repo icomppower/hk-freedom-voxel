@@ -20,6 +20,7 @@ stage not `done`.
 | 10 Ship | done | verify.sh ALL GATES GREEN; README credits (upstream MIT, sheep-village, three.js, Yuji Boku, the Phaser original); production deploy READY at https://hk-freedom-voxel.vercel.app (200, 0 console errors desktop + 844×390, hk4 deep link); Notion: Live Projects Bookmark row + project Status ticked. Repo pushed to github.com/icomppower/hk-freedom-voxel and git-connected to Vercel |
 | C2 777 is a woman | done (branch stage/airport) | stamp-model gate 3/10 → 10/10 (knee skirt, silver bob to the chin, 6 pearls each wider than tall = never a cross, no tie / chain, scale 1.26 + hammer / crack / split states unchanged); boss gate 4/4 as lungjai + 4/4 as siumei unchanged (stamp phases 59.77 / 24.80 %, 59.80 / 24.80 %); ch1 Node 6/6 identical; shots bench/shots/airport/777-*.png |
 | 11 Ch 8·12 hk5 airport | done (branch stage/airport) | bot WIN 6/6 (lungjai 5:55 / 5:39 / 5:04, siumei 5:18 / 5:18 / 5:23 sim; steady / rush / back); map gate 6/6 each (securityLine + deckEscalator crossed, 0 NaN / off-field / teleport); touch-only real-page run WIN as 小美 (Pixel 7 landscape, mobile tier, 1 194 taps, 17 653 frames, 0 errors); airport look 10/10 desktop (#debug: board top row = live objective 626/626 settled samples, 6/6 rows → 取消 only after the cancellation, plane outside the glass 631 samples, climb-out, 8 travellers + 4 stranded drawn, stanchions / shutter 1.0, boss rings); boss gate 5/5 (commander: P2 49.74 %, P3 24.80 %, 48 pepper impacts, 2 速龍 called); result card fits 10/10 (hk1-5 × 1280×720 / 844×390); scroll cols 24 → 29/29 cards; cut flow 15 → 16/16; preview 22 → 24/24; airport look 10/10 on Pixel 7 mobile tier too (siumei); desktop p95 16.7-16.8 ms at 300 / 600 enemies; Pixel 7 + 4× CPU p95 7.0-7.4 ms; ch1 Node 6/6 identical, ch1 Chrome checkpoints 6/6 × 2; touch-twin 7/7, touch UI 13/13, phone flow 17/17, scroll flow 12/12, cut shots 4/4 × 3, ending fit pass |
+| F1 烽火戰 event cards | done (branch fenghuo-cards) | ch1 Node 6/6 finals unchanged before → after on the build machine (b3defa68 5f075b54 e9e4aa7e 6de58982 99b239d8 863f8282); 烽火 gates 6/6 (bench/fenghuo/balance.mjs): deck 32 cards 14 buff / 14 debuff / 4 mixed in bounds · 10 000-seed draw 4 986 one-card / 5 014 two-card, max share deviation 9.3 % · same seed → same hash (3d8e86c0 ×2) · render-only cards hash-identical to no card (6efe33e2) · K.O. pace vs no card 0.81-1.07 over 6 configs (r1 metric broken by one baseline death; r2 caught B04 制裁令 / M01 八號風球 cutting waves = slower K.O. race → reworked) · bot wins 80/80 at 1000 K.O. / 5:00, median 141 s, slowest 237 s; real page (headless Chromium, SwiftShader): title → 烽火戰 → select → battlefield → loading cards → HUD → result, 0 page errors (bench/shots/fenghuo) |
 
 **Next action:** none — all stages done (stage/airport PR open: C2 + 8·12 機場); open P2s below.
 
@@ -131,3 +132,13 @@ stage not `done`.
   / hk1), which flake on this machine on main too (main dbd6603, eight runs: 6/6 twice, else 4/6 or 5/6, a different
   frame failing from run to run; branch: 3/6-5/6 in ten runs while the machine sat at load ≈ 5). Nothing on the branch touches ch1.js, hkmap.js,
   prologue.js or index.html; hk5's map is a string copy of HK_MAP.
+
+- 2026-10-03 烽火戰 (branch fenghuo-cards): a fourth title mode — the free arena on any battlefield with a clock (5:00) and
+  a goal (1000 K.O.), shaped by 1–2 烽火事件牌 drawn from the battle seed (select → newSeed(); 再戰 keeps the hand,
+  再燃烽火 draws again; `?go=fenghuo&seed=N` deep link). The hero can fall (game.fh.on). Cards: src/fenghuo/cards.js (32,
+  fictionalised from recent Asian news, no names, no tragedy as a buff); sim: fenghuo.js (game.mods + derived game.diff,
+  regen, K.O. heal, clock, end through story:end); UI: ui.js (loading reveal, HUD clock / chips, minimap off, card fog,
+  result). Engine hook commit b067b60 (combat / crowd / hero read game.mods, neutral ×1 / +0 outside 烽火戰). 烽火 wins
+  don't open 修羅. Goal 1000 assumes a human pace ≈ 200 K.O./min; the bot runs ≈ 420/min and never falls on 普通, so most
+  survival cards read ≈ 1.0 on its K.O. pace — the 40-70 % human win band needs playtests (P2). enemy_waves stays in the
+  stat table but no card uses it (fewer waves = a slower K.O. race).

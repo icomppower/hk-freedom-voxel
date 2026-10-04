@@ -19,6 +19,7 @@ import { SWASH, STAGE as TITLE } from './title.js';
 import { MODE } from './loading.js';
 import { difficulty } from '../core/difficulty.js';
 import { CHAPTERS, chaptersFor } from '../story/chapters.js';
+import { newSeed } from '../fenghuo/ui.js';
 import { MAPS } from '../world/map.js';
 
 const SHU = { zh: '蜀', en: 'Shu Han' };
@@ -83,7 +84,7 @@ export function createSelect(el, flow) {
     picking = true; chapEl.hidden = false; el.classList.add('chap');
     chList.innerHTML = chs.map((id, k) => {
       const C = CHAPTERS[id], m = MAPS[C.map];
-      return `<button class="s-ch" data-k="${k}"><small>${ctx.mode === 'free' ? m.name.zh : C.title.small}</small><b>${ctx.mode === 'free' ? '自由演武' : C.title.zh}</b><em>${ctx.mode === 'free' ? m.name.en : C.title.en}</em></button>`;
+      return `<button class="s-ch" data-k="${k}"><small>${ctx.mode !== 'story' ? m.name.zh : C.title.small}</small><b>${ctx.mode === 'free' ? '自由演武' : ctx.mode === 'fenghuo' ? '烽火戰' : C.title.zh}</b><em>${ctx.mode !== 'story' ? m.name.en : C.title.en}</em></button>`;
     }).join('');
     chapFocus(0); replay(chapEl, 'in'); sfx('ok');
   }
@@ -127,7 +128,7 @@ export function createSelect(el, flow) {
     busy = true;
     stamp($('.s-act'), '出陣');
     const id = CHAR_ORDER[cur], chapter = chs[ci];
-    setTimeout(() => inkWipe(() => flow.go('loading', { mode: ctx.mode, char: id, chapter })), 520);
+    setTimeout(() => inkWipe(() => flow.go('loading', { mode: ctx.mode, char: id, chapter, seed: newSeed() })), 520);
   }
   const back = () => {
     if (busy) return;

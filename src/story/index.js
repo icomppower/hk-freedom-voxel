@@ -147,9 +147,9 @@ export function createStory(game) {
     if (mode === 'story') for (const id in GATES) setGate(id, false);   // spawnPoint() opened them all; the script opens each
     st.morale = mode === 'story' ? 0.4 : undefined;
     const c = game.crowd;
-    if (mode === 'free') { c.spawnArmy(); c.spawnAllies({ ...MAP.freeAllies }); }
+    if (mode === 'free') { c.spawnArmy(); c.spawnAllies({ ...MAP.freeAllies, n: Math.max(0, MAP.freeAllies.n + (game.mods?.allyN ?? 0)) }); }   // 烽火 cards: ± allies
     else for (const a of CH.allies || []) c.spawnAllies({ ...a });
-    c.setAllies(true);
+    c.setAllies(game.mods?.allyReinforce ?? true);   // 烽火 封路: no ally columns
     // story: the first beat spawns the field on step 1 — after main.js's 'scenario' reset of the HUD, so its objective sticks
   };
 

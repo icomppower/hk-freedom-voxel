@@ -25,6 +25,11 @@ record — ropes, sewers and motorbikes waiting in the dark — and remembers th
   clearance) · 第三章 元朗 Yuen Long (escort the passengers, hold the train doors, 強哥 The Fixer) · 第四章 理工大學
   PolyU (the water cannon, the rope route, 維尼熊 The Bear in four phases) — then the ending scroll 天光 and a tribute
   card. After each chapter, the Phaser game's history text for that day.
+- **烽火戰 Bonfire battle** (title menu) — any of the five battlefields against the clock: K.O. 1000 in 5:00. Before
+  each battle 1–2 **烽火事件牌** event cards are drawn from the battle seed — 32 fictionalised cards inspired by recent
+  Asian news (人鏈, 雨傘陣, 斷網, 宵禁令, 八號風球, 黑色暴雨 …), each a buff, a debuff or a twist on attack, defence,
+  speed, the Musou gauge, enemy waves and officers, allies, the clock or the minimap. 再戰 keeps the hand, 再燃烽火
+  draws a new one. Cards and rules: `src/fenghuo/`; oracle: `bench/fenghuo/balance.mjs`.
 - Written Cantonese + English throughout. Plays on phones: floating stick, 攻 蓄 跳 閃 無雙 buttons, a lighter mobile
   quality tier.
 
@@ -45,7 +50,8 @@ python3 -m http.server 8000
 ```
 
 Then open http://localhost:8000 . Needs a WebGL2 browser. `?hq` forces full quality on a phone; `?dev` shows the
-upstream 定軍山 chapter and officers.
+upstream 定軍山 chapter and officers. `?go=fenghuo&char=lungjai&ch=hk1&seed=42` jumps straight into a
+烽火戰 with that seed's cards.
 
 ## Controls
 
@@ -69,6 +75,10 @@ in three play styles, scroll and result-card checks, the touch hook (touch and k
 state hashes; every button hit-testable at 844×390; a tap-through from boot to a battle on a phone), the ending flow,
 and frame time on desktop and on an emulated phone with a 4× CPU throttle. `--quick` skips the Chrome half. Build log:
 `PROGRESS.md`; screenshots per stage: `bench/shots/`.
+
+`node --import ./bench/harness/register.mjs bench/fenghuo/balance.mjs` runs the 烽火 gates (deck bounds and types, the
+draw, determinism, render-only cards, card direction on the bot's K.O. pace, every draw winnable);
+`node bench/fenghuo/shots.mjs` walks title → 烽火戰 → result in headless Chromium and saves screenshots.
 
 ## Credits & License
 

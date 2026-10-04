@@ -42,6 +42,8 @@ import { createCutscenes } from './story/cutscenes/player.js';
 import { createPreview } from './story/preview.js';
 import { createResult } from './story/result.js';
 import { difficulty, recordClear } from './core/difficulty.js';
+import { createFenghuo } from './fenghuo/fenghuo.js';
+import { createFenghuoView } from './fenghuo/ui.js';
 
 const params = new URLSearchParams(location.search);
 // mobile quality tier (touch hook): coarse pointers get 150 enemies, no MSAA / DoF, half-res bloom; ?hq forces full.
@@ -65,6 +67,7 @@ game.crowd = createCrowd(game, ENEMIES);
 game.combat = createCombat(game);
 game.musou = game.hero.kit.createMusou(game);     // the character's Musou (rebuilt with the kit in startBattle)
 game.story = createStory(game);
+game.fh = createFenghuo(game); game.fh.begin(null);   // 烽火戰 (event cards); off = neutral game.mods
 const input = createInput();
 createTouch(input.virt, game, MOBILE);
 
@@ -82,6 +85,7 @@ buildViews();
 // hud part: camera passed so officer name/HP tags can be projected over their heads (read-only)
 const hud = createHud(document.getElementById('hud'), game, camRig.camera);
 createAudio(game);
+const fhView = createFenghuoView(document.getElementById('hud'), game, scene);   // 烽火戰 HUD (clock, cards) + card fog
 
 function step() {
   const inp = input.sample();
@@ -91,6 +95,7 @@ function step() {
   game.crowd.step();
   game.musou.step();
   game.story.step();
+  game.fh.step();
   game.frame++;
   vfx.afterStep();
 }
@@ -110,26 +115,30 @@ function render(real) {
   musouView.update(dt);
   post.render(scene, camRig.camera, game.frame / 60, camRig.focus, vfx.flash);   // post-fx: DoF focus + screen flash
   hud.update();
+  fhView.update(state === 'battle');
 }
 
 /** New battle: { char: CHARS id, mode: 'story' | 'free', chapter?: CHAPTERS id }. Makes the chapter's map active (its
  *  world rebuilt if another map was on screen), resets every sim module (deterministic from here: both RNGs reseeded,
  *  frame 0), rebuilds the kit views on a character change, lets the story spawn the field. */
-function startBattle({ char = 'zhaoyun', mode = 'free', chapter } = {}) {
+function startBattle({ char = 'zhaoyun', mode = 'free', chapter, seed = 1 } = {}) {
+  const fenghuo = mode === 'fenghuo'; if (fenghuo) mode = 'free';   // 烽火戰 = the free arena + a goal, a clock and event cards
   const ch = CHARS[char] || CHARS.zhaoyun, CH = resolveChapter(chapter, ch.id);
   setMap(CH.map); world.sync();
   const p = spawnPoint(mode), newKit = ch.kit !== game.hero.kit;
   Object.assign(game, { mode, chapter: CH.id, frame: 0, hitstop: 0, freeze: 0, diff: difficulty() });
   lastRenderFrame = 0;
   vrng.seed(7936); rng.seed(1);
+  game.fh.begin(fenghuo ? { seed } : null);           // cards → game.mods + derived game.diff, before any spawn
   game.hero.reset({ ...p, char: ch });
+  game.fh.afterHero();
   if (newKit) game.musou = ch.kit.createMusou(game);
   game.crowd.reset(); game.combat.reset(); game.musou.reset(); game.cam.reset(p.yaw); game.cam.tilt = p.tilt || 0;
   if (newKit) buildViews();
   heroView.reset();
   game.story.reset({ mode, char: ch.id, chapter: CH.id });
   menu.querySelector('.t').innerHTML = `${ch.name.zh}<i>${ch.seal}</i>`;
-  menu.querySelector('.sub').innerHTML = `戰局暫停・${game.diff.zh}<small>Battle paused · ${game.diff.en}</small>`;
+  menu.querySelector('.sub').innerHTML = `${fenghuo ? '烽火戰・' + game.fh.cards.map((k) => k.name).join('・') + '・' : ''}戰局暫停・${game.diff.zh}<small>Battle paused · ${game.diff.en}</small>`;
   document.title = `${ch.name.zh} — 香港自由戰士`;
   emit('scenario', { mode, char: ch.id, chapter: CH.id });
 }
@@ -240,7 +249,7 @@ const screens = {
 };
 // a win records the clear (上級 / 修羅 opens 修羅: unlock = the result screen announces it)
 on('story:end', (e) => {
-  const unlock = e.win && recordClear(game.diff);
+  const unlock = e.win && !game.fh.on && recordClear(game.diff);   // 烽火戰 wins don't open 修羅
   inkWipe(() => flow.go('result', { ...ctx, win: e.win, stats: e.stats, diff: game.diff, unlock }));
 });
 addEventListener('keydown', (e) => {
@@ -267,5 +276,5 @@ const frame = (now) => {
 if (params.has('preview')) createPreview(flow);                                    // ?preview: scene gallery on the title
 const dev = params.get('go');
 // the page opens under full ink (index.html): the first screen is built and compiled under it, then the ink sweeps off
-inkBoot(() => dev ? flow.go('battle', { mode: dev === 'story' ? 'story' : 'free', char: params.get('char') || 'zhaoyun', chapter: params.get('ch') || undefined }) : flow.go('title'));
+inkBoot(() => dev ? flow.go('battle', { mode: dev === 'story' ? 'story' : dev === 'fenghuo' ? 'fenghuo' : 'free', seed: Number(params.get('seed')) || 1, char: params.get('char') || 'zhaoyun', chapter: params.get('ch') || undefined }) : flow.go('title'));
 requestAnimationFrame(frame);

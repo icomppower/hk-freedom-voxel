@@ -18,6 +18,7 @@ import { createCamSim } from '../../src/camera/camera.js';
 import { CHARS } from '../../src/chars/index.js';
 import { createStory } from '../../src/story/index.js';
 import { difficulty, DIFFS, setDifficulty } from '../../src/core/difficulty.js';
+import { createFenghuo } from '../../src/fenghuo/fenghuo.js';
 
 export const ACTIONS = ['attack', 'charge', 'jump', 'dodge', 'musou', 'target'];
 
@@ -29,18 +30,22 @@ export async function createSim({ enemies = 300 } = {}) {
   game.combat = createCombat(game);
   game.musou = game.hero.kit.createMusou(game);
   game.story = createStory(game);
+  game.fh = createFenghuo(game); game.fh.begin(null);
   const sim = { game, end: null, events: [] };
   on('story:end', (e) => { sim.end = e; });
   for (const n of ['story:say', 'story:banner', 'story:objective', 'ko', 'hero:down', 'musou:start'])
     on(n, (e) => { if (sim.trace) sim.events.push([game.frame, n, n === 'ko' ? e.officer : n === 'story:objective' ? e.en : n === 'story:banner' ? e.en : null]); });
 
-  sim.start = ({ char = 'zhaoyun', mode = 'story', chapter } = {}) => {
+  sim.start = ({ char = 'zhaoyun', mode = 'story', chapter, seed = 1, cards } = {}) => {
+    const fenghuo = mode === 'fenghuo'; if (fenghuo) mode = 'free';
     const ch = CHARS[char] || CHARS.zhaoyun, CH = resolveChapter(chapter, ch.id);
     setMap(CH.map);
     const p = spawnPoint(mode), newKit = ch.kit !== game.hero.kit;
     Object.assign(game, { mode, chapter: CH.id, frame: 0, hitstop: 0, freeze: 0, diff: difficulty() });
     vrng.seed(7936); rng.seed(1);
+    game.fh.begin(fenghuo ? { seed, cards } : null);
     game.hero.reset({ ...p, char: ch });
+    game.fh.afterHero();
     if (newKit) game.musou = ch.kit.createMusou(game);
     game.crowd.reset(); game.combat.reset(); game.musou.reset(); game.cam.reset(p.yaw); game.cam.tilt = p.tilt || 0;
     game.story.reset({ mode, char: ch.id, chapter: CH.id });
@@ -55,6 +60,7 @@ export async function createSim({ enemies = 300 } = {}) {
     game.crowd.step();
     game.musou.step();
     game.story.step();
+    game.fh.step();
     game.frame++;
   };
 

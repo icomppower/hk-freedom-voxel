@@ -34,6 +34,7 @@ const TRIBUTE_CH = Object.values(CHAPTERS).find((c) => c.TRIBUTE && !c.dev);
 const ITEMS = [
   { go: 'story', zh: '故事模式', en: 'Story · choose your chapter' },
   { go: 'free', zh: '自由演武', en: 'Free battle · endless waves' },
+  { go: 'fenghuo', zh: '烽火戰', en: 'Bonfire · event cards, beat the clock' },   // src/fenghuo
   { go: 'controls', zh: '操作說明', en: 'Controls' },
   { go: 'tribute', zh: '致敬', en: 'Tribute · Hong Kong, 2019' },
 ].filter((it) => (it.go === 'tribute' ? TRIBUTE_CH : it.go === 'controls' || CHAR_ORDER.length));
