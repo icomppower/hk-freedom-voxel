@@ -82,6 +82,7 @@ export function createCrowd(game, grunts) {
     raiseF: I(), feint: I(), wind: I(),                         // raiseF: rallying until (render + ring surge); feint strike; winding up
     hitHeavy: I(),                                              // last hit was heavy (set by combat, read by view.js hitGlow)
     foe: I(),                                                   // duel partner (ally ↔ Wei grunt), -1 = none
+    tgt: I(),                                                   // co-op: index in game.heroes of the hero this soldier is on
     via: I(),                                                   // ally: sf left on the road (the straight line was blocked)
     boss: I(), offName: new Array(CROWD.officerSlots).fill(null),   // story: boss flag; officer display names {zh, en}
     waveT: 0, tokensUsed: 0, strikeF: 0, gap: 0, graceF: 0, heroHp: 0, wavesOn: false, engaged: 0, zMax: Infinity,   // zMax: story stage bound (waves)
@@ -234,16 +235,30 @@ export function createCrowd(game, grunts) {
 
   function setSt(i, s) { c.st[i] = s; c.stT[i] = 0; }
 
+  // co-op (game.heroes, 2 heroes): every soldier works the nearest living hero (c.tgt); the director, rings, waves and
+  // columns follow game.hero (the lead the step binds). Solo (no list) runs exactly the single-hero code.
+  function nearest(i, H0, HS) {
+    let b = -1, bd = Infinity;
+    for (let k = 0; k < HS.length; k++) {
+      const x = HS[k]; if (x.dead) continue;
+      const d2 = (x.x - c.x[i]) * (x.x - c.x[i]) + (x.z - c.z[i]) * (x.z - c.z[i]);
+      if (d2 < bd) { bd = d2; b = k; }
+    }
+    if (b < 0) { c.tgt[i] = HS.indexOf(H0); return H0; }
+    c.tgt[i] = b; return HS[b];
+  }
+
   c.step = () => {
-    const h = game.hero, frozen = game.freeze > 0;
+    const H0 = game.hero, frozen = game.freeze > 0, HS = game.heroes && game.heroes.length > 1 ? game.heroes : null;
     if (game.freeze > 0) game.freeze--;
-    if (!frozen) squads(h);
+    if (!frozen) squads(H0);
     // a blow landed: the next strikes are feints for a while (the ring threatens, the hero keeps fighting)
-    if (h.hp < c.heroHp) c.graceF = game.frame + Math.round(rng.int(CROWD.grace[0], CROWD.grace[1]) * game.diff.grace);
-    c.heroHp = h.hp;
+    let hp = H0.hp;
+    if (HS) { hp = 0; for (const x of HS) hp += x.hp; }
+    if (hp < c.heroHp) c.graceF = game.frame + Math.round(rng.int(CROWD.grace[0], CROWD.grace[1]) * game.diff.grace);
+    c.heroHp = hp;
     let strikers = 0;
     for (let i = 0; i < N; i++) if (c.st[i] === ST.ATTACK && c.stT[i] < game.diff.windup && c.foe[i] < 0) strikers++;
-    const busy = h.state === 'attack';
     c.front += wrap(game.cam.yaw - c.front) * 0.01;                 // allies' front: the view direction, eased (≈ 1.7 s)
     // ---- AI (Wei army, then the Shu allies)
     for (let i = 0; i < T; i++) {
@@ -262,6 +277,7 @@ export function createCrowd(game, grunts) {
         releaseToken(i); c.form[i] = 0; continue;
       }
       if (c.cd[i] > 0) c.cd[i]--;
+      const h = HS ? nearest(i, H0, HS) : H0, busy = h.state === 'attack';
       const dx = h.x - c.x[i], dz = h.z - c.z[i], d = Math.hypot(dx, dz) || 1e-6;
       const face = Math.atan2(dx, dz);
       let vx = 0, vz = 0;
@@ -365,13 +381,13 @@ export function createCrowd(game, grunts) {
     if (!frozen) {
       // a token that doesn't turn into a strike within 3 s goes back to the pool
       for (let i = 0; i < N; i++) if (c.token[i] && c.st[i] !== ST.ATTACK && ++c.tokT[i] > 180) { releaseToken(i); c.cd[i] = 60; }
-      if (game.frame % 6 === 0) rings(h);
-      grantTokens(h);
-      separate(h);
-      waves(h);
-      allyColumns(h);
+      if (game.frame % 6 === 0) rings(H0);
+      if (HS) { for (const x of HS) if (!x.dead) grantTokens(x); } else grantTokens(H0);
+      separate(H0, HS);
+      waves(H0);
+      allyColumns(H0);
       // the hero swept a ring (≥ 10 KOs within ≈ 1 s): the allies near him cheer
-      if (game.frame % 30 === 0) { if (h.kos - c.kosAgo[1] >= 10) cheer(); c.kosAgo[1] = c.kosAgo[0]; c.kosAgo[0] = h.kos; }
+      if (game.frame % 30 === 0) { if (H0.kos - c.kosAgo[1] >= 10) cheer(); c.kosAgo[1] = c.kosAgo[0]; c.kosAgo[0] = H0.kos; }
     }
   };
   on('ko', (e) => { if (e.officer) cheer(); });                      // (sim-side: combat emits it inside step())
@@ -661,7 +677,7 @@ export function createCrowd(game, grunts) {
     if (best >= 0) { c.token[best] = 1; c.tokensUsed++; c.tokT[best] = 0; }
   }
 
-  function separate(h) {
+  function separate(h, HS) {
     head.fill(-1);
     for (let i = 0; i < T; i++) {
       const s = c.st[i];
@@ -690,8 +706,10 @@ export function createCrowd(game, grunts) {
           px[i] += d2 > 1e-8 ? dx / d * push : (i < j ? push : -push); pz[i] += d2 > 1e-8 ? dz / d * push : 0;
         }
       }
-      const dx = c.x[i] - h.x, dz = c.z[i] - h.z, d = Math.hypot(dx, dz);
-      if (d < hr && !h.y) { const k = (hr - d) / (d || 1e-4); px[i] += dx * k; pz[i] += dz * k; }
+      for (const x of HS || [h]) {                                      // co-op: every hero's body pushes
+        const dx = c.x[i] - x.x, dz = c.z[i] - x.z, d = Math.hypot(dx, dz);
+        if (d < hr && !x.y) { const k = (hr - d) / (d || 1e-4); px[i] += dx * k; pz[i] += dz * k; }
+      }
     }
     // every live body is clamped here, pushed or not: this runs after both movers of the step (the AI integrate above
     // and combat reactions(), which run first in main.js step()), so nobody walks, slides or is thrown through a
