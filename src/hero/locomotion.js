@@ -70,7 +70,7 @@ export function stepLocomotion(h, inp, camYaw) {
     else { h.vx *= 0.75; h.vz *= 0.75; h.speed = Math.hypot(h.vx, h.vz); h.anim.lean *= 0.7; return; }
   }
   if (!h.grounded) {                       // air control (momentum from the run carries)
-    const tvx = dx * LOCO.runSpeed * mag, tvz = dz * LOCO.runSpeed * mag;
+    const tvx = dx * LOCO.runSpeed * h.speedMul * mag, tvz = dz * LOCO.runSpeed * h.speedMul * mag;
     if (mag) {
       h.vx += clamp(tvx - h.vx, -LOCO.airControl * DT, LOCO.airControl * DT);
       h.vz += clamp(tvz - h.vz, -LOCO.airControl * DT, LOCO.airControl * DT);
@@ -86,7 +86,7 @@ export function stepLocomotion(h, inp, camYaw) {
     if (sp0 < 1.5 && h.state !== 'run') h.yaw = want;          // from a standstill: face the stick at once
     else turnToward(h, want, LOCO.turnRate * DT);
     const left = Math.abs(wrap(want - h.yaw));                  // still turning → shed some speed (no skid)
-    const target = LOCO.runSpeed * mag * (1 - LOCO.turnSlow * left / Math.PI);
+    const target = LOCO.runSpeed * h.speedMul * mag * (1 - LOCO.turnSlow * left / Math.PI);
     sp = sp0 + clamp(target - sp0, -LOCO.decel * DT, LOCO.accel * DT);
     h.vx = Math.sin(h.yaw) * sp; h.vz = Math.cos(h.yaw) * sp;  // velocity follows facing: tight arc, no drift
     setState(h, 'run');
@@ -129,7 +129,7 @@ function stepDodge(h, mag) {
   if (t === ROLL_PLANT) emit('footstep', { x: h.x, y: 0, z: h.z, foot: 'R', speed: 7, kick: 1 });   // feet plant out of the roll
   if (t >= LOCO.dodgeFrames || (mag && t >= LOCO.dodgeRunCancel)) {
     // come out of the crouch already moving, so the run picks up without a dead frame
-    const v = mag ? LOCO.runSpeed * 0.6 : 0;
+    const v = mag ? LOCO.runSpeed * h.speedMul * 0.6 : 0;
     h.vx = h.dodgeX * v; h.vz = h.dodgeZ * v; h.speed = v;
     setState(h, 'idle');
   }

@@ -18,7 +18,7 @@ export function createHero(game) {
 
   /** New battle: position, facing and (optionally) a new character. */
   h.reset = ({ x = 0, z = 0, yaw = 0, char = h.char } = {}) => {
-    h.char = char; h.kit = char.kit; h.hpMax = 400; h.musouMax = 100;
+    h.char = char; h.kit = char.kit; h.hpMax = 400; h.musouMax = 100; h.speedMul = 1;   // speedMul: 烽火 card (fenghuo.js)
     Object.assign(h, { dead: false, x, y: 0, z, vx: 0, vy: 0, vz: 0, yaw, hp: h.hpMax, musou: 0, state: 'idle', stateT: 0, move: null,
       moveT: 0, moveSeq: 0, grounded: true, airAttack: false, iframes: 0, speed: 0, runT: 0, runPhase: 0, combo: 0, comboT: 0,
       kos: 0, buf: null, bufT: 0, dodgeBuf: 0, jumpBuf: 0, musouBuf: 0, musouClip: null, musouT: 0,
@@ -33,8 +33,8 @@ export function createHero(game) {
   /** Called by combat when an enemy strike connects. Any attack move armours against grunts; officers need `armor`. */
   h.hurt = (dmg, fromX, fromZ, officer) => {
     if (h.dead || h.iframes > 0 || h.state === 'musou' || h.state === 'dodge') return false;
-    h.hp = Math.max(game.mode === 'story' ? 0 : 1, h.hp - dmg);   // free mode: the hero cannot die (the demo keeps running)
-    h.musou = Math.min(h.musouMax, h.musou + dmg * 0.15);
+    h.hp = Math.max(game.mode === 'story' || game.fh?.on ? 0 : 1, h.hp - dmg);   // 烽火戰 (game.fh) is mortal too   // free mode: the hero cannot die (the demo keeps running)
+    h.musou = Math.min(h.musouMax, h.musou + dmg * 0.15 * (game.mods?.musouGain ?? 1));
     const armored = !!h.move && h.move !== 'aim' && (!officer || h.kit.moves[h.move].armor);   // aim: a stance, not a swing
     emit('hero:hurt', { dmg, hp: h.hp, x: h.x, y: h.y + 1.2, z: h.z, armored });
     const dx = h.x - fromX, dz = h.z - fromZ, l = Math.hypot(dx, dz) || 1;   // knockback away from the striker

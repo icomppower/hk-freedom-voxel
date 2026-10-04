@@ -173,7 +173,7 @@ export function createCombat(game) {
     if (hit.shape === 'line') { dx = dx * 0.35 + Math.sin(yaw) * 0.65; dz = dz * 0.35 + Math.cos(yaw) * 0.65; }
     const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
 
-    c.hp[i] -= hit.dmg;
+    c.hp[i] -= hit.dmg * (game.mods?.heroAtk ?? 1);          // 烽火 hook: event-card attack (×1 outside 烽火戰)
     // hot silhouette only on a fresh contact (crowd/view.js hitGlow); rapid re-hits (multi-hit moves, juggles) just refresh the tint.
     // Heavy hits tint 3 sf longer and deeper (amber).
     c.flash[i] = c.flash[i] > COMBAT.tintFrames / 2 ? COMBAT.tintFrames - 2 : COMBAT.tintFrames + (hit.heavy ? 3 : 0);
@@ -244,7 +244,7 @@ export function createCombat(game) {
     }
     // hero rewards
     h.combo++; h.comboT = COMBAT.comboWindow;
-    if (h.state !== 'musou') h.musou = Math.min(h.musouMax, h.musou + COMBAT.musouPerHit + (killed ? COMBAT.musouPerKO : 0));
+    if (h.state !== 'musou') h.musou = Math.min(h.musouMax, h.musou + COMBAT.musouPerHit * (game.mods?.musouGain ?? 1) + (killed ? COMBAT.musouPerKO * (game.mods?.musouGain ?? 1) : 0));
     emit('hit', { i, x: c.x[i], y: c.y[i] + 1.1, z: c.z[i], dx, dz, move: moveId, killed, officer, heavy: !!hit.heavy });
     if (killed) {
       h.kos++;

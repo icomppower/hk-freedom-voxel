@@ -98,7 +98,7 @@ export function createCrowd(game, grunts) {
     c.x[i] = x; c.z[i] = z; c.y[i] = 0; c.vx[i] = c.vz[i] = c.vy[i] = 0;
     c.yaw[i] = Math.atan2(game.hero.x - x, game.hero.z - z);
     c.type[i] = off ? 1 : 0; c.kind[i] = kind;
-    c.hpMax[i] = c.hp[i] = i >= N ? CROWD.allyHp : off ? CROWD.officerHp * game.diff.officerHp : (kind === KIND.CAPTAIN ? CROWD.captainHp : CROWD.hp) * game.diff.gruntHp;
+    c.hpMax[i] = c.hp[i] = i >= N ? CROWD.allyHp * (game.mods?.allyHp ?? 1) : off ? CROWD.officerHp * game.diff.officerHp : (kind === KIND.CAPTAIN ? CROWD.captainHp : CROWD.hp) * game.diff.gruntHp;
     c.st[i] = engaged ? ST.ADVANCE : ST.IDLE; c.stT[i] = rng.int(0, 60);
     c.token[i] = 0; c.cd[i] = rng.int(0, 120); c.hs[i] = 0; c.flash[i] = 0; c.raiseF[i] = 0; c.feint[i] = 0; c.wind[i] = 0;
     c.rx[i] = c.rxV[i] = c.spinV[i] = 0; c.bounce[i] = 0; c.lastHit[i] = -1; c.kod[i] = 0; c.boss[i] = 0;
@@ -168,7 +168,7 @@ export function createCrowd(game, grunts) {
       k += size; n++;
     }
     for (const i of freeSlots(true)) {
-      if (i >= grunts + CROWD.officers) break;
+      if (i >= grunts + CROWD.officers + (game.mods?.officers ?? 0)) break;   // 烽火 hook: event-card officer count
       const a = rng.range(0, Math.PI * 2), d = rng.range(12, 30);
       place(i, Math.cos(a) * d, Math.sin(a) * d, false);
       c.offName[i - grunts] = FREE_OFFICERS[(i - grunts) % FREE_OFFICERS.length];
@@ -705,7 +705,7 @@ export function createCrowd(game, grunts) {
   /** Reinforcement column in front of the camera when the field runs dry. */
   function waves(h) {
     // columns keep coming while the ring is under strength, faster when it is below half
-    if (!c.wavesOn || ++c.waveT < CROWD.waveEvery[c.engaged < CROWD.engaged / 2 ? 0 : 1]) return;
+    if (!c.wavesOn || ++c.waveT < CROWD.waveEvery[c.engaged < CROWD.engaged / 2 ? 0 : 1] / (game.mods?.waves ?? 1)) return;   // 烽火 hook: card wave rate
     if (c.engaged >= CROWD.engaged || holdNear) return;                  // a block waits closer: the director uses it
     const off = freeSlots(false);
     if (off.length < CROWD.wave[0]) return;
@@ -720,7 +720,7 @@ export function createCrowd(game, grunts) {
     makeSquad(off.slice(0, n), sx, sz, Math.atan2(h.x - sx, h.z - sz), 3, SQ_CHARGE);   // a column that runs straight in
     // free mode: KO'd officers come back with the waves (story officers are named and stay down)
     for (const i of freeSlots(true)) {
-      if (game.mode === 'story' || i >= grunts + CROWD.officers) break;
+      if (game.mode === 'story' || i >= grunts + CROWD.officers + (game.mods?.officers ?? 0)) break;
       place(i, sx + rng.range(-2, 2), sz + rng.range(-2, 2), true); c.offName[i - grunts] = FREE_OFFICERS[(i - grunts) % FREE_OFFICERS.length];
       break;
     }
