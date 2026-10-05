@@ -117,14 +117,18 @@ export function createSession({ server, name = 'Player', pid, netsim = null, dMa
       case 'left': if (m.slot !== S.you) { S.partnerGone = true; status('partner-left'); } return;
       case 'back': if (m.slot !== S.you) { S.partnerGone = false; status('partner-back'); } return;
       case 'bot': status(m.slot === S.you ? 'you-bot' : 'partner-bot'); return;
-      case 'ended': S.phase = 'lobby'; S.over = true; A.ended?.(m); return;
+      case 'ended':                                   // the leader's story ended at frame m.frames: if we are behind, step the
+        if (S.phase === 'game' && !S.halted && S.simT < m.frames) { S.endMsg = m; S.live = false; return; }   // frames we hold first
+        return finish(m);
       case 'ui': A.ui?.(m); return;
       case 'slow': resend(m.from); return;            // the room dropped a run over its rate: send again from there
       case 'room_closed': S.phase = 'closed'; A.closed?.(m.reason); return;
     }
   }
 
+  function finish(m) { S.endMsg = null; S.phase = 'lobby'; S.over = true; A.ended?.(m); }
   function onStart(m) {
+    S.endMsg = null;
     const same = S.start && S.start.seed === m.seed && S.start.chapter === m.chapter && S.phase === 'game' && !S.over;
     S.you = m.you; S.phase = 'game';
     if (m.resume && same) {                          // same page, socket came back: keep the sim, re-take the log
@@ -230,6 +234,15 @@ export function createSession({ server, name = 'Player', pid, netsim = null, dMa
     tx.c = c; tx.t0 = from;
     flush();
   }
+  /** A hidden tab (timers throttled to ≈ 1 Hz, no animation frames): promise neutral input up to `ahead` ticks past the
+   *  room's clock in one message, so the partner never waits on us. Back on screen, the first input lands after the
+   *  promised ticks (≤ `ahead`). */
+  S.away = (ahead) => {
+    if (!S.live || S.halted || S.over) return;
+    const tx = S.tx, upto = Math.max(S.simT, S.frames.length) + ahead;
+    if (upto - tx.committed < BATCH) return;
+    tx.carry = EMPTY; commit(upto); flush();
+  };
   /** Re-simulating a resumed log (no inputs go out until it is done and the room said 'live'). */
   S.catchingUp = () => S.start?.resume && !S.live;
   S.depth = () => S.frames.length - S.simT;
@@ -255,6 +268,7 @@ export function createSession({ server, name = 'Player', pid, netsim = null, dMa
       if (S.live) sendInputs(sample);
     }
     if (n === 0 && S.live) sendInputs(null);        // stalled: the sender may owe the partner ticks (time-gated above)
+    if (S.endMsg && (S.simT >= S.endMsg.frames || S.over)) finish(S.endMsg);   // caught up with the room's last frame
     if (S.catchingUp() && S.synced >= 0 && S.simT >= S.synced && !S.liveAsked) { S.liveAsked = true; send({ type: 'live' }); }
     if (S.sock) S.stats.rttMax = Math.max(S.stats.rttMax, S.sock.rtt);
     return n;

@@ -5,6 +5,8 @@
 //   node --import ./bench/harness/register.mjs bench/net/client.mjs --server http://localhost:8787 --mode quick|create|join
 //        [--code ABCD] [--name A] [--pid X] [--chapter hk1] [--bot] [--netsim 150,30] [--pace] [--die-at T] [--drop-at T]
 //        [--pause-at T --pause-for N] [--max-frames N] [--style steady] [--no-ready] [--d D]
+//        [--hide-at T --hide-ms MS --hide-mode new|old]  (a background tab from tick T: one wake per second, as Chrome
+//        throttles a hidden page's timers; new = page.js's S.away + catch-up, old = the pre-fix 6 + ≤ 30 ticks a wake)
 import { createCoopGame, coop } from './simkit.mjs';
 const { createSession } = await import('../../src/net/session.js');
 const { encodeIn } = await import('../../src/net/codec.js');
@@ -16,6 +18,8 @@ const flag = (k) => process.argv.includes('--' + k);
 const server = arg('server', 'http://localhost:8787'), mode = arg('mode', 'quick'), name = arg('name', 'Node');
 const dieAt = +arg('die-at', -1), dropAt = +arg('drop-at', -1), pauseAt = +arg('pause-at', -1), pauseFor = +arg('pause-for', 120);
 const maxFrames = +arg('max-frames', 60 * 3600), pace = flag('pace');
+const hideAt = +arg('hide-at', -1), hideMs = +arg('hide-ms', 30000), hideMode = arg('hide-mode', 'new');
+let hideT0 = 0;
 const netsim = arg('netsim', null)?.split(',').map(Number) ?? null;
 const out = (o) => process.stdout.write(JSON.stringify(o) + '\n');
 
@@ -76,6 +80,13 @@ const loop = async () => {
     if (S.phase !== 'game' || !hands) { await sleep(5); continue; }
     if (dieAt >= 0 && S.simT >= dieAt) { out({ ev: 'die', simT: S.simT }); process.exit(3); }
     if (dropAt >= 0 && !dropped && S.simT >= dropAt) { dropped = true; out({ ev: 'drop', simT: S.simT }); S.drop(); }
+    if (hideAt >= 0 && S.simT >= hideAt && (!hideT0 || performance.now() - hideT0 < hideMs)) {   // hidden: wake once a second
+      if (!hideT0) { hideT0 = performance.now(); out({ ev: 'hide', simT: S.simT }); }
+      if (hideMode === 'new') { S.away(90); const w = performance.now(); while (S.depth() > 0 && performance.now() - w < 50 && S.pump(sample, 60) > 0); }
+      else { const depth = S.depth(); S.pump(sample, 6 + (depth > S.D + 4 ? Math.min(depth - S.D, 30) : 0)); }
+      await sleep(1000); acc = 0; last = performance.now();
+      continue;
+    }
     let max = 4000;
     if (pace && !S.catchingUp()) { const now = performance.now(); acc = Math.min(acc + (now - last) / (1000 / 60), 8); last = now; max = Math.floor(acc); }
     const n = S.pump(sample, Math.max(0, max));
