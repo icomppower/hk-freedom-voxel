@@ -41,7 +41,7 @@ try {
   await sleep(500);
   await click(A.page, '#coop button', '準備'); await click(B.page, '#coop button', '準備');
   for (const P of [A, B]) for (let i = 0; i < 200 && (await P.page.evaluate(() => window.__vm.state)) !== 'battle'; i++) { if ((await P.page.evaluate(() => window.__vm.state)) === 'prologue') await P.page.keyboard.press('Escape'); await sleep(300); }
-  const seen = { line: 0, prompt: 0, ring: 0, waiting: 0, asked: 0, card: 0, umbrellas: 0, arc: 0, blast: 0, dbgLine: 0, cardIn: 0, callIn: 0 };
+  const seen = { line: 0, prompt: 0, ring: 0, waiting: 0, asked: 0, card: 0, umbrellas: 0, trail: 0, arc: 0, blast: 0, pillar: 0, dbgLine: 0, cardIn: 0, callIn: 0 };
   const t0 = Date.now();
   for (;;) {
     const s = await A.page.evaluate(() => {
@@ -50,13 +50,15 @@ try {
     });
     const d = s.d;
     if (d.line) seen.line++; if (d.prompt) seen.prompt++; if (d.ring > 0) seen.ring++; if (d.call === 'waiting') seen.waiting++; if (d.call === 'asked') seen.asked++;
-    if (d.card) seen.card++; if (d.umbrellas === 10) seen.umbrellas++; if (d.arc) seen.arc++; if (d.blast) seen.blast++;
+    if (d.card) seen.card++; if (d.umbrellas === 10) seen.umbrellas++; if (d.trail) seen.trail++; if (d.pillar) seen.pillar++; if (d.arc) seen.arc++; if (d.blast) seen.blast++;
     if (/team: (ready|calling|firing|idle)/.test(s.dbg)) seen.dbgLine++; if (s.cardIn) seen.cardIn++; if (s.callIn) seen.callIn++;
     if (s.fires >= 2 && seen.blast || s.ended || Date.now() - t0 > 600000) break;
     await sleep(100);
   }
-  for (const k of ['line', 'prompt', 'ring', 'card', 'umbrellas', 'arc', 'blast', 'dbgLine', 'cardIn', 'callIn']) ok(`seen: ${k}`, seen[k] > 0, `${seen[k]} samples`);
-  ok('a call card shown (waiting or asked)', seen.waiting + seen.asked > 0, `waiting ${seen.waiting} · asked ${seen.asked}`);
+  const fr = await A.page.evaluate(() => window.__vm.scene.getObjectByName('team-musou').userData.debug.frames);
+  for (const k of ['line', 'prompt', 'ring', 'card', 'umbrellas', 'trail', 'arc', 'blast', 'pillar']) ok(`drawn: ${k}`, fr[k] > 0, `${fr[k] || 0} frames`);
+  for (const k of ['dbgLine', 'cardIn', 'callIn']) ok(`seen: ${k}`, seen[k] > 0, `${seen[k]} samples`);
+  ok('a call card shown (waiting or asked)', (fr.call || 0) > 0, `${fr.call || 0} frames`);
   const logs = await Promise.all([A, B].map((P) => P.page.evaluate(() => JSON.stringify(window.__vm.game.coop.team.log))));
   const st = await Promise.all([A, B].map((P) => P.page.evaluate(() => ({ halted: window.__coop.C.S.halted, simT: window.__coop.C.S.simT }))));
   ok('0 desyncs on both pages', !st[0].halted && !st[1].halted, JSON.stringify(st));

@@ -4,9 +4,10 @@
 //    (#hud .mu.team), a small 「齊上齊落」 prompt above the HUD
 //  · calling: a shrinking 90-tick ring on the ground round both heroes; the partner's screen shows 「齊上齊落！」 and the
 //    Musou button flashes (#touch .b-mu.team); the caller's shows "waiting for partner"
-//  · firing: the title card over the ~1 s cinematic (+ a procedural sound sting), then the spinning umbrella wall, the two
-//    pole sweeps round the ring and the shockwave (RADIUS from the sim)
-// #debug: root.userData.debug = { line, ring, umbrellas, arc, blast, card, prompt } (bench/net/team-look.mjs).
+//  · firing: the title card (龍仔 × 小美) over the ~1 s cinematic (+ a procedural sound sting), then the umbrella wall
+//    popping open round 小美, a gold trail behind 龍仔's two laps, the two ring sweeps, and the finisher: a light pillar
+//    and a double shockwave (RADIUS from the sim)
+// #debug: root.userData.debug = { line, ring, umbrellas, trail, arc, blast, pillar, card, prompt } (bench/net/team-look.mjs).
 import * as THREE from 'three';
 import { on } from '../core/events.js';
 import { BUS } from '../audio/audio.js';
@@ -32,7 +33,7 @@ const CSS = `
 export function createTeamView(scene, game, C) {
   const st = document.createElement('style'); st.textContent = CSS; document.head.append(st);
   const el = document.createElement('div'); el.id = 'team';
-  el.innerHTML = `<div class="pr" hidden>齊上齊落 · 無雙 I</div><div class="call" hidden></div><div class="card" hidden>齊上齊落<small>TEAM MUSOU</small></div>`;
+  el.innerHTML = `<div class="pr" hidden>齊上齊落 · 無雙 I</div><div class="call" hidden></div><div class="card" hidden>齊上齊落<small>龍仔 × 小美 · TEAM MUSOU</small></div>`;
   document.body.append(el);
   const prompt = el.querySelector('.pr'), call = el.querySelector('.call'), card = el.querySelector('.card');
 
@@ -46,6 +47,13 @@ export function createTeamView(scene, game, C) {
   const rings = [0, 1].map(() => add(flat(new THREE.RingGeometry(1.1, 1.35, RING_SEG, 1), GOLD, 0.85)));
   const arc = add(flat(new THREE.RingGeometry(TEAM.radius - 0.7, TEAM.radius, 96, 1), 0xffe8a0, 0.7));
   const blast = add(flat(new THREE.RingGeometry(0.85, 1, 96, 1), 0xfff2c0, 0.8));
+  const blast2 = add(flat(new THREE.RingGeometry(0.9, 1, 96, 1), GOLD, 0.7));
+  // a thin light beam on impact (normal blending: an additive column blew out the HDR bloom into banded black stripes)
+  const pillar = add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.4, 14, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe8a0, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false })));
+  // 龍仔's lap trail: glowing gold slabs along the last stretch of his circle
+  const TRAIL = 28, trailGeo = new THREE.BoxGeometry(0.5, 0.08, 0.5), trail = add(new THREE.Group());
+  const trailMats = Array.from({ length: TRAIL }, (_, k) => new THREE.MeshBasicMaterial({ color: k < 6 ? 0xfff2c0 : GOLD, transparent: true, opacity: 0.9 * (1 - k / TRAIL), depthWrite: false, blending: THREE.AdditiveBlending }));
+  for (let k = 0; k < TRAIL; k++) trail.add(new THREE.Mesh(trailGeo, trailMats[k]));
   // the umbrella wall: open umbrellas (black canopy, gold rim, gold handle) round the pair
   const wall = add(new THREE.Group());
   const canopy = new THREE.ConeGeometry(0.75, 0.42, 10, 1, true), rim = new THREE.TorusGeometry(0.75, 0.04, 4, 10), stick = new THREE.CylinderGeometry(0.025, 0.025, 1.1, 5);
@@ -61,7 +69,8 @@ export function createTeamView(scene, game, C) {
     piv.rotation.y = (k / UMB) * Math.PI * 2;
     wall.add(piv);
   }
-  const dbg = { line: false, ring: 0, umbrellas: 0, arc: 0, blast: 0, card: false, prompt: false, call: '' };
+  const dbg = { line: false, ring: 0, umbrellas: 0, trail: 0, arc: 0, blast: 0, pillar: 0, card: false, prompt: false, call: '' };
+  dbg.frames = {};                                          // per key: rendered frames it was on (the look gate reads these)
   root.userData.debug = dbg;
 
   // procedural sting: two gong strikes and a rising fifth (into the game's mix bus once the audio graph exists)
@@ -114,7 +123,15 @@ export function createTeamView(scene, game, C) {
       const t = firing ? T.t : -1;
       card.hidden = !(firing && t < TEAM.cine);
       wall.visible = firing && t >= TEAM.cine;
-      if (wall.visible) { wall.position.set(T.cx, 0, T.cz); wall.rotation.y = t * 0.12; wall.scale.setScalar(Math.min(1, (t - TEAM.cine) / 10) * Math.min(1, (TEAM.end - t) / 12)); }
+      if (wall.visible) {                                         // pops open with an overshoot, spins, folds away at the end
+        const o = Math.min(1, (t - TEAM.cine) / 8), pop = o < 1 ? o * (1.25 - 0.25 * o) : 1 + 0.08 * Math.sin((t - TEAM.cine - 8) * 0.5) * Math.max(0, 1 - (t - TEAM.cine - 8) / 20);
+        wall.position.set(T.cx, 0, T.cz); wall.rotation.y = t * 0.16; wall.scale.setScalar(pop * Math.min(1, (TEAM.fin + 10 - t) / 14));
+      }
+      trail.visible = firing && t > TEAM.lap[0] - 4 && t <= TEAM.lap[1] + 10;
+      if (trail.visible) {
+        const span = Math.PI * 2 * TEAM.laps / (TEAM.lap[1] - TEAM.lap[0]), a = T.lapAng ?? 0, fade = Math.min(1, (TEAM.lap[1] + 10 - t) / 10);
+        trail.children.forEach((m, k) => { const b = a - k * span * 0.6; m.position.set(T.cx + Math.sin(b) * TEAM.lapR, 0.1 + 0.9 * (1 - k / TRAIL), T.cz + Math.cos(b) * TEAM.lapR); m.rotation.y = b; m.material.opacity = 0.9 * (1 - k / TRAIL) * fade; });
+      }
       const sw = firing ? TEAM.arcs.find((x) => t > x - 15 && t <= x + 20) : undefined;
       arc.visible = sw !== undefined;
       if (arc.visible) {
@@ -124,7 +141,12 @@ export function createTeamView(scene, game, C) {
       }
       blast.visible = firing && t >= TEAM.blast && t < TEAM.blast + 20;
       if (blast.visible) { const u = (t - TEAM.blast) / 20; blast.position.set(T.cx, 0.1, T.cz); blast.scale.setScalar(0.5 + TEAM.radius * (1 - (1 - u) ** 3)); blast.material.opacity = 0.85 * (1 - u); }
-      Object.assign(dbg, { line: line.visible, ring: calling ? segs : 0, umbrellas: wall.visible ? UMB : 0, arc: arc.visible ? 1 : 0, blast: blast.visible ? 1 : 0, card: !card.hidden, prompt: !prompt.hidden, call: asked ? 'asked' : calling ? 'waiting' : '' });
+      blast2.visible = firing && t >= TEAM.blast + 5 && t < TEAM.blast + 20;
+      if (blast2.visible) { const u = (t - TEAM.blast - 5) / 15; blast2.position.set(T.cx, 0.12, T.cz); blast2.scale.setScalar(0.5 + TEAM.radius * 0.8 * (1 - (1 - u) ** 2)); blast2.material.opacity = 0.75 * (1 - u); }
+      pillar.visible = firing && t >= TEAM.blast && t < TEAM.blast + 14;
+      if (pillar.visible) { const u = (t - TEAM.blast) / 14; pillar.position.set(T.cx, 7, T.cz); pillar.scale.set(1 + u, 1, 1 + u); pillar.material.opacity = 0.35 * (1 - u); }
+      Object.assign(dbg, { line: line.visible, ring: calling ? segs : 0, umbrellas: wall.visible ? UMB : 0, trail: trail.visible ? TRAIL : 0, arc: arc.visible ? 1 : 0, blast: blast.visible ? 1 : 0, pillar: pillar.visible ? 1 : 0, card: !card.hidden, prompt: !prompt.hidden, call: asked ? 'asked' : calling ? 'waiting' : '' });
+      for (const k of ['line', 'ring', 'umbrellas', 'trail', 'arc', 'blast', 'pillar', 'card', 'prompt', 'call']) if (dbg[k]) dbg.frames[k] = (dbg.frames[k] || 0) + 1;
     },
     /** ?coopdebug line. */
     status() {

@@ -3,16 +3,20 @@
 // window, the press is held back); the partner's press inside it fires the Team Musou, no answer fires the caller's
 // own Musou at once; both pressing on the same tick fires it with no caller. Every decision reads the merged lockstep
 // inputs and counts ticks, so both peers resolve it identically.
-// Firing (300 ticks): 0–60 the cinematic (both heroes back to back at the midpoint, the world frozen by the Musou rule:
-// game.freeze; the camera's two-shot comes from mu.shot, wrapped in install()), 60–300 the attack under the normal
-// camera — 小美's umbrella wall round both (hits every 15 ticks inside WALL_R, pushes out), 龍仔's two pole sweeps round
-// the ring (120, 200: everything within RADIUS), the combined shockwave (280). Both invincible (iframes) and out of
-// reach (state 'musou') for all 300 ticks; both gauges are spent fully at the start.
+// Firing (300 ticks), each hero on his own moves: 0–60 the cinematic (back to back at the midpoint, the world frozen by
+// the Musou rule: game.freeze; camera two-shot through mu.shot, wrapped in install()); 60–210 小美 spins her umbrella
+// tornado in the centre inside the umbrella wall (hits every 15 ticks inside WALL_R) while 龍仔 runs two laps round it at
+// LAP_R on his pole spins (a pole hit round him every 6 ticks, a full-ring sweep at the end of each lap: 140, 210);
+// 210–250 he dashes back beside her; 250–300 the finisher — his fist and her umbrella thrust land together at 280: the
+// shockwave over RADIUS, the world held 6 ticks. The camera stays on Team Musou shots throughout (mu.shot): the two-shot,
+// high and wide over the ring for the laps, low and wide for the finisher.
+// Both invincible (iframes) and out of reach (state 'musou') for all 300 ticks; both gauges are spent fully at the start.
 // Numbers: damage per enemy caught by every hit = 1.5 × (龍仔 solo + 小美 solo, each summed over its hits); RADIUS =
 // max(9 m, 1.5 × the larger solo radius); a boss takes ≤ 25 % of its max HP per use (per-victim hits: combat.hitOne);
 // officers uncapped. A downed hero can't join and isn't revived.
 // State: game.coop.team { phase 'idle'|'calling'|'firing', t, caller, cx, cz, seq, log[], budget }. Events: team:call {i},
-// team:timeout {i}, team:start {caller, x, z}, team:end; musou:start / musou:end bracket the cinematic (camera, HUD, audio).
+// team:timeout {i}, team:start {caller, x, z}, team:arc, team:end; musou:start / musou:end bracket the
+// whole move (camera cinematic, HUD, audio).
 import { setState } from '../hero/locomotion.js';
 import { clampWalk } from '../world/map.js';
 import { emit } from '../core/events.js';
@@ -26,11 +30,15 @@ const SOLO_R = Math.max(LJ.waveR + 0.8, SM.xHit.range);                         
 export const TEAM = {
   range: 6, window: 90, cine: 60, end: 300,
   radius: Math.max(9, 1.5 * SOLO_R), wallR: 3.2, bossCap: 0.25,
-  wall: Array.from({ length: 16 }, (_, k) => 60 + 15 * k), arcs: [120, 200], blast: 280,
+  wall: Array.from({ length: 16 }, (_, k) => 60 + 15 * k), arcs: [140, 210], blast: 280,
+  lap: [70, 210], lapR: 4.6, laps: 2, lapHits: Array.from({ length: 23 }, (_, k) => 72 + 6 * k), back: [210, 250], fin: 250,
   total: 1.5 * (SOLO_LJ + SOLO_SM),
 };
-const WALL_DMG = TEAM.total * 0.25 / TEAM.wall.length, ARC_DMG = TEAM.total * 0.4 / TEAM.arcs.length, BLAST_DMG = TEAM.total * 0.35;
+// shares of the per-enemy budget: wall 25 %, lap pole hits 15 %, the two ring sweeps 25 %, the shockwave 35 %
+const WALL_DMG = TEAM.total * 0.25 / TEAM.wall.length, LAP_DMG = TEAM.total * 0.15 / TEAM.lapHits.length;
+const ARC_DMG = TEAM.total * 0.25 / TEAM.arcs.length, BLAST_DMG = TEAM.total * 0.35;
 const WALL_HIT = { shape: 'circle', dmg: WALL_DMG, kb: 'spin', force: 6, lift: 2.5, hitstop: 0 };
+const LAP_HIT = { shape: 'circle', dmg: LAP_DMG, kb: 'spin', force: 7, lift: 3.5, hitstop: 0, range: 2.6 };
 const ARC_HIT = { shape: 'circle', dmg: ARC_DMG, kb: 'spin', force: 8, lift: 4, hitstop: 0, heavy: true };
 const BLAST_HIT = { shape: 'circle', dmg: BLAST_DMG, kb: 'launch', force: 7, lift: 9.5, hitstop: 0, heavy: true, yMax: 6 };
 
@@ -98,34 +106,64 @@ function fire(game, caller, kind, bind) {
 }
 
 /** In place of both heroes' hero.step while firing (camera sim and hitboxes still step as usual). */
+const ease = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
 export function teamStep(game, bind) {
   const T = game.coop.team, H = game.heroes, t = ++T.t, w = wallHero(game), p = 1 - w;
-  for (const h of H) { h.iframes = Math.max(h.iframes, 2); h.vx = h.vz = 0; }
+  for (const h of H) { h.iframes = Math.max(h.iframes, 2); h.vx = h.vz = 0; h.y = 0; }
   const hw = H[w], hp = H[p];
-  hw.musouT = t < TEAM.cine ? 0.08 * t / TEAM.cine : 0.65;        // 小美 holds the umbrellas-open spin of her clip
-  hp.musouT = t < TEAM.cine ? 0.08 * t / TEAM.cine : 0.14 + 0.8 * (t - TEAM.cine) / (TEAM.end - TEAM.cine);
-  if (t < TEAM.cine) { game.freeze = Math.max(game.freeze, 2); return; }
-  if (t === TEAM.cine) emit('musou:end', {});                     // the camera eases back to the gameplay rig
-  hw.yaw += 0.3;
-  for (const a of TEAM.arcs) if (t > a - 15 && t <= a + 15) hp.yaw += Math.PI * 2 / 30;
+  if (t < TEAM.cine) {                                            // both raise their weapons (the start of each clip)
+    hw.musouT = hp.musouT = 0.1 * t / TEAM.cine;
+    game.freeze = Math.max(game.freeze, 2);
+    return;
+  }
   const key = -(6000000 + (T.seq % 1000) * 1000);
-  if (TEAM.wall.includes(t)) hits(game, w, WALL_HIT, TEAM.wallR, key - t, bind);
-  if (TEAM.arcs.includes(t)) { hits(game, p, ARC_HIT, TEAM.radius, key - t, bind); emit('team:arc', { x: T.cx, z: T.cz }); }
-  if (t === TEAM.blast) { hits(game, p, BLAST_HIT, TEAM.radius, key - t, bind); emit('musou:burst', { count: 0, x: T.cx, z: T.cz }); }
+  // 小美: centre, umbrellas open — her tornado (clip 112–174 of 200) on a loop, then her finisher thrust (180) at 280
+  [hw.x, hw.z] = clampWalk(T.cx, T.cz, 0.3);
+  if (t < TEAM.fin) { hw.musouT = 0.58 + 0.26 * ((t - TEAM.cine) % 40) / 40; hw.yaw += 0.35; }
+  else hw.musouT = Math.min(0.99, 0.84 + 0.06 * (t - TEAM.fin) / (TEAM.blast - TEAM.fin) + Math.max(0, t - TEAM.blast) * 0.004);
+  // 龍仔: two laps round the wall on his pole spins (clip 24–100 of 210 on a loop), then the dash back and his fist (180)
+  const [l0, l1] = TEAM.lap, a0 = T.yaw + Math.PI;
+  if (t <= l1) {
+    const u = ease((t - TEAM.cine) / (l0 - TEAM.cine));            // step out to the ring
+    const ang = a0 + Math.max(0, t - l0) / (l1 - l0) * Math.PI * 2 * TEAM.laps, r = 0.6 + (TEAM.lapR - 0.6) * (t < l0 ? u : 1);
+    [hp.x, hp.z] = clampWalk(T.cx + Math.sin(ang) * r, T.cz + Math.cos(ang) * r, 0.3);
+    hp.yaw = ang + Math.PI / 2 + ((t * 0.9) % (Math.PI * 2));      // spinning as he runs
+    hp.musouT = (24 + ((t - TEAM.cine) * 2.2) % 76) / 210;
+    T.lapAng = ang;
+  } else if (t <= TEAM.back[1]) {                                  // the dash back, fist first (clip 128–140)
+    const u = ease((t - TEAM.back[0]) / (TEAM.back[1] - TEAM.back[0]));
+    const ex = T.cx + Math.sin(T.yaw) * 0.9, ez = T.cz + Math.cos(T.yaw) * 0.9;
+    const sx = T.cx + Math.sin(T.lapAng) * TEAM.lapR, sz = T.cz + Math.cos(T.lapAng) * TEAM.lapR;
+    [hp.x, hp.z] = clampWalk(sx + (ex - sx) * u, sz + (ez - sz) * u, 0.3);
+    hp.yaw = Math.atan2(ex - sx, ez - sz);
+    hp.musouT = (124 + 18 * u) / 210;
+  } else {                                                         // the finisher: his fist lands on 280 (clip 180)
+    hp.yaw = T.yaw + Math.PI;
+    hp.musouT = Math.min(0.99, (150 + 30 * Math.min(1, (t - TEAM.back[1]) / (TEAM.blast - TEAM.back[1])) + Math.max(0, t - TEAM.blast) * 0.9) / 210);
+  }
+  if (TEAM.wall.includes(t)) hits(game, w, WALL_HIT, T.cx, T.cz, TEAM.wallR, key - t, bind);
+  if (TEAM.lapHits.includes(t)) hits(game, p, LAP_HIT, hp.x, hp.z, LAP_HIT.range, key - t, bind);
+  if (TEAM.arcs.includes(t)) { hits(game, p, ARC_HIT, T.cx, T.cz, TEAM.radius, key - t, bind); emit('team:arc', { x: T.cx, z: T.cz }); }
+  if (t === TEAM.blast) {
+    hits(game, p, BLAST_HIT, T.cx, T.cz, TEAM.radius, key - t, bind);
+    game.freeze = Math.max(game.freeze, 6);                       // the impact holds the world
+    emit('musou:burst', { count: 0, x: T.cx, z: T.cz });
+  }
   if (t >= TEAM.end) {
     for (const h of H) { h.iframes = 30; h.musouClip = null; h.musouT = 0; setState(h, 'idle'); }
     T.phase = 'idle'; T.caller = -1;
+    emit('musou:end', {});                                        // the camera eases back to the gameplay rig
     emit('team:end', {});
   }
 }
 
-/** One hit on every foe within r of the centre, credited to hero `by`; bosses capped at bossCap × hpMax per use. */
-function hits(game, by, hit, r, key, bind) {
+/** One hit on every foe within r of (x, z), credited to hero `by`; bosses capped at bossCap × hpMax per use. */
+function hits(game, by, hit, x, z, r, key, bind) {
   const T = game.coop.team, c = game.crowd, prev = game.bound;
   bind(game, by);
   for (let i = 0; i < c.N; i++) {
     const s = c.st[i];
-    if (s === ST.OFF || s === ST.DEAD || Math.hypot(c.x[i] - T.cx, c.z[i] - T.cz) > r) continue;
+    if (s === ST.OFF || s === ST.DEAD || Math.hypot(c.x[i] - x, c.z[i] - z) > r) continue;
     let h = hit;
     if (T.budget.has(i)) {
       const d = Math.min(hit.dmg, T.budget.get(i));
@@ -133,7 +171,7 @@ function hits(game, by, hit, r, key, bind) {
       T.budget.set(i, T.budget.get(i) - d);
       h = { ...hit, dmg: d };
     }
-    game.combat.hitOne(i, h, T.cx, T.cz, Math.atan2(c.x[i] - T.cx, c.z[i] - T.cz), key, true, 'musou');
+    game.combat.hitOne(i, h, x, z, Math.atan2(c.x[i] - x, c.z[i] - z), key, true, 'musou');
   }
   bind(game, prev);
 }
@@ -148,7 +186,17 @@ export function install(game) {
       const T = game.coop?.team;
       if (T?.phase === 'firing' && T.t < TEAM.cine) {
         const u = T.t / TEAM.cine;
-        Object.assign(o, { id: 50, yaw: T.yaw + Math.PI / 2 + 0.25 * u, dist: 5.2 - 1.2 * u, height: 1.2 + 0.2 * u });
+        Object.assign(o, { id: 50, yaw: T.yaw + Math.PI / 2 + 0.25 * u, dist: 5.2 - 1.2 * u, pitch: 0.12, fov: 46, height: 1.2 + 0.2 * u, shake: 0.3 });
+        return o;
+      }
+      if (T?.phase === 'firing' && T.t < TEAM.fin) {              // the laps: high and wide over the ring, drifting round
+        const u = (T.t - TEAM.cine) / (TEAM.fin - TEAM.cine);
+        Object.assign(o, { id: 52, yaw: T.yaw - Math.PI / 2 + 0.6 * u, dist: 11.5, pitch: 0.55, fov: 56, height: 1.4, shake: 0.35 });
+        return o;
+      }
+      if (T?.phase === 'firing') {             // finisher: low, wide, slowly pushing in; shake on impact
+        const u = (T.t - TEAM.fin) / (TEAM.end - TEAM.fin), hit = T.t >= TEAM.blast;
+        Object.assign(o, { id: 51, yaw: T.yaw - Math.PI / 2 - 0.35, dist: 9 - 2 * u, pitch: 0.04, fov: 60, height: 0.9 + 0.5 * u, shake: hit ? 1 : 0.4 });
         return o;
       }
       return solo();

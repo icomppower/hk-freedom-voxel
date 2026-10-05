@@ -60,14 +60,22 @@ g.step(press([1]));
 ok('partner answers inside 90 ticks → firing (answer, caller 0)', T().phase === 'firing' && T().log.at(-1).kind === 'answer' && T().log.at(-1).caller === 0);
 ok('both gauges spent fully', G.heroes.every((h) => h.musou === 0), G.heroes.map((h) => h.musou).join(' / '));
 let inv = true, state = true, hp0 = G.heroes.map((h) => h.hp), maxR = 0;
+const lj = G.heroes.findIndex((h) => h.char.id === 'lungjai'), sm = 1 - lj, lap = { min: 1e9, max: 0, turn: 0, last: null }, smMax = { d: 0 }, fin = {};
 for (let k = 0; k < TEAM.end - 1; k++) {
   const t = T().t;
   c.x[bi] = T().cx + 1.2; c.z[bi] = T().cz + 1.2;            // the boss pinned next to them: every hit lands, the cap must bind
   if (t % 30 === 5) for (const h of G.heroes) inv = !h.hurt(50, h.x + 1, h.z, true) && inv;
   state = state && G.heroes.every((h) => h.state === 'musou');
+  { const T0 = T(), a = G.heroes[lj], b = G.heroes[sm], d = Math.hypot(a.x - T0.cx, a.z - T0.cz);
+    if (t > TEAM.lap[0] && t <= TEAM.lap[1]) { lap.min = Math.min(lap.min, d); lap.max = Math.max(lap.max, d); const ang = Math.atan2(a.x - T0.cx, a.z - T0.cz); if (lap.last !== null) { let da = ang - lap.last; da -= Math.round(da / (2 * Math.PI)) * 2 * Math.PI; lap.turn += da; } lap.last = ang; }
+    if (t > TEAM.cine) smMax.d = Math.max(smMax.d, Math.hypot(b.x - T0.cx, b.z - T0.cz));
+    if (t === TEAM.blast) Object.assign(fin, { ljT: a.musouT * 210, smT: b.musouT * 200, gap: Math.hypot(a.x - b.x, a.z - b.z), ljClip: a.musouClip, smClip: b.musouClip }); }
   if (TEAM.arcs.includes(t + 1)) { const before = new Map(dmg); g.step([idle(), idle()]); for (const [i] of dmg) if (!before.has(i) || dmg.get(i) !== before.get(i)) maxR = Math.max(maxR, Math.hypot(c.x[i] - T().cx, c.z[i] - T().cz)); continue; }
   g.step([idle(), idle()]);
 }
+ok('龍仔 runs the ring on his own clip: two laps at ≈ LAP_R round the centre', fin.ljClip === 'mu_lungjai' && Math.abs(Math.abs(lap.turn) - Math.PI * 2 * TEAM.laps) < 0.3 && lap.min > TEAM.lapR - 0.8 && lap.max < TEAM.lapR + 0.3, `turned ${(Math.abs(lap.turn) / (2 * Math.PI)).toFixed(2)} laps, r ${lap.min.toFixed(2)}–${lap.max.toFixed(2)} m`);
+ok('小美 holds the centre on her own clip (umbrella tornado)', fin.smClip === 'mu_siumei' && smMax.d < 0.5, `max ${smMax.d.toFixed(2)} m from centre`);
+ok('finisher together on the shockwave tick: his fist (clip 180/210) + her thrust (180/200), side by side', Math.abs(fin.ljT - 180) < 3 && Math.abs(fin.smT - 180) < 3 && fin.gap < 1.5, `龍仔 ${fin.ljT?.toFixed(1)} · 小美 ${fin.smT?.toFixed(1)} · ${fin.gap?.toFixed(2)} m apart`);
 ok('both invincible for the whole 300 ticks (hurt() refused, hp unchanged)', inv && G.heroes.every((h, i) => h.hp === hp0[i]));
 ok('both in the Musou state (out of reach) throughout', state);
 ok('a pole sweep reaches past the solo radius', maxR > Math.max(LJ.waveR + 0.8, SM.xHit.range), `farthest victim ${maxR.toFixed(1)} m`);
