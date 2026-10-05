@@ -1,7 +1,7 @@
 // Perf lane: each chapter's map in the real page (story mode, the bot fighting, default 300 enemies, then ?enemies=600),
 // 20 s of rAF deltas after the first 4 s → p50 / p95 / max frame time. Budget: p95 ≤ 17 ms (60 fps held).
 import { openGame } from '../harness/browser.mjs';
-const chs = process.argv.slice(2).length ? process.argv.slice(2) : ['hk1', 'hk2', 'hk3', 'hk5', 'hk4'];
+const chs = process.argv.slice(2).length ? process.argv.slice(2) : ['hk1', 'hk2', 'hk3', 'hk4'];
 let bad = 0;
 for (const ch of chs) for (const en of [300, 600]) {
   const g = await openGame({ query: `?go=story&char=lungjai&ch=${ch}&enemies=${en}`, args: ['--disable-gpu-vsync'], init: () => {

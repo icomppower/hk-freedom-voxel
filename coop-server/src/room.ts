@@ -17,7 +17,7 @@ import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./index";
 
 const CHARS = ["lungjai", "siumei"];
-const CHAPTERS = ["hk1", "hk2", "hk3", "hk5", "hk4"];
+const CHAPTERS = ["hk1", "hk2", "hk3", "hk4"];
 const LOBBY_IDLE_MS = 10 * 60_000, CAP_MS = 2 * 60 * 60_000, CLEANUP_MS = 5_000, BOT_AFTER_MS = 60_000;
 const IN_RATE = 40, IN_BURST = 120;               // input messages per second per connection (token bucket; a client
                                                   // sends ≤ 20 / s), ≤ 120 ticks per message

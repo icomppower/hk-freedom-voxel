@@ -19,19 +19,6 @@ export const RAPTOR = {
   scale: 1.22, tip: 0.95, voxel: 0.03, kneel: true,
 };
 
-// ---------------------------------------------------------------- 速龍指揮官 Raptor Commander (8·12 airport boss): 1.13×, the
-// 速龍 kit heavier — charcoal vest over the all-black kit, shin guards, gas-mask helmet with the clear visor raised, a
-// shoulder radio, a longer baton and a bigger plain shield. Original archetype; no badge, rank mark or number.
-const CMD = { ...RAP, shirt: hex('#14141f'), pants: hex('#14141f') };
-export const COMMANDER = {
-  parts: { ...humanBody(CMD, { bulk: 1.16, vest: 0x2c303c, patch: true, pads: 0x2c303c }),
-    head: humanHead(CMD, { helmet: { c: 0x10121a, visor: 0x8aa4b8, snout: true } }) },
-  weapon: [...stick(0x121212, { butt: -0.3, tip: 1.15, w: 0.05 }), box([0.07, 0.07, 0.12], [0, 0, -0.2], 0x2a2a2a)],
-  offhand: roundShield(0x5a6e80, 0x101216, 0.42),
-  scale: 1.3, tip: 1.15, voxel: 0.028, kneel: true,
-};
-COMMANDER.parts.torso = [...COMMANDER.parts.torso, b([0.1, 0.36, 0.12], [0.16, 0.44, 0.15], 0x1a1a1a), b([0.13, 0.44, 0.13], [0.145, 0.52, 0.145], 0x1a1a1a)];   // radio + aerial
-
 // ---------------------------------------------------------------- 便衣 plainclothes: grey jacket, cap, pepper-ball launcher
 const PLN = { ...SKIN, shirt: 0x3a3a44, pants: 0x2e2e36, boot: 0x1a1a1a, belt: 0x1a1a1a };
 export const PLAIN = {
