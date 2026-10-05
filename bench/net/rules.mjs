@@ -58,7 +58,8 @@ ok('both down → back at the gate', rb.length === 2 && rb[0].f - bd === COOP.bo
 
 // ---- separate Musou gauges
 g.start({ chars: ['lungjai', 'siumei'], chapter: 'hk1', seed: 6 });
-let differ = 0; for (let k = 0; k < 3000; k++) { run(1); if (H()[0].musou !== H()[1].musou) differ++; }
-ok('separate Musou gauges', differ > 2000, `gauges differ on ${differ}/3000 frames (e.g. ${H()[0].musou.toFixed(1)} vs ${H()[1].musou.toFixed(1)})`);
+// (a Team Musou 齊上齊落 spends both gauges at once: frames with both empty don't count)
+let differ = 0, live = 0; for (let k = 0; k < 3000; k++) { run(1); if (H()[0].musou || H()[1].musou) { live++; if (H()[0].musou !== H()[1].musou) differ++; } }
+ok('separate Musou gauges', differ > 0.9 * live && live > 1000, `gauges differ on ${differ}/${live} frames with a non-empty gauge (e.g. ${H()[0].musou.toFixed(1)} vs ${H()[1].musou.toFixed(1)})`);
 console.log(fail ? `RULES FAIL ${fail}/${pass + fail}` : `RULES PASS ${pass}/${pass + fail}`);
 process.exit(fail ? 1 : 0);

@@ -245,7 +245,7 @@ export function createCoopOverlay(C, { revive }) {
         lastDbg = now;
         const s = S?.stats || {}, lh = s.lastHash;
         dbg.textContent = `rtt ${Math.round(S?.rtt() ?? 0)} ms · D ${S?.D} · tick ${S?.simT} · queue ${S?.depth()} · stalls ${s.stalls} (${(100 * s.stalls / Math.max(1, s.stalls + s.steps)).toFixed(1)} %)\n` +
-          `hash ${lh ? `${lh[0]} ${lh[1]}` : '-'} · msgs ${S?.sock?.msgs ?? 0} (${C2 && C2.mpm ? C2.mpm() : '-'} /min) · you ${C.you} · ${C.status}`;
+          `hash ${lh ? `${lh[0]} ${lh[1]}` : '-'} · msgs ${S?.sock?.msgs ?? 0} (${C2 && C2.mpm ? C2.mpm() : '-'} /min) · you ${C.you} · ${C.status}\nteam: ${C.teamStatus?.() ?? '-'}`;
       }
     },
   };

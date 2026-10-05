@@ -17,8 +17,8 @@ for ch in hk1 hk2 hk3 hk4; do
   g $N bench/maps/mapcheck.mjs $ch lungjai; g $N bench/maps/mapcheck.mjs $ch siumei
   for c in lungjai siumei; do for st in steady rush back; do g $N bench/bot/run.mjs --char $c --chapter $ch --style $st --quiet; done; done
 done
-echo "== co-op (Node): 2P bots hk1, 2P rules, battle carry-over"
-g $N bench/net/duo.mjs hk1; g $N bench/net/rules.mjs; g $N bench/net/carry.mjs hk1 3000 hk2 hk1
+echo "== co-op (Node): 2P bots hk1, 2P rules, battle carry-over, Team Musou"
+g $N bench/net/duo.mjs hk1; g $N bench/net/rules.mjs; g $N bench/net/carry.mjs hk1 3000 hk2 hk1; g $N bench/net/team.mjs
 [ "$1" = "--quick" ] && { echo "QUICK GATES GREEN"; exit 0; }
 echo "== Chrome: boot, scrolls";     g node bench/harness/smoke.mjs "?x" 4; g node bench/harness/shots-scroll.mjs ch1
 echo "== Chrome: crowd, skins, UI";  g node bench/harness/crowdprobe.mjs ch1; g node bench/harness/skin-test.mjs
@@ -29,6 +29,7 @@ echo "== Chrome: touch hook";        g node bench/harness/touch-twin.mjs; g node
 echo "== Chrome: ending flow";       g node bench/harness/scroll-flow.mjs hk4
 echo "== Chrome: cutscenes";         g node bench/harness/cut-flow.mjs; g node bench/harness/cut-shots.mjs; g node bench/harness/cut-shots.mjs --skip
 echo "== Chrome: co-op entry";       g node bench/net/coop-entry.mjs
+echo "== Chrome: Team Musou look";   g $N bench/net/team-look.mjs
 echo "== Chrome: ?preview gallery";   g node bench/harness/preview-flow.mjs
 g node bench/harness/cut-shots.mjs --mobile; g node bench/harness/ending-fit.mjs
 echo "== Chrome: frame time";        g node bench/maps/perfmap.mjs hk1 hk4

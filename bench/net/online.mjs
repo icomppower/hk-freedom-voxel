@@ -9,6 +9,7 @@
 //              the hero back; 0 desyncs, identical final hashes
 //   pause      one client holds pause for 300 ticks: both consume the same paused frames, hashes identical
 //   netsim     both clients ?netsim=150,30 and paced at 60 Hz: 0 desyncs; RTT and stall % reported
+//   team       齊上齊落: ≥ 3 Team Musous through the server (event 2 a timeout → solo, a same-tick press from event 3 on), 0 desyncs
 //   hidden     B in a background tab (1 Hz wakes) for 30 s: 0 desyncs, on-screen A stalls < 5 % (--hide-mode old: pre-fix)
 //   coopbot    one client + the room's bot slot (?coopbot) clears hk1
 //   scaling    (every run) boss hpMax = base × 1.6, officers × 1.3 (× difficulty)
@@ -23,7 +24,7 @@ const { CHAPTERS } = await import('../../src/story/chapters.js');
 const { CROWD } = await import('../../src/crowd/crowd.js');
 const OFFS = Object.values(CHAPTERS[chapter].OFF);
 const want = argv.filter((a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--'));
-const ALL = ['quick', 'room', 'full', 'reconnect', 'pause', 'coopbot', 'takeover', 'netsim', 'hidden'];
+const ALL = ['quick', 'room', 'full', 'reconnect', 'pause', 'coopbot', 'takeover', 'netsim', 'hidden', 'team'];
 const list = want.length ? want : ALL;
 let server = opt('server', null), dev = null;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -155,6 +156,16 @@ for (const sc of list) {
     const [a, b] = await pair('netsim', ['--netsim', '150,30', '--pace', ...dA], ['--netsim', '150,30', '--pace', ...dA]);
     await a.done; await b.done;
     judge(`netsim 150,30 paced 60 Hz${fd ? ' (fixed D ' + fd + ')' : ''}`, a, b);
+  }
+  if (sc === 'team') {   // 齊上齊落: bots fire it through the real server; event 2 unanswered (timeout), event 3 same tick
+    const tA = ['--d', '4', '--team-ignore', '2', '--team-same', '3', ...(opt('team-debug', null) ? ['--debug'] : [])];
+    const [a, b] = await pair('team', tA, tA);
+    await a.done; await b.done;
+    const la = a.result()?.team || [], lb = b.result()?.team || [];
+    const fires = la.filter((e) => e.kind !== 'timeout').length, same = JSON.stringify(la) === JSON.stringify(lb);
+    const ok = judge('Team Musou 齊上齊落 hk1', a, b, ` · team ${la.map((e) => `${e.kind}@${e.f}`).join(' ')}`);
+    const si = la.findIndex((e) => e.kind === 'same');
+    if (ok) report('team musou events', same && fires >= 3 && la[1]?.kind === 'timeout' && si >= 2, `fires ${fires} · logs equal ${same} · event 2 ${la[1]?.kind} · same-tick at event ${si + 1}`);
   }
   if (sc === 'hidden') {   // B goes to a background tab for 30 s at tick 1800; A (on screen) must not wait on it
     const mode = opt('hide-mode', 'new');
