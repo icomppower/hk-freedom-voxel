@@ -13,13 +13,11 @@
 //   sides.names { us: {zh, en}, them: {zh, en} }   who the HUD's reinforcement banners name
 //   after              (香港自由戰士) the cutscene played after a story WIN, before the next chapter (story/cutscenes/)
 //   endScene           the end scene between the ENDING scroll and the TRIBUTE card
-//   chain              (香港自由戰士) a story WIN goes straight on to the next chapter (no cutscene in between)
 import * as ch1 from './ch1.js';
 import * as hk1 from './hk1.js';
 import * as hk2 from './hk2.js';
 import * as hk3 from './hk3.js';
 import * as hk4 from './hk4.js';
-import * as hk5 from './hk5.js';
 import { DEV } from '../chars/index.js';
 
 const LIST = [
@@ -45,23 +43,15 @@ const LIST = [
     allies: [-1, 1].map((sx) => ({ x: sx * 6, z: -132, n: 10, cols: 5, hold: true })),   // the crowd on the plaza
   },
   {
-    ...hk3, id: 'hk3', chain: true, map: 'yuenlong', cast: ['lungjai', 'siumei'],
+    ...hk3, id: 'hk3', after: 'between3', map: 'yuenlong', cast: ['lungjai', 'siumei'],
     title: { small: '第三章', zh: '元朗', en: 'CHAPTER III · YUEN LONG' },
     sides: { us: '港', them: '白', names: { us: { zh: '乘客', en: 'Passengers' }, them: { zh: '白衫友', en: 'White shirts' } } },
     skin: { foe: 'white', ally: 'civil' },
     allies: [-1, 1].map((sx) => ({ x: sx * 5, z: -128, n: 6, cols: 3, hold: true })),   // passengers who stood up to them
   },
   {
-    // 8·12 機場: campaign order 元朗 → 機場 → 理工 (hk3 chains straight into it; 竹枝 between3 now plays after it, before hk4)
-    ...hk5, id: 'hk5', after: 'between3', map: 'airport', cast: ['lungjai', 'siumei'],
-    title: { small: '第四章', zh: '機場', en: 'CHAPTER IV · THE AIRPORT' },
-    sides: { us: '港', them: '警', names: { us: { zh: '手足', en: 'Protesters' }, them: { zh: '防暴警', en: 'Riot police' } } },
-    skin: { foe: 'riot', ally: 'blackbloc' },
-    allies: [-1, 1].map((sx) => ({ x: sx * 7, z: -128, n: 10, cols: 5, hold: true })),   // the sit-in, either side of the hall
-  },
-  {
     ...hk4, id: 'hk4', endScene: 'ending', map: 'polyu', cast: ['lungjai', 'siumei'],
-    title: { small: '第五章', zh: '理工大學', en: 'CHAPTER V · POLYU SIEGE' },
+    title: { small: '第四章', zh: '理工大學', en: 'CHAPTER IV · POLYU SIEGE' },
     sides: { us: '港', them: '警', names: { us: { zh: '手足', en: 'Protesters' }, them: { zh: '防暴警', en: 'Riot police' } } },
     skin: { foe: 'riot', ally: 'blackbloc' },
     allies: [-1, 1].map((sx) => ({ x: sx * 6, z: -130, n: 10, cols: 5, hold: true })),   // the students holding the podium

@@ -12,7 +12,7 @@ echo "== character + boss gates";    g $N bench/chars/gates.mjs lungjai; g $N be
 g $N bench/chars/boss.mjs lungjai; g $N bench/chars/boss.mjs siumei; g $N bench/chars/stamp-model.mjs
 echo "== scroll columns";            g $N bench/harness/cols.mjs
 echo "== cutscene look";             g $N bench/chars/cut-look.mjs
-for ch in hk1 hk2 hk3 hk5 hk4; do
+for ch in hk1 hk2 hk3 hk4; do
   echo "== $ch: map gate + bot (both playables × steady / rush / back)"
   g $N bench/maps/mapcheck.mjs $ch lungjai; g $N bench/maps/mapcheck.mjs $ch siumei
   for c in lungjai siumei; do for st in steady rush back; do g $N bench/bot/run.mjs --char $c --chapter $ch --style $st --quiet; done; done
@@ -30,7 +30,6 @@ echo "== Chrome: ending flow";       g node bench/harness/scroll-flow.mjs hk4
 echo "== Chrome: cutscenes";         g node bench/harness/cut-flow.mjs; g node bench/harness/cut-shots.mjs; g node bench/harness/cut-shots.mjs --skip
 echo "== Chrome: ?preview gallery";   g node bench/harness/preview-flow.mjs
 g node bench/harness/cut-shots.mjs --mobile; g node bench/harness/ending-fit.mjs
-echo "== Chrome: 機場 look (#debug asserts)"; g node bench/maps/airport-look.mjs lungjai
-echo "== Chrome: frame time";        g node bench/maps/perfmap.mjs hk1 hk4 hk5
-echo "== Chrome: mobile frame time"; g node bench/maps/perf-mobile.mjs ch1 hk1 hk4 hk5
+echo "== Chrome: frame time";        g node bench/maps/perfmap.mjs hk1 hk4
+echo "== Chrome: mobile frame time"; g node bench/maps/perf-mobile.mjs ch1 hk1 hk4
 echo "ALL GATES GREEN"
