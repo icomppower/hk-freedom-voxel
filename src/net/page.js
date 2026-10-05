@@ -205,11 +205,18 @@ export function createCoopPage(api) {
     else if (e.state !== 'battle') C.inBattle = false;
     if (e.state === 'title' && C.S) { coop.leave(); detachCoop(game); dropPartner?.(); partnerViews?.hero.dispose(); partnerViews?.mu.dispose(); partnerViews = null; dropPartner = null; }
   });
-  // a hidden tab gets no animation frames: keep the lockstep going on a timer (the partner would wait otherwise)
+  // a hidden tab gets no animation frames and its timers run at ≈ 1 Hz: promise neutral input 1.5 s ahead (the partner
+  // would wait otherwise) and step every frame that has arrived (≤ 50 ms of work per call)
   let hidT = performance.now();
   setInterval(() => {
     const now = performance.now(), d = Math.min(1, (now - hidT) / 1000); hidT = now;
-    if (document.hidden && coop.active()) coop.frame(d);
+    if (!document.hidden || !coop.active()) return;
+    coop.frame(d);
+    const S = C.S;
+    if (!S || S.catchingUp()) return;
+    S.away(90);
+    while (S.depth() > 0 && performance.now() - now < 50 && S.pump(sample, 60) > 0);
+    bind(game, C.you);
   }, 200);
   // 2P rule events → overlay banners
   on('coop:down', (e) => overlay.event('down', e.i));

@@ -9,6 +9,7 @@
 //              the hero back; 0 desyncs, identical final hashes
 //   pause      one client holds pause for 300 ticks: both consume the same paused frames, hashes identical
 //   netsim     both clients ?netsim=150,30 and paced at 60 Hz: 0 desyncs; RTT and stall % reported
+//   hidden     B in a background tab (1 Hz wakes) for 30 s: 0 desyncs, on-screen A stalls < 5 % (--hide-mode old: pre-fix)
 //   coopbot    one client + the room's bot slot (?coopbot) clears hk1
 //   scaling    (every run) boss hpMax = base × 1.6, officers × 1.3 (× difficulty)
 //   node --import ./bench/harness/register.mjs bench/net/online.mjs [scenario …] [--server URL] [--chapter hk1]
@@ -22,7 +23,7 @@ const { CHAPTERS } = await import('../../src/story/chapters.js');
 const { CROWD } = await import('../../src/crowd/crowd.js');
 const OFFS = Object.values(CHAPTERS[chapter].OFF);
 const want = argv.filter((a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--'));
-const ALL = ['quick', 'room', 'full', 'reconnect', 'pause', 'coopbot', 'takeover', 'netsim'];
+const ALL = ['quick', 'room', 'full', 'reconnect', 'pause', 'coopbot', 'takeover', 'netsim', 'hidden'];
 const list = want.length ? want : ALL;
 let server = opt('server', null), dev = null;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -154,6 +155,14 @@ for (const sc of list) {
     const [a, b] = await pair('netsim', ['--netsim', '150,30', '--pace', ...dA], ['--netsim', '150,30', '--pace', ...dA]);
     await a.done; await b.done;
     judge(`netsim 150,30 paced 60 Hz${fd ? ' (fixed D ' + fd + ')' : ''}`, a, b);
+  }
+  if (sc === 'hidden') {   // B goes to a background tab for 30 s at tick 1800; A (on screen) must not wait on it
+    const mode = opt('hide-mode', 'new');
+    const [a, b] = await pair('hidden', ['--pace'], ['--pace', '--hide-at', '1800', '--hide-ms', '30000', '--hide-mode', mode]);
+    await a.done; await b.done;
+    const st = a.result()?.stats.stallPct;
+    const ok = judge(`partner in a background tab 30 s (${mode})`, a, b, ` · on-screen player stall ${st} %`);
+    if (ok && !(st < 5)) report('on-screen player keeps playing', false, `stall ${st} % ≥ 5 %`);
   }
   console.log(`   (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
 }
