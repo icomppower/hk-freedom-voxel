@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>xengine</title>
+<script type="importmap">{ "imports": { "three": "../../vendor/three/three.module.js", "three/addons/": "../../vendor/three/addons/" } }</script>
+<script type="module">
+// Cross-engine probe page (bench/net/xengine.mjs): the 2P bot sim headless in this browser's JS engine, checkpoints out.
+const q = new URLSearchParams(location.search);
+if (!q.has('native')) (await import('../../src/core/dmath.js')).install();
+const { createHero } = await import('../../src/hero/hero.js');
+const { createCrowd } = await import('../../src/crowd/crowd.js');
+const { createCombat } = await import('../../src/combat/combat.js');
+const { createCamSim } = await import('../../src/camera/camera.js');
+const { createStory } = await import('../../src/story/index.js');
+const { on } = await import('../../src/core/events.js');
+const coop = await import('../../src/net/coopsim.js');
+const { coopHash } = await import('../../src/net/hash.js');
+const game = { frame: 0, hitstop: 0, freeze: 0, mode: 'story', diff: (await import('../../src/core/difficulty.js')).difficulty() };
+game.cam = createCamSim(); game.hero = createHero(game); game.crowd = createCrowd(game, 300); game.combat = createCombat(game);
+game.musou = game.hero.kit.createMusou(game); game.story = createStory(game);
+coop.attachCoop(game);
+let end = null; on('story:end', (e) => { end = e; });
+coop.coopStart(game, { chars: ['lungjai', 'siumei'], chapter: q.get('ch') || 'hk1', seed: +(q.get('seed') || 1) });
+const out = {}, max = +(q.get('frames') || 1e9);
+while (!end && game.frame < max) { coop.coopStep(game, [null, null]); if (game.frame % 600 === 0) out[game.frame] = coopHash(game); }
+out[game.frame] = coopHash(game);
+window.__res = { out, win: end?.win ?? null, frame: game.frame, dmath: !!globalThis.__dmath };
+</script>

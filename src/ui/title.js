@@ -34,6 +34,7 @@ const TRIBUTE_CH = Object.values(CHAPTERS).find((c) => c.TRIBUTE && !c.dev);
 const ITEMS = [
   { go: 'story', zh: '故事模式', en: 'Story · choose your chapter' },
   { go: 'free', zh: '自由演武', en: 'Free battle · endless waves' },
+  ...(new URLSearchParams(location.search).has('coop') ? [{ go: 'coop', zh: '網上合作', en: 'Online co-op · 2 players' }] : []),   // ?coop: src/net/page.js
   { go: 'controls', zh: '操作說明', en: 'Controls' },
   { go: 'tribute', zh: '致敬', en: 'Tribute · Hong Kong, 2019' },
 ].filter((it) => (it.go === 'tribute' ? TRIBUTE_CH : it.go === 'controls' || CHAR_ORDER.length));
@@ -159,6 +160,7 @@ export function createTitle(el, flow) {
     }
     const it = ITEMS[cur];
     if (it.go === 'controls') { sfx('ok'); return setCtl(true); }
+    if (it.go === 'coop') { sfx('ok'); busy = true; return inkWipe(() => flow.go('coop')); }
     if (it.go === 'tribute') { sfx('ok'); busy = true; return inkWipe(() => flow.go('ending', { mode: 'story', char: TRIBUTE_CH.cast[0], chapter: TRIBUTE_CH.id, tribute: true })); }
     sfx('ok'); setDif(it.go);
   };

@@ -33,6 +33,7 @@ import { emit, on } from '../core/events.js';
 import { zone, setGate, GATES, WALL_Z, GATE_X, MAP } from '../world/map.js';
 import { CHARS } from '../chars/index.js';
 import { resolveChapter } from './chapters.js';
+import { CROWD } from '../crowd/crowd.js';
 
 let BEATS, OFF, SPK;                            // the active chapter's script (story.reset)
 
@@ -49,6 +50,12 @@ const nearZ = (id) => { const q = zone(id); return q.z - (q.r ?? q.d / 2); };
 
 export function createStory(game) {
   const S = { mode: 'free', char: 'zhaoyun', t: 0, done: false, maxChain: 0, downT: -1 };
+  // co-op (src/net/coopsim.js: game.heroes, 2 heroes): triggers take the furthest hero / the pair's KOs, the stage bound
+  // and the victory i-frames / heals hold for both, a single hero down is not a defeat (2P revive rules), officers and
+  // bosses get more HP. Solo (no list) is the single-hero code below, unchanged.
+  const duo = () => (game.heroes && game.heroes.length > 1 ? game.heroes : null);
+  const kosOf = (h) => { const D = duo(); if (!D) return h.kos; let k = 0; for (const x of D) k += x.kos; return k; };
+  const zOf = (h) => { const D = duo(); if (!D) return h.z; let z = -Infinity; for (const x of D) if (x.z > z) z = x.z; return z; };
   const st = { morale: undefined, target: null };
   const DLG_GAP = 12;                            // sim frames between two queued lines
 
@@ -56,14 +63,14 @@ export function createStory(game) {
 
   st.stats = () => {
     const h = game.hero, time = Math.round(S.t / 60);
-    const s = { kos: h.kos, time, hpMax: h.hpMax, maxChain: S.maxChain, dmg: S.dmg };
+    const s = { kos: kosOf(h), time, hpMax: h.hpMax, maxChain: S.maxChain, dmg: S.dmg };
     if (S.won >= 0) s.rank = rank(s);
     return s;
   };
   S.end = (win) => { if (!S.done) { S.done = true; game.timeScale = 1; emit('story:end', { win, stats: st.stats() }); } };
 
   // sim-side listeners (these events fire inside step(), so the bookkeeping stays deterministic)
-  on('hero:down', () => { if (S.mode === 'story' && S.won < 0) S.downT = S.t; });
+  on('hero:down', () => { if (S.mode === 'story' && S.won < 0 && !duo()) S.downT = S.t; });
   on('hero:hurt', (e) => { S.dmg += e.dmg; });
   on('ko', (e) => { if (e.officer && S.off) for (const k in S.off) if (S.off[k] === e.i) { S.dead[k] = true; S.off[k] = -1; } });
 
@@ -88,9 +95,9 @@ export function createStory(game) {
     if (Array.isArray(w)) return w.some(holds);
     const h = game.hero;
     if (w.wait != null && S.t - S.beatT < w.wait) return false;
-    if (w.kos != null && h.kos - S.koBase < w.kos) return false;
-    if (w.zone && h.z < nearZ(w.zone)) return false;
-    if (w.at && h.z < pos(w.at)[1]) return false;
+    if (w.kos != null && kosOf(h) - S.koBase < w.kos) return false;
+    if (w.zone && zOf(h) < nearZ(w.zone)) return false;
+    if (w.at && zOf(h) < pos(w.at)[1]) return false;
     if (w.down && !S.dead[w.down]) return false;
     if (w.below && officerFrac(w.below[0]) >= w.below[1]) return false;
     if (w.flag && !S.flags[w.flag]) return false;
@@ -105,13 +112,14 @@ export function createStory(game) {
     for (const k in b.officers || {}) {                                // spawned on the next steps (retried while slots are full)
       const o = b.officers[k], d = OFF[o.like || k];
       const [x, z] = pos(o.at);
-      S.want[k] = { x, z, name: d.name, hp: d.hp, boss: !!d.boss, engaged: !!o.engaged };
+      const hp = duo() ? (d.hp ?? CROWD.officerHp) * (d.boss ? 1.6 : 1.3) : d.hp;   // co-op: boss × 1.6, officer × 1.3
+      S.want[k] = { x, z, name: d.name, hp, boss: !!d.boss, engaged: !!o.engaged };
       S.wantModel[k] = d.model || null;
       S.off[k] = -1; S.dead[k] = false;
     }
     if (b.waves != null) c.setWaves(b.waves);
     if (b.limit) { S.limit = c.zMax = b.limit.z ? pos(b.limit.z)[1] : Infinity; S.nag = b.limit.nag || null; }   // crowd: waves spawn inside it
-    if (b.heal && !h.dead) h.hp = Math.min(h.hpMax, h.hp + b.heal * game.diff.heal * h.hpMax);
+    for (const x of duo() || [h]) if (b.heal && !x.dead) x.hp = Math.min(x.hpMax, x.hp + b.heal * game.diff.heal * x.hpMax);
     if (b.morale != null) S.mBase = b.morale === 1 ? 1 : S.mBase + b.morale;
     if (b.gate) setGate(b.gate, true);
     if (b.banner) emit('story:banner', { dur: 150, ...b.banner });
@@ -169,7 +177,7 @@ export function createStory(game) {
     if (S.won >= 0) {
       const k = S.t - S.won;
       game.timeScale = k < 90 ? 0.3 : Math.min(1, 0.3 + (k - 90) / 60 * 0.7);
-      h.iframes = Math.max(h.iframes, 2);
+      for (const x of duo() || [h]) x.iframes = Math.max(x.iframes, 2);
       if (k >= 300) S.end(true);
     } else if (S.downT >= 0) { if (S.t - S.downT >= 120) S.end(false); return; }     // 2 s on the ground, then defeat
 
@@ -177,7 +185,7 @@ export function createStory(game) {
       const b = BEATS[S.beat];
       if (b.skip && holds(b.skip)) { S.beat++; continue; }
       if (!holds(b.when)) break;
-      S.beat++; S.beatT = S.t; S.koBase = h.kos;
+      S.beat++; S.beatT = S.t; S.koBase = kosOf(h);
       fire(b);
       if (b.win) break;
     }
@@ -191,8 +199,8 @@ export function createStory(game) {
     if (S.script && S.won < 0) S.script.step();                     // the chapter's set pieces (hook)
 
     // stage gate: the hero can't run past the stage he is on (a nag line explains, at most every 10 s)
-    if (h.z > S.limit) {
-      h.z = S.limit; if (h.vz > 0) h.vz = 0;
+    for (const x of duo() || [h]) if (x.z > S.limit) {
+      x.z = S.limit; if (x.vz > 0) x.vz = 0;
       if (S.nag && S.t - S.nagT > 600 && !S.q.length && S.t >= S.sayUntil) { S.nagT = S.t; say(S.nag); }
     }
 
@@ -204,7 +212,7 @@ export function createStory(game) {
     if (typeof g === 'string') { const i = S.off[g]; st.target = i >= 0 ? { x: c.x[i], z: c.z[i] } : S.want[g] ? { x: S.want[g].x, z: S.want[g].z } : null; }
     else if (g) { const [x, z] = pos(g); st.target = { x, z }; }
     else st.target = null;
-    const m = S.mBase >= 1 ? 1 : clamp01(S.mBase + h.kos * 0.0004 + (c.allyKos - c.allyLost) * 0.0006);
+    const m = S.mBase >= 1 ? 1 : clamp01(S.mBase + kosOf(h) * 0.0004 + (c.allyKos - c.allyLost) * 0.0006);
     st.morale += (Math.min(0.95, Math.max(0.08, m)) - st.morale) * 0.03;
   };
 

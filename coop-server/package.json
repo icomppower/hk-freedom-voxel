@@ -1,0 +1,17 @@
+{
+  "name": "hk-freedom-coop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Online co-op lockstep server for 香港自由戰士 · Voxel (Cloudflare Workers + Durable Objects). Started from Viking Row's party-server.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "coop:deploy": "set -a && . ./.env && set +a && npx wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0",
+    "@cloudflare/workers-types": "^5.20260710.1",
+    "typescript": "^5.5.0"
+  }
+}

@@ -47,10 +47,12 @@ export function createCombat(game) {
   const rxEnd = new Float64Array(game.crowd.T);             // planned lying angle at touchdown
   const victims = new Int32Array(game.crowd.N);
 
-  let lastTick = -1;                                         // a move frame is resolved once, even across hitstop
-  let heavyKey = null;                                       // window that already paid its heavy hitstop
-  let sweepKey = null;                                       // combo-system r4: sweep window that already paid its hitstop
-  cb.reset = () => { lastTick = -1; heavyKey = null; sweepKey = null; };
+  // per hero (co-op: one entry per game.heroes member, keyed by the bound game.hero):
+  //   lastTick: a move frame is resolved once, even across hitstop · heavyKey: window that already paid its heavy
+  //   hitstop · sweepKey: combo-system r4: sweep window that already paid its hitstop
+  const ks = new Map();
+  const K = () => { let k = ks.get(game.hero); if (!k) ks.set(game.hero, k = { lastTick: -1, heavyKey: null, sweepKey: null }); return k; };
+  cb.reset = () => { ks.clear(); };
   const heroMove = (id) => !!game.hero.kit.moves[id];
 
   /** Is enemy i inside `hit` cast from (ox, oz) facing yaw? */
@@ -74,9 +76,10 @@ export function createCombat(game) {
   function heroStop(hit, count, moveId, key) {
     const base = hit.hitstop || 0;
     if (!base || !heroMove(moveId)) return base;
-    if (hit.sweep) { if (key === sweepKey) return 0; sweepKey = key; }   // combo-system r4: one stop per sweep
-    if (hit.heavy && key !== heavyKey) {                     // once per window: late stragglers get the mook stop
-      heavyKey = key;
+    const k = K();
+    if (hit.sweep) { if (key === k.sweepKey) return 0; k.sweepKey = key; }   // combo-system r4: one stop per sweep
+    if (hit.heavy && key !== k.heavyKey) {                   // once per window: late stragglers get the mook stop
+      k.heavyKey = key;
       return Math.max(COMBAT.stopHeavy[0], Math.min(COMBAT.stopHeavy[1], base));
     }
     return Math.min(COMBAT.stopMax, 1 + Math.floor((count - 1) / COMBAT.stopPer));
@@ -277,11 +280,12 @@ export function createCombat(game) {
 
   /** Hero hitboxes for the current move frame. */
   function heroAttacks() {
-    const h = game.hero;
+    const h = game.hero, k = K();
     if (h.state !== 'attack' || game.hitstop > 0) return;
     const tick = h.moveSeq * 1000 + h.moveT;
-    if (tick === lastTick) return;
-    lastTick = tick;
+    if (tick === k.lastTick) return;
+    k.lastTick = tick;
+    const kb = h.keyBase || 0;                               // co-op: the second hero's windows get their own keys
     const m = h.kit.moves[h.move];
     for (let w = 0; w < m.hits.length; w++) {
       const hit = m.hits[w];
@@ -295,11 +299,11 @@ export function createCombat(game) {
         const n = hit.sweepN || hit.f[1] - hit.f[0] + 1, ang = hit.shape === 'circle' ? 360 : hit.ang;
         if (rel >= n) continue;
         const span = ang * (rel + 1) / n, dir = (hit.dir || 0) - hit.sweep * (ang - span) / 2;
-        cb.strike({ ...hit, shape: 'arc', ang: span, dir }, h.x, h.z, h.yaw, h.moveSeq * 16 + w, false, h.move);
+        cb.strike({ ...hit, shape: 'arc', ang: span, dir }, h.x, h.z, h.yaw, kb + h.moveSeq * 16 + w, false, h.move);
         continue;
       }
       if (hit.every && rel % hit.every !== 0) continue;
-      cb.strike(hit, h.x, h.z, h.yaw, h.moveSeq * 16 + w, !!hit.every, h.move);
+      cb.strike(hit, h.x, h.z, h.yaw, kb + h.moveSeq * 16 + w, !!hit.every, h.move);
     }
   }
 
@@ -366,7 +370,7 @@ export function createCombat(game) {
 
   /** An enemy's real (non-feint) strike reaches its active frame (called by crowd AI, which emits enemy:attack). */
   cb.enemyStrike = (i) => {
-    const c = game.crowd, h = game.hero;
+    const c = game.crowd, HS = game.heroes, h = HS && HS.length > 1 ? HS[c.tgt[i]] : game.hero;   // co-op: his target
     const officer = c.type[i] === 1;
     const dx = h.x - c.x[i], dz = h.z - c.z[i], d = Math.hypot(dx, dz);
     if (d > (officer ? 2.3 : 1.9) || h.y > 1.2) return;
@@ -378,5 +382,8 @@ export function createCombat(game) {
     heroAttacks();
     reactions();
   };
+  // co-op: the two halves of step(), so each hero's swings resolve with that hero bound (src/net/coopsim.js)
+  cb.heroStep = heroAttacks;
+  cb.worldStep = reactions;
   return cb;
 }
