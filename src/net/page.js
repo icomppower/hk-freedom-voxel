@@ -98,11 +98,12 @@ export function createCoopPage(api) {
 
   const coop = {
     C,
-    /** ?coop&room=ABCD: into that room's lobby. Returns true when it took over the boot. */
+    /** ?coop&room=ABCD: into that room's lobby; ?coop&lobby: the co-op menu. Returns true when it took over the boot. */
     boot(f) {
       flow = f;
       const room = Q.get('room');
       if (room && /^[A-Za-z]{4}$/.test(room)) { flow.go('coop', { join: room.toUpperCase() }); return true; }
+      if (Q.has('lobby')) { flow.go('coop'); return true; }   // the title's 網上合作 from a solo page reloads here
       return false;
     },
     setFlow(f) { flow = f; },

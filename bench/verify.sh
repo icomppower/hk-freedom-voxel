@@ -28,6 +28,7 @@ echo "== Chrome: ch1 checkpoints";   g node bench/harness/xcheck.mjs ch1-zhaoyun
 echo "== Chrome: touch hook";        g node bench/harness/touch-twin.mjs; g node bench/harness/touch-ui.mjs; g node bench/harness/phone-flow.mjs
 echo "== Chrome: ending flow";       g node bench/harness/scroll-flow.mjs hk4
 echo "== Chrome: cutscenes";         g node bench/harness/cut-flow.mjs; g node bench/harness/cut-shots.mjs; g node bench/harness/cut-shots.mjs --skip
+echo "== Chrome: co-op entry";       g node bench/net/coop-entry.mjs
 echo "== Chrome: ?preview gallery";   g node bench/harness/preview-flow.mjs
 g node bench/harness/cut-shots.mjs --mobile; g node bench/harness/ending-fit.mjs
 echo "== Chrome: frame time";        g node bench/maps/perfmap.mjs hk1 hk4

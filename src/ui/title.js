@@ -24,6 +24,7 @@ import { createNav, sfx, inkWipe, wiping, afterWipe, stamp, clearStamp, replay }
 import { ground } from '../world/map.js';
 import { dotTex, scatter, passPoint, standOfficer, poseOfficer } from './stage.js';
 import { DIFFS, LOCK, unlocked, difficulty, setDifficulty } from '../core/difficulty.js';
+import { style as coopStyle } from './coop-lobby.js';
 
 // brush swash drawn under the focused item (revealed left → right) — one tapered stroke, dry tail
 export const SWASH = `<svg class="swash" viewBox="0 0 400 26" preserveAspectRatio="none" aria-hidden="true"><path d="M3 15C40 7 118 4 214 8
@@ -31,10 +32,12 @@ export const SWASH = `<svg class="swash" viewBox="0 0 400 26" preserveAspectRati
 
 // 故事模式 / 自由演武 need a playable officer on the roster; 致敬 needs the chapter that carries the TRIBUTE card
 const TRIBUTE_CH = Object.values(CHAPTERS).find((c) => c.TRIBUTE && !c.dev);
+const COOP_ON = new URLSearchParams(location.search).has('coop');
+coopStyle();   // the co-op CSS packs the 5-item menu so 致敬 still fits a 390 px-tall phone
 const ITEMS = [
   { go: 'story', zh: '故事模式', en: 'Story · choose your chapter' },
   { go: 'free', zh: '自由演武', en: 'Free battle · endless waves' },
-  ...(new URLSearchParams(location.search).has('coop') ? [{ go: 'coop', zh: '網上合作', en: 'Online co-op · 2 players' }] : []),   // ?coop: src/net/page.js
+  { go: 'coop', zh: '網上合作', en: 'Online co-op · 2 players' },   // src/net/page.js; without ?coop it reloads into ?coop&lobby
   { go: 'controls', zh: '操作說明', en: 'Controls' },
   { go: 'tribute', zh: '致敬', en: 'Tribute · Hong Kong, 2019' },
 ].filter((it) => (it.go === 'tribute' ? TRIBUTE_CH : it.go === 'controls' || CHAR_ORDER.length));
@@ -160,7 +163,12 @@ export function createTitle(el, flow) {
     }
     const it = ITEMS[cur];
     if (it.go === 'controls') { sfx('ok'); return setCtl(true); }
-    if (it.go === 'coop') { sfx('ok'); busy = true; return inkWipe(() => flow.go('coop')); }
+    if (it.go === 'coop') {   // co-op needs dmath installed before any module runs (src/net/boot.js): solo pages reload into it
+      sfx('ok'); busy = true;
+      if (COOP_ON) return inkWipe(() => flow.go('coop'));
+      const q = new URLSearchParams(location.search); q.set('coop', ''); q.set('lobby', '');
+      return inkWipe(() => location.assign(`${location.pathname}?${q.toString().replace(/=(&|$)/g, '$1')}`));
+    }
     if (it.go === 'tribute') { sfx('ok'); busy = true; return inkWipe(() => flow.go('ending', { mode: 'story', char: TRIBUTE_CH.cast[0], chapter: TRIBUTE_CH.id, tribute: true })); }
     sfx('ok'); setDif(it.go);
   };
