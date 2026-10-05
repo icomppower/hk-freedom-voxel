@@ -13,7 +13,7 @@ import { inkWipe, createNav, sfx } from './menu.js';
 import { COOP } from '../net/coopsim.js';
 
 const CSS = `
-/* ?coop adds a 5th title item (網上合作): the menu packs tighter so 致敬 still fits a 390 px-tall phone */
+/* the 5th title item (網上合作): the menu packs tighter so 致敬 still fits a 390 px-tall phone */
 #title .t-main { gap: 0; margin-top: 1.2rem; }
 #title .t-main button { padding-top: .25rem; padding-bottom: .6rem; min-height: 44px; box-sizing: border-box; }
 #coop:not([hidden]) { display: flex; }
@@ -62,7 +62,7 @@ const CSS = `
 #coop-hud .dbg { position: absolute; left: 6px; bottom: 6px; margin: 0; padding: 4px 6px; font: 11px/1.3 monospace; color: #0f0; background: rgba(0,0,0,.7); white-space: pre; }
 `;
 let styled = false;
-function style() { if (styled) return; styled = true; const s = document.createElement('style'); s.textContent = CSS; document.head.append(s); }
+export function style() { if (styled) return; styled = true; const s = document.createElement('style'); s.textContent = CSS; document.head.append(s); }
 
 const ERR = {
   full: ['房間已滿', 'Room full — two players already'],
