@@ -5,6 +5,8 @@
 //   node --import ./bench/harness/register.mjs bench/net/client.mjs --server http://localhost:8787 --mode quick|create|join
 //        [--code ABCD] [--name A] [--pid X] [--chapter hk1] [--bot] [--netsim 150,30] [--pace] [--die-at T] [--drop-at T]
 //        [--pause-at T --pause-for N] [--max-frames N] [--style steady] [--no-ready] [--d D]
+//        [--team-ignore N] [--team-same N]  (Team Musou: don't answer the N-th team event's call → timeout; from the N-th
+//        event on, until one lands, press Musou on ticks both can fire with frame % 30 = 0 → a same-tick press, no caller)
 //        [--hide-at T --hide-ms MS --hide-mode new|old]  (a background tab from tick T: one wake per second, as Chrome
 //        throttles a hidden page's timers; new = page.js's S.away + catch-up, old = the pre-fix 6 + ≤ 30 ticks a wake)
 import { createCoopGame, coop } from './simkit.mjs';
@@ -12,6 +14,7 @@ const { createSession } = await import('../../src/net/session.js');
 const { encodeIn } = await import('../../src/net/codec.js');
 const { createCoopBot } = await import('../../src/net/coopbot.js');
 const { on } = await import('../../src/core/events.js');
+const { eligible: teamOk } = await import('../../src/combat/team-musou.js');
 
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const flag = (k) => process.argv.includes('--' + k);
@@ -59,7 +62,10 @@ S.fixedD = arg('d') ? +arg('d') : null;
 // local "hands": the bot policy on this client's own hero, read from the local sim (as a human reads the screen)
 const sample = () => {
   const b = G.bound; coop.bind(G, S.you);
-  const inp = hands(G);
+  const inp = hands(G), T = G.coop.team, e = T.log.length + 1;
+  if (+arg('team-ignore', 0) === e && (S.you === 1 || (T.phase === 'calling' && T.caller !== S.you))) inp.pressed = { ...inp.pressed, musou: false };   // slot 0 calls, slot 1 stays silent
+  if (+arg('team-same', 0) && e >= +arg('team-same', 0) && !T.log.some((x) => x.kind === 'same') && T.phase === 'idle') inp.pressed = { ...inp.pressed, musou: teamOk(G) && G.frame % 30 === 0 };
+  if (flag('debug') && inp.pressed.musou) process.stderr.write(`press you ${S.you} simT ${S.simT} frame ${G.frame} phase ${T.phase} e ${e} committed ${S.tx?.committed}\n`);
   coop.bind(G, b);
   const paused = pauseAt >= 0 && S.simT >= pauseAt && S.simT < pauseAt + pauseFor;
   return encodeIn(inp, { pause: paused });
@@ -103,7 +109,7 @@ const loop = async () => {
     hp: G.heroes.map((h) => Math.round(h.hp)), kos: G.heroes.map((h) => h.kos), wall: +wall.toFixed(1),
     sockMsgs: S.sock?.msgs ?? 0,
     stats: { ...S.stats, rtt: Math.round(S.rtt()), D: S.D, stallPct: pace ? +Math.max(0, 100 * (1 - S.stats.steps / Math.max(1, wall * 60))).toFixed(1) : null },   // stallPct (paced): share of wall time the clock held the sim
-    officers: officerHp(),
+    officers: officerHp(), team: G.coop.team.log,
   });
   S.leave();
   setTimeout(() => process.exit(0), 300);

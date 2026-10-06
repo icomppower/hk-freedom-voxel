@@ -22,6 +22,7 @@ import { emit } from '../core/events.js';
 import { DIFFS } from '../core/difficulty.js';
 import { createCoopBot } from './coopbot.js';
 import { encodeIn, decodeIn } from './codec.js';
+import { newTeam, teamPre, teamStep, install as installTeam } from '../combat/team-musou.js';   // 齊上齊落 Team Musou
 
 export const COOP = {
   reviveR: 2, reviveF: 180, reviveHp: 0.4,   // partner within 2 m holds interact 3 s → 40 % HP
@@ -86,6 +87,7 @@ export function coopStart(game, { chars, chapter, seed = 1 }) {
   game.crowd.heroHp = H.reduce((s, h) => s + h.hp, 0);
   Object.assign(K, { downAt: [-1, -1], reviveT: [0, 0], bot: [null, null], lastGate: null, open: {}, start: { x: p.x, z: p.z, yaw: p.yaw }, bothAt: -1, chars: [...chars] });
   for (const id in GATES) K.open[id] = GATES[id].open;
+  K.team = newTeam(); installTeam(game);
   emit('scenario', { mode: 'story', char: chars[0], chapter: CH.id, coop: true });
   return CH;
 }
@@ -99,7 +101,10 @@ export function coopStep(game, ins) {
     bind(game, i);
     ins[i] = decodeIn(encodeIn(K.bot[i](game)));          // quantised like a network input
   }
-  for (let i = 0; i < n; i++) { bind(game, i); game.cam.step(game, ins[i]); game.hero.step(ins[i]); game.combat.heroStep(); }
+  teamPre(game, ins, bind);
+  const team = K.team.phase === 'firing';                 // Team Musou: it drives both heroes instead of hero.step
+  for (let i = 0; i < n; i++) { bind(game, i); game.cam.step(game, ins[i]); if (!team) { game.hero.step(ins[i]); game.combat.heroStep(); } }
+  if (team) { teamStep(game, bind); for (let i = 0; i < n; i++) { bind(game, i); game.combat.heroStep(); } }
   const L = lead(game);
   bind(game, L);
   game.combat.worldStep();

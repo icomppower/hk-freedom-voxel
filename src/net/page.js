@@ -17,6 +17,7 @@ import { createCoopBot } from './coopbot.js';
 import { createHeroView } from '../hero/hero.js';
 import { emit, on, collect } from '../core/events.js';
 import { createCoopLobby, createCoopOverlay } from '../ui/coop-lobby.js';
+import { createTeamView } from './team-view.js';     // 齊上齊落 Team Musou presentation
 
 const Q = new URLSearchParams(location.search);
 export const COOP_ON = Q.has('coop');
@@ -40,6 +41,8 @@ export function createCoopPage(api) {
   let flow = null, lobby = null;
   const overlay = createCoopOverlay(C, { revive: (v) => { C.interact = v; } });
   C.mpm = () => coop.msgsPerMin();
+  const team = createTeamView(scene, game, C);
+  C.teamStatus = () => team.status();
   const hands = Q.get('coophands') === 'bot';
   let bot = null;
 
@@ -174,6 +177,7 @@ export function createCoopPage(api) {
         bind(game, 1 - C.you); partnerViews.mu.update(dt); bind(game, C.you);
       }
       overlay.update(game, C);
+      team.update();
     },
     ended(e) { C.ended = true; C.S?.end(e.win); },
     msgsPerMin() {
