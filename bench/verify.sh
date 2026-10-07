@@ -30,6 +30,7 @@ echo "== Chrome: ending flow";       g node bench/harness/scroll-flow.mjs hk4
 echo "== Chrome: cutscenes";         g node bench/harness/cut-flow.mjs; g node bench/harness/cut-shots.mjs; g node bench/harness/cut-shots.mjs --skip
 echo "== Chrome: co-op entry";       g node bench/net/coop-entry.mjs
 echo "== Chrome: Team Musou look";   g $N bench/net/team-look.mjs
+echo "== Chrome: co-op version guard"; g $N bench/net/coop-version.mjs
 echo "== Chrome: ?preview gallery";   g node bench/harness/preview-flow.mjs
 g node bench/harness/cut-shots.mjs --mobile; g node bench/harness/ending-fit.mjs
 echo "== Chrome: frame time";        g node bench/maps/perfmap.mjs hk1 hk4

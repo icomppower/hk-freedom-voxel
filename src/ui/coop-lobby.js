@@ -70,6 +70,8 @@ const ERR = {
   busy: ['伺服器繁忙，請稍後再試', 'Server busy — try later'],
   closed: ['房間已關閉', 'The room closed'],
   expired: ['配對逾時', 'No partner found in 2 min — try again'],
+  version: ['版本不同 — 兩部機都請重新載入', 'Your partner runs a different game version — both reload the page'],
+  stale: ['有新版本 — 請重新載入', 'A new version is out — reload before playing online'],
 };
 
 export function createCoopLobby(el, flow, coop) {
@@ -77,8 +79,8 @@ export function createCoopLobby(el, flow, coop) {
   const C = coop.C;
   let mode = 'menu', joinCode = '';
   const html = () => {
-    const S = C.S, err = C.error && ERR[C.error];
-    const E = err ? `<div class="err">${err[0]}<br><small>${err[1]}</small></div>` : '';
+    const S = C.S, vbad = !!S?.verMismatch?.(), ek = vbad ? 'version' : C.stale ? 'stale' : C.error, err = ek && ERR[ek];
+    const E = err ? `<div class="err">${err[0]}<br><small>${err[1]}</small>${vbad || C.stale ? '<br><button data-a="reload" class="pri">重新載入<small>RELOAD</small></button>' : ''}</div>` : '';
     if (S && S.phase === 'queue') {
       return `<h2>快速配對<small>QUICK MATCH</small></h2><div class="msg">搜尋隊友中… Searching for a partner${C.queueN ? ` (${C.queueN} waiting)` : ''}</div>
         <div class="row"><button data-a="cancel">取消<small>CANCEL</small></button></div>`;
@@ -101,7 +103,7 @@ export function createCoopLobby(el, flow, coop) {
           <div class="nm2">${ch.title.small} ${ch.title.zh}<small>${ch.title.en}${host ? '' : ' · 房主選擇 host picks'}</small></div>
           <button data-a="ch+" ${host && ci < CHAPTER_ORDER.length - 1 ? '' : 'disabled'} aria-label="next chapter">▶</button></div>
         <div class="row"><button data-a="swap">換角色 ⇄<small>SWAP CHARACTERS</small></button>
-          <button data-a="ready" class="${me?.ready ? 'on' : 'pri'}" ${alone ? 'disabled' : ''}>${me?.ready ? '已準備' : '準備'}<small>${me?.ready ? 'READY ✓ (tap to cancel)' : 'READY'}</small></button></div>
+          <button data-a="ready" class="${me?.ready ? 'on' : 'pri'}" ${alone || vbad ? 'disabled' : ''}>${me?.ready ? '已準備' : '準備'}<small>${me?.ready ? 'READY ✓ (tap to cancel)' : 'READY'}</small></button></div>
         <div class="row">${alone && host && BOT ? '<button data-a="bot">加入電腦<small>ADD BOT (?coopbot)</small></button>' : ''}
           <button data-a="leave">離開<small>LEAVE</small></button></div>
         <div class="msg">延遲 ping ${Math.round(S.rtt())} ms</div>`;
@@ -138,6 +140,7 @@ export function createCoopLobby(el, flow, coop) {
     switch (a) {
       case 'quick': coop.quick(); break;
       case 'create': coop.create(); break;
+      case 'reload': location.reload(); break;
       case 'join': mode = 'join'; C.error = null; break;
       case 'join-go': if (/^[A-Z]{4}$/.test(joinCode)) { mode = 'menu'; coop.join(joinCode); } else C.error = 'not_found'; break;
       case 'back-menu': mode = 'menu'; C.error = null; break;
