@@ -152,3 +152,7 @@ stage not `done`.
   9 m would break its own ≥ 1.5 × rule); the boss cap never binds on 777 (2080 HP: 25 % = 520 > the 417 team total) but does on
   smaller bosses; the caller's "call pose" is the ring timer + link line + call card (no new clip); the co-op bot now saves a ready
   gauge for the partner and calls within 6 m (slot 0 on frame % 7 = 0, slot 1 on 3) so ?coopbot / bot takeover play it too.
+- 2026-10-07 co-op desync reported at tick ≈ 15000 on the final boss (real players). Node / Chrome / WebKit bot runs agree
+  28/28 + 26/26 checkpoints, the sim has no vrng / clock / Math.random, so the likely cause is a tab left open across the
+  PR #9 deploy (old build: a Musou press starts a solo Musou; new build: a team call). Fix: SIM_VERSION handshake in the
+  lobby (src/net/version.js, bump it whenever the co-op step changes) + a stale-tab check on the co-op menu.

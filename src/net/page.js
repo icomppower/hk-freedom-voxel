@@ -18,6 +18,7 @@ import { createHeroView } from '../hero/hero.js';
 import { emit, on, collect } from '../core/events.js';
 import { createCoopLobby, createCoopOverlay } from '../ui/coop-lobby.js';
 import { createTeamView } from './team-view.js';     // 齊上齊落 Team Musou presentation
+import { SIM_VERSION } from './version.js';
 
 const Q = new URLSearchParams(location.search);
 export const COOP_ON = Q.has('coop');
@@ -67,7 +68,7 @@ export function createCoopPage(api) {
         stepped: () => { bind(game, C.you); api.afterStep(); },
         desync: (m) => onDesync(m),
         ended: () => { lobby?.refresh(); },
-        ui: () => {},
+        ui: () => { lobby?.refresh(); },                // the partner's version (session.js handshake)
         live: () => { lobby?.refresh(); },
       },
     });
@@ -204,7 +205,16 @@ export function createCoopPage(api) {
   addEventListener('keyup', (e) => { if (e.code === 'KeyF') C.interact = false; });
   addEventListener('blur', (e) => { if (e.isTrusted) C.interact = false; });
 
+  // a tab left open across a deploy keeps the old simulation: compare with the deployed version file on the co-op menu
+  async function checkStale() {
+    try {
+      const t = await (await fetch(`${new URL('./version.js', import.meta.url).href}?t=${Date.now()}`, { cache: 'no-store' })).text();
+      const v = +(/SIM_VERSION = (\d+)/.exec(t)?.[1] || 0);
+      C.stale = v > SIM_VERSION; lobby?.refresh();
+    } catch { /* offline: the lobby handshake still guards */ }
+  }
   on('flow', (e) => {
+    if (e.state === 'coop') checkStale();
     if (e.state === 'battle' && e.ctx?.coop) coop.enterBattle();
     else if (e.state !== 'battle') C.inBattle = false;
     if (e.state === 'title' && C.S) { coop.leave(); detachCoop(game); dropPartner?.(); partnerViews?.hero.dispose(); partnerViews?.mu.dispose(); partnerViews = null; dropPartner = null; }

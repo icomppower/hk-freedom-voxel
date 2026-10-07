@@ -14,6 +14,7 @@
 // the room, which compares the two.
 import { createSocket, httpOf, wsOf } from './socket.js';
 import { encodeIn, decodeIn, isPause, EMPTY } from './codec.js';
+import { SIM_VERSION } from './version.js';
 import { coopStep } from './coopsim.js';
 import { coopHash } from './hash.js';
 
@@ -101,11 +102,25 @@ export function createSession({ server, name = 'Player', pid, netsim = null, dMa
   S.bot = (v = true) => send({ type: 'bot', v });
   S.ui = (a, n = 0) => send({ type: 'ui', a, n });
 
+  // version handshake: a human partner (new in this room) gets our SIM_VERSION once; no answer in 4 s = an older build
+  S.partnerVer = null; S.verKey = ''; S.verAt = 0;
+  function verCheck(m) {
+    const p = m.players[1 - S.you], key = p && !p.bot ? `${m.code}|${p.name}` : '';
+    if (key && key !== S.verKey) { S.partnerVer = null; S.verAt = performance.now(); send({ type: 'ui', a: 'ver', n: SIM_VERSION }); }
+    S.verKey = key;
+  }
+  /** The partner is a human on another simulation version (or an old build that never answered). */
+  S.verMismatch = () => {
+    const p = S.lobbyMsg?.players[1 - S.you];
+    if (!p || p.bot || !S.verKey) return false;
+    return S.partnerVer != null ? S.partnerVer !== SIM_VERSION : performance.now() - S.verAt > 4000;
+  };
+
   function onMsg(m) {
     switch (m.type) {
       case 'hello': S.you = m.you; S.retry = 0; if (S.phase === 'joining' || S.phase === 'reconnecting') S.phase = 'lobby'; status('joined'); return;
       case 'full': S.phase = 'full'; A.full?.(m); return;
-      case 'lobby': S.lobbyMsg = m; if (S.phase !== 'game') S.phase = 'lobby'; A.lobby?.(m); return;
+      case 'lobby': S.lobbyMsg = m; if (S.phase !== 'game') S.phase = 'lobby'; verCheck(m); A.lobby?.(m); return;
       case 'start': return onStart(m);
       case 'frame': return onFrames(m);
       case 'synced':
@@ -120,7 +135,7 @@ export function createSession({ server, name = 'Player', pid, netsim = null, dMa
       case 'ended':                                   // the leader's story ended at frame m.frames: if we are behind, step the
         if (S.phase === 'game' && !S.halted && S.simT < m.frames) { S.endMsg = m; S.live = false; return; }   // frames we hold first
         return finish(m);
-      case 'ui': A.ui?.(m); return;
+      case 'ui': if (m.a === 'ver' && m.slot !== S.you) S.partnerVer = m.n; A.ui?.(m); return;
       case 'slow': resend(m.from); return;            // the room dropped a run over its rate: send again from there
       case 'room_closed': S.phase = 'closed'; A.closed?.(m.reason); return;
     }
