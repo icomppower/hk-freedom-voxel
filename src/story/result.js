@@ -24,7 +24,7 @@ export function createResult(el, flow) {
     if (b.dataset.act === 'retry') leave(() => flow.go('loading', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter, art: ctx.art, retry: true }));
     else if (b.dataset.act === 'ending') leave(() => flow.go('ending', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter }));
     else if (b.dataset.act === 'cut') {                             // 香港自由戰士: the between-chapter cutscene, then the next chapter
-      const next = CHAPTER_ORDER[CHAPTER_ORDER.indexOf(ctx.chapter) + 1], c = { mode: 'story', char: ctx.char, chapter: next };
+      const ci = CHAPTER_ORDER.indexOf(ctx.chapter), next = ci >= 0 ? CHAPTER_ORDER[ci + 1] : undefined, c = { mode: 'story', char: ctx.char, chapter: next };   // a preview chapter: back to the title
       leave(() => flow.go('cutscene', { id: resolveChapter(ctx.chapter, ctx.char).after, char: ctx.char, then: () => inkWipe(() => flow.go(next ? 'loading' : 'title', c)) }));
     }
     else if (b.dataset.act === 'room') leave(() => flow.go('coop'));   // online co-op (src/net/page.js): the room's lobby

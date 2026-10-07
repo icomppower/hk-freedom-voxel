@@ -13,11 +13,13 @@
 //   sides.names { us: {zh, en}, them: {zh, en} }   who the HUD's reinforcement banners name
 //   after              (香港自由戰士) the cutscene played after a story WIN, before the next chapter (story/cutscenes/)
 //   endScene           the end scene between the ENDING scroll and the TRIBUTE card
+//   preview            (香港自由戰士) built but not in the campaign yet: off the menus and the 繼續 chain, ?ch= only
 import * as ch1 from './ch1.js';
 import * as hk1 from './hk1.js';
 import * as hk2 from './hk2.js';
 import * as hk3 from './hk3.js';
 import * as hk4 from './hk4.js';
+import * as hk6 from './hk6.js';
 import { DEV } from '../chars/index.js';
 
 const LIST = [
@@ -50,6 +52,14 @@ const LIST = [
     allies: [-1, 1].map((sx) => ({ x: sx * 5, z: -128, n: 6, cols: 3, hold: true })),   // passengers who stood up to them
   },
   {
+    // 11·12 中大二號橋 (brief: CLI Brief — 中大二號橋): preview until the owner approves it; then it moves before hk4
+    ...hk6, id: 'hk6', preview: true, map: 'cuhk', cast: ['lungjai', 'siumei'],
+    title: { small: '第四章', zh: '中大二號橋', en: 'CHAPTER IV · BRIDGE NO. 2' },
+    sides: { us: '港', them: '警', names: { us: { zh: '同學', en: 'Students' }, them: { zh: '防暴警', en: 'Riot police' } } },
+    skin: { foe: 'riot', ally: 'blackbloc' },
+    allies: [-1, 1].map((sx) => ({ x: sx * 7, z: -150, n: 10, cols: 5, hold: true })),   // the students on the campus road
+  },
+  {
     ...hk4, id: 'hk4', endScene: 'ending', map: 'polyu', cast: ['lungjai', 'siumei'],
     title: { small: '第四章', zh: '理工大學', en: 'CHAPTER IV · POLYU SIEGE' },
     sides: { us: '港', them: '警', names: { us: { zh: '手足', en: 'Protesters' }, them: { zh: '防暴警', en: 'Riot police' } } },
@@ -60,7 +70,7 @@ const LIST = [
 
 export const CHAPTERS = Object.fromEntries(LIST.map((c) => [c.id, c]));
 // 定軍山 ch1 stays registered (the hash gate, ?ch=ch1 / ?go=story) but is listed on the menus only with ?dev
-export const CHAPTER_ORDER = LIST.filter((c) => DEV || !c.dev).map((c) => c.id);
+export const CHAPTER_ORDER = LIST.filter((c) => (DEV || !c.dev) && !c.preview).map((c) => c.id);
 export const DEFAULT_CHAPTER = 'ch1';
 
 /** Chapters an officer can play (in order). */
