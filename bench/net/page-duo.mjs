@@ -5,7 +5,7 @@
 //   flow       title → 網上合作 → 建立房間 (code) · the 2nd page opens the Copy-Link URL → both 準備 → loading → battle
 //   lockstep   N ticks (or the chapter's end): 0 desyncs, every hash both pages computed equal, msgs / min, rtt, stalls
 //   pause      page A opens the pause menu: page B shows "Paused by your partner", both sims hold; resume
-//   node --import ./bench/harness/register.mjs bench/net/page-duo.mjs [--server URL] [--b webkit] [--ticks 3600] [--a-size 844x390] [--b-size 390x844]
+//   node --import ./bench/harness/register.mjs bench/net/page-duo.mjs [--server URL] [--b webkit] [--ticks 3600] [--a-size 844x390] [--b-size 390x844] [--hands bot|chaos]
 import { chromium, webkit } from 'playwright-core';
 import { serve } from '../harness/browser.mjs';
 const argv = process.argv.slice(2), opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 ? argv[i + 1] : d; };
@@ -24,7 +24,7 @@ async function launch(engine, viewport) {
   page.on('console', (m) => { if (m.type() === 'error' && !/desync/.test(m.text())) errors.push(m.text()); });
   return { b, page, errors, engine };
 }
-const q = `coop&coopdebug&coophands=bot&coopserver=${encodeURIComponent(server)}`;
+const q = `coop&coopdebug&coophands=${opt('hands', 'bot')}&coopserver=${encodeURIComponent(server)}`;
 
 /** Every visible button of the co-op lobby: size, hit-test, inside the viewport. */
 async function lobbyFit(page, tag) {
@@ -99,6 +99,11 @@ try {
   const wall = (Date.now() - t0) / 60000;
   const get = (P) => P.page.evaluate(() => { const S = window.__coop.C.S; return { simT: S.simT, hashes: S.hashes, halted: S.halted, desync: !!window.__coop.C.desyncDump, stats: S.stats, rtt: S.rtt(), D: S.D, msgs: S.sock.msgs, mpm: window.__coop.msgsPerMin() }; });
   const ra = await get(A), rb = await get(B);
+  if (ra.desync || rb.desync) {                    // keep both dumps for bench/net replay
+    const { writeFileSync, mkdirSync } = await import('node:fs'); mkdirSync('bench/out', { recursive: true });
+    for (const [P, tag] of [[A, 'A'], [B, 'B']]) writeFileSync(`bench/out/desync-${tag}.json`, await P.page.evaluate(() => JSON.stringify({ dump: window.__coop.C.desyncDump || window.__coop.C.S.dump(), ua: navigator.userAgent })));
+    console.log('desync dumps → bench/out/desync-A.json, desync-B.json');
+  }
   const keys = Object.keys(ra.hashes).filter((k) => k in rb.hashes), same = keys.filter((k) => ra.hashes[k] === rb.hashes[k]);
   const mpm = Math.round((ra.msgs - m0[0]) / wall);
   report(`lockstep chrome vs ${bEngine}`, !ra.desync && !rb.desync && !ra.halted && same.length === keys.length && keys.length > 10,

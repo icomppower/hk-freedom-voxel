@@ -21,7 +21,9 @@ coop.attachCoop(game);
 let end = null; on('story:end', (e) => { end = e; });
 coop.coopStart(game, { chars: ['lungjai', 'siumei'], chapter: q.get('ch') || 'hk1', seed: +(q.get('seed') || 1) });
 const out = {}, max = +(q.get('frames') || 1e9);
-while (!end && game.frame < max) { coop.coopStep(game, [null, null]); if (game.frame % 600 === 0) out[game.frame] = coopHash(game); }
+const chaos = q.has('chaos') ? (await import('./chaos.mjs')).createChaos() : null;
+const ins = () => (chaos ? [chaos(game, 0, coop.bind), chaos(game, 1, coop.bind)] : [null, null]);
+while (!end && game.frame < max) { coop.coopStep(game, ins()); if (game.frame % 600 === 0) out[game.frame] = coopHash(game); }
 out[game.frame] = coopHash(game);
 window.__res = { out, win: end?.win ?? null, frame: game.frame, dmath: !!globalThis.__dmath };
 </script>

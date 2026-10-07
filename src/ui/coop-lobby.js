@@ -190,7 +190,7 @@ const BANNER = {
   paused: ['隊友暫停了遊戲', 'Paused by your partner'],
   reconnecting: ['重新連線中…', 'Reconnecting to the room'],
   resim: ['重新同步中…', 'Re-simulating the battle'],
-  desync: ['不同步', 'Desync'],
+  desync: ['不同步', 'Desync — a report was sent'],
   'room-closed': ['房間已關閉', 'The room closed'],
 };
 export function createCoopOverlay(C, { revive }) {
@@ -212,7 +212,7 @@ export function createCoopOverlay(C, { revive }) {
   };
   return {
     banner(k, a, b) {
-      if (k === 'desync') { fixed = ['desync', ` @ tick ${a}`]; return; }
+      if (k === 'desync') { fixed = ['desync', ` @ tick ${a}${b ? ` · 房號 room ${b}` : ''}`]; return; }
       if (k === 'resim') { flash = ['resim', ` ${a} / ${b}`]; flashT = performance.now() + 300; return; }
       fixed = [k, ''];
     },

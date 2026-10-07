@@ -16,12 +16,32 @@ function sanitizeName(raw: string | null): string {
 }
 
 export class Matchmaker extends DurableObject<Env> {
+  /** Desync reports (this single instance's SQLite storage outlives the rooms, which wipe theirs at cleanup): POST stores
+   *  one client's gzip+base64 dump under its room code (≤ 1.5 MB, the newest 20 kept); GET ?code= returns that room's
+   *  reports, GET without a code lists the stored ones. */
+  async report(request: Request, url: URL): Promise<Response> {
+    const code = (url.searchParams.get("code") || "").toUpperCase();
+    const J = (d: unknown, status = 200) => new Response(JSON.stringify(d), { status, headers: { "content-type": "application/json" } });
+    if (request.method === "POST") {
+      if (!/^[A-Z]{4}$/.test(code)) return J({ error: "bad_code" }, 400);
+      const body = await request.text();
+      if (body.length > 1_500_000) return J({ error: "too_large" }, 413);
+      await this.ctx.storage.put(`report:${Date.now()}:${code}:${Math.random().toString(36).slice(2, 6)}`, body);
+      const keys = [...(await this.ctx.storage.list({ prefix: "report:" })).keys()];
+      if (keys.length > 20) await this.ctx.storage.delete(keys.slice(0, keys.length - 20));
+      return J({ ok: true });
+    }
+    const all = await this.ctx.storage.list<string>({ prefix: "report:" });
+    if (!code) return J([...all.keys()].map((k) => { const [, at, c] = k.split(":"); return { at: +at, code: c }; }));
+    return J([...all].filter(([k]) => k.split(":")[2] === code).map(([k, v]) => ({ at: +k.split(":")[1], body: v })));
+  }
   queue: Entry[] = [];
   pairing = false;
 
   async fetch(request: Request): Promise<Response> {
-    if (request.headers.get("Upgrade") !== "websocket") return new Response("expected websocket", { status: 400 });
     const url = new URL(request.url);
+    if (url.pathname === "/report") return this.report(request, url);
+    if (request.headers.get("Upgrade") !== "websocket") return new Response("expected websocket", { status: 400 });
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();

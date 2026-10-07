@@ -9,7 +9,8 @@
 // ?coopdebug readout). Local input = keyboard / mouse / pad / touch pad through input.sample(), plus F / 救 (hold:
 // revive) and the pause menu (a pause bit in the input: either side pauses both).
 // URL: ?coopserver=URL (default the deployed worker) · ?coopbot (lobby: fill slot 2 with bot autoplay) · ?netsim=150,30 ·
-// ?coopdmax=12 (input-delay cap, default 8 = 133 ms) · ?coopdebug · ?coophands=bot (test only: this player's hero plays itself with the bot policy, over the wire).
+// ?coopdmax=12 (input-delay cap, default 8 = 133 ms) · ?coopdebug · ?coophands=bot (test only: this player's hero plays itself with the bot policy, over the wire) · ?coophands=chaos
+// (local test only: human-like inputs, bench/net/chaos.mjs).
 import { createSession } from './session.js';
 import { encodeIn } from './codec.js';
 import { attachCoop, detachCoop, coopStart, bind, COOP } from './coopsim.js';
@@ -44,7 +45,9 @@ export function createCoopPage(api) {
   C.mpm = () => coop.msgsPerMin();
   const team = createTeamView(scene, game, C);
   C.teamStatus = () => team.status();
-  const hands = Q.get('coophands') === 'bot';
+  const handsMode = Q.get('coophands'), hands = handsMode === 'bot' || handsMode === 'chaos';
+  let chaos = null;                                  // ?coophands=chaos (local test only): human-like inputs, bench/net/chaos.mjs
+  if (handsMode === 'chaos') import('../../bench/net/chaos.mjs').then((m) => { chaos = m.createChaos(); });
   let bot = null;
 
   // ---------------------------------------------------------------- session
@@ -83,10 +86,23 @@ export function createCoopPage(api) {
     flow.go('loading', { mode: 'story', char: m.chars[m.you], chapter: m.chapter, coop: true, retry: !!m.resume });
   }
   function onDesync(m) {
-    overlay.banner('desync', m.t);
-    const dump = { ...m.dump, t: m.t, h: m.h, at: new Date().toISOString(), ua: navigator.userAgent };
+    const code = C.S?.code || '';
+    overlay.banner('desync', m.t, code);
+    const dump = { ...m.dump, t: m.t, h: m.h, at: new Date().toISOString(), ua: navigator.userAgent, ver: SIM_VERSION, code, touch: matchMedia('(pointer: coarse)').matches };
     console.error('[coop] desync at tick', m.t, m.h, dump);
     C.desyncDump = dump;
+    sendReport(code, dump);
+  }
+  /** Upload the dump (gzip + base64) to the worker's report store, so the room code is all a player has to pass on. */
+  async function sendReport(code, dump) {
+    if (!/^[A-Z]{4}$/.test(code)) return;
+    try {
+      const raw = new Blob([JSON.stringify(dump)]).stream().pipeThrough(new CompressionStream('gzip'));
+      const buf = new Uint8Array(await new Response(raw).arrayBuffer());
+      let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+      const r = await fetch(`${server}/api/report/${code}`, { method: 'POST', body: JSON.stringify({ gz: btoa(bin), you: dump.you, ver: SIM_VERSION, ua: dump.ua }) });
+      C.reportSent = r.ok;
+    } catch { C.reportSent = false; }
   }
 
   // ---------------------------------------------------------------- views of the partner
@@ -132,7 +148,7 @@ export function createCoopPage(api) {
       attachCoop(game);
       coopStart(game, { chars: m.chars, chapter: m.chapter, seed: m.seed });
       bind(game, C.you);
-      bot = hands ? createCoopBot(C.you) : null;
+      bot = !hands ? null : chaos ? (g) => chaos(g, C.you, bind) : createCoopBot(C.you);
       C.partner = m.names[1 - C.you];
       buildPartner();
       emit('scenario', { mode: 'story', char: m.chars[m.you], chapter: m.chapter, coop: true });
