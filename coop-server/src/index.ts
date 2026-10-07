@@ -6,6 +6,7 @@
 //   GET  /api/room/:code/ws?name=&pid=   → WebSocket                 lobby + lockstep (room.ts)
 //   GET  /api/room/:code/status          → { phase, players, … }
 //   GET  /api/quick?name=                → WebSocket                 Quick Match queue (matchmaker.ts) → { matched, code }
+//   POST /api/report/:code  · GET /api/report[/:code]                 desync reports (gzip+base64 dumps, newest 20)
 import { Room } from "./room";
 import { Matchmaker } from "./matchmaker";
 import { allocRoom } from "./util";
@@ -50,6 +51,13 @@ export default {
       });
       if (action === "status") return new Response(await res.text(), { status: res.status, headers: { "content-type": "application/json", ...cors(origin) } });
       return res;
+    }
+
+    const rep = url.pathname.match(/^\/api\/report(?:\/([A-Za-z]{4}))?$/);
+    if (rep && (request.method === "GET" || request.method === "POST")) {   // desync reports (matchmaker.ts report())
+      const stub = env.MATCH.get(env.MATCH.idFromName("quick"));
+      const res = await stub.fetch(`https://match/report?code=${rep[1] ?? ""}`, { method: request.method, body: request.method === "POST" ? await request.text() : undefined });
+      return new Response(await res.text(), { status: res.status, headers: { "content-type": "application/json", ...cors(origin) } });
     }
 
     if (url.pathname === "/api/quick") {
