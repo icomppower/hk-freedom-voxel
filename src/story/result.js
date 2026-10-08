@@ -25,7 +25,8 @@ export function createResult(el, flow) {
     else if (b.dataset.act === 'ending') leave(() => flow.go('ending', { mode: ctx.mode, char: ctx.char, chapter: ctx.chapter }));
     else if (b.dataset.act === 'cut') {                             // 香港自由戰士: the between-chapter cutscene, then the next chapter
       const ci = CHAPTER_ORDER.indexOf(ctx.chapter), next = ci >= 0 ? CHAPTER_ORDER[ci + 1] : undefined, c = { mode: 'story', char: ctx.char, chapter: next };   // a preview chapter: back to the title
-      leave(() => flow.go('cutscene', { id: resolveChapter(ctx.chapter, ctx.char).after, char: ctx.char, then: () => inkWipe(() => flow.go(next ? 'loading' : 'title', c)) }));
+      const id = resolveChapter(ctx.chapter, ctx.char).after;       // a `chain` chapter: straight on, no cutscene
+      leave(() => (id ? flow.go('cutscene', { id, char: ctx.char, then: () => inkWipe(() => flow.go(next ? 'loading' : 'title', c)) }) : flow.go(next ? 'loading' : 'title', c)));
     }
     else if (b.dataset.act === 'room') leave(() => flow.go('coop'));   // online co-op (src/net/page.js): the room's lobby
     else leave(() => flow.go('title'));
@@ -43,7 +44,7 @@ export function createResult(el, flow) {
       const epi = E[ch.id] || (E.zh ? E : Object.values(E)[0]), T = CH.title;
       const lose = CH.DEFEAT || { zh: '{name}力戰不支，蜀軍攻勢受挫……', en: '{name} falls at last, and the Shu assault falters...' };
       const loseZh = lose.zh.replace('{name}', ch.name.zh), loseEn = lose.en.replace('{name}', ch.name.en), end = win && CH.ENDING;
-      const cut = win && c.mode === 'story' && CH.after;                // a story win with a cutscene after it
+      const cut = win && c.mode === 'story' && (CH.after || CH.chain);  // a story win with a cutscene (or the next chapter) after it
       const rows = [
         ['擊破數', 'K.O. COUNT', s.kos, (v) => v],
         ['最大連擊', 'MAX CHAIN', s.maxChain, (v) => v],

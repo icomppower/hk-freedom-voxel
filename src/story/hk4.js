@@ -1,4 +1,4 @@
-// 第四章「理工大學」 PolyU Siege, November 2019 — chapter data (format: ./ch1.js header; registry: ./chapters.js). After its
+// 第五章「理工大學」 PolyU Siege, November 2019 — chapter data (format: ./ch1.js header; registry: ./chapters.js). After its
 // win the result screen leads into the ENDING scroll (尾聲 天光), the end scene (story/cutscenes/ending.js) and the TRIBUTE
 // card (story/prologue.js), then the title. The ENDING and the end scene are the game's fiction: Hong Kong wins its freedom.
 // Story (Story Bible, Scroll Cutscenes page): every exit sealed; they hold the podium; the water-cannon truck's blue-dye
@@ -99,7 +99,7 @@ export const PROLOGUE = [
   { cols: ['維尼熊', '親自落嚟', '收網'], en: 'The Bear came down in person to close the net.', show: ['bear'], focus: [900, 470, 1.5] },
   { cols: ['繩索 下水道', '電單車', '喺黑暗度等'], en: 'Ropes. Sewers. Motorbikes waiting in the dark.', show: ['ropes', 'sewer', 'bikes'], focus: [900, 480, 1.2] },
 ];
-export const STAMP = { small: '第四章', big: '理工大學', seal: '圍城', en: 'CHAPTER IV · POLYU SIEGE · NOVEMBER 2019' };
+export const STAMP = { small: '第五章', big: '理工大學', seal: '圍城', en: 'CHAPTER V · POLYU SIEGE · NOVEMBER 2019' };
 // Result-screen epilogue: the Phaser game's STORY[3] (src/data/story.js), verbatim
 export const EPILOGUE = {
   zh: ['2019年11月，警方圍困香港理工大學長達兩週。數百名示威者被困校內——有人經下水道逃脫，有人用繩索滑下，黑暗中有電單車等待接應。留下來的人面對被捕的命運。校園成為最後防線的象徵。',

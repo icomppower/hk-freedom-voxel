@@ -1,6 +1,5 @@
 // 中大二號橋 Bridge No. 2, 12 November 2019 — chapter data (format: ./ch1.js header; registry: ./chapters.js). Chapter id hk6
-// (hk5 stays retired: it was the airport). Kept out of the campaign until the owner approves it (chapters.js `preview`):
-// reachable by ?ch=hk6 only.
+// (hk5 stays retired: it was the airport). Campaign: 元朗 hk3 chains into it, 竹枝 between3 follows it into 理工 hk4.
 // Story: students hold Bridge No. 2, the footbridge over the highway, through a long day of tear gas. 龍仔 and 小美 learn
 // 滅煙 on the campus road (a traffic cone over the canister, then water), hold the bridge through three waves while
 // canisters keep landing, restack the barricade at its far end, and on the hill face 煙霧隊長 The Gas Captain (an
