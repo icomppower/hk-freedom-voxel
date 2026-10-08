@@ -14,7 +14,11 @@ await until(() => __vm.state === 'title', null, 60000); await wait(1500);
 await result('hk3', true); await cont();
 ok('hk3 win → hk6 scroll (no cutscene)', await until(() => __vm.state === 'prologue' && __vm.game.chapter === 'hk6', null, 40000) && !(await P.evaluate(() => window.__cut?.id)), JSON.stringify(await state()));
 await P.evaluate(() => __vm.flow.go('title')); await until(() => __vm.state === 'title');
-for (const [ch, next, cut] of [['hk1', 'hk2', 'between1'], ['hk2', 'hk3', 'between2'], ['hk6', 'hk4', 'between3']]) {
+// hk7 chains straight into 立法會 hk2 (no cutscene)
+await result('hk7', true); await cont();
+ok('hk7 win → hk2 scroll (no cutscene)', await until(() => __vm.state === 'prologue' && __vm.game.chapter === 'hk2', null, 40000) && !(await P.evaluate(() => window.__cut?.id)), JSON.stringify(await state()));
+await P.evaluate(() => __vm.flow.go('title')); await until(() => __vm.state === 'title');
+for (const [ch, next, cut] of [['hk1', 'hk7', 'between1'], ['hk2', 'hk3', 'between2'], ['hk6', 'hk4', 'between3']]) {
   await result(ch, true); await cont();
   const inCut = await until((id) => __vm.state === 'cutscene' && window.__cut?.id === id, cut);
   ok(`${ch} win → ${cut}`, inCut, JSON.stringify(await state()));

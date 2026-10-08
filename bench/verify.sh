@@ -11,15 +11,16 @@ echo "== ch1 bot (?dev chapter)";    g $N bench/bot/run.mjs --char zhaoyun --qui
 echo "== character + boss gates";    g $N bench/chars/gates.mjs lungjai; g $N bench/chars/gates.mjs siumei
 g $N bench/chars/boss.mjs lungjai; g $N bench/chars/boss.mjs siumei; g $N bench/chars/stamp-model.mjs
 echo "== 中大二號橋 rules";        g $N bench/maps/cuhk-rules.mjs
+echo "== 銅鑼灣 rules";            g $N bench/maps/causeway-rules.mjs
 echo "== scroll columns";            g $N bench/harness/cols.mjs
 echo "== cutscene look";             g $N bench/chars/cut-look.mjs
-for ch in hk1 hk2 hk3 hk4 hk6; do
+for ch in hk1 hk2 hk3 hk4 hk6 hk7; do
   echo "== $ch: map gate + bot (both playables × steady / rush / back)"
   g $N bench/maps/mapcheck.mjs $ch lungjai; g $N bench/maps/mapcheck.mjs $ch siumei
   for c in lungjai siumei; do for st in steady rush back; do g $N bench/bot/run.mjs --char $c --chapter $ch --style $st --quiet; done; done
 done
 echo "== co-op (Node): 2P bots hk1, 2P rules, battle carry-over, Team Musou"
-g $N bench/net/duo.mjs hk1; g $N bench/net/duo.mjs hk6; g $N bench/net/rules.mjs; g $N bench/net/carry.mjs hk1 3000 hk2 hk1; g $N bench/net/team.mjs
+g $N bench/net/duo.mjs hk1; g $N bench/net/duo.mjs hk6; g $N bench/net/duo.mjs hk7; g $N bench/net/rules.mjs; g $N bench/net/carry.mjs hk1 3000 hk2 hk1; g $N bench/net/team.mjs
 [ "$1" = "--quick" ] && { echo "QUICK GATES GREEN"; exit 0; }
 echo "== Chrome: boot, scrolls";     g node bench/harness/smoke.mjs "?x" 4; g node bench/harness/shots-scroll.mjs ch1
 echo "== Chrome: crowd, skins, UI";  g node bench/harness/crowdprobe.mjs ch1; g node bench/harness/skin-test.mjs
@@ -35,6 +36,7 @@ echo "== Chrome: co-op version guard"; g $N bench/net/coop-version.mjs
 echo "== Chrome: ?preview gallery";   g node bench/harness/preview-flow.mjs
 g node bench/harness/cut-shots.mjs --mobile; g node bench/harness/ending-fit.mjs
 echo "== Chrome: 中大二號橋 look";    g node bench/maps/cuhk-look.mjs lungjai
-echo "== Chrome: frame time";        g node bench/maps/perfmap.mjs hk1 hk4 hk6
-echo "== Chrome: mobile frame time"; g node bench/maps/perf-mobile.mjs ch1 hk1 hk4 hk6
+echo "== Chrome: 銅鑼灣 look";        g node bench/maps/causeway-look.mjs lungjai
+echo "== Chrome: frame time";        g node bench/maps/perfmap.mjs hk1 hk4 hk6 hk7
+echo "== Chrome: mobile frame time"; g node bench/maps/perf-mobile.mjs ch1 hk1 hk4 hk6 hk7
 echo "ALL GATES GREEN"

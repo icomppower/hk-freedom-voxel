@@ -94,7 +94,7 @@ export const PROLOGUE = [
   { cols: ['打九九九', '冇人嚟', '記者照直播'], en: 'Calls to 999. No one came. Reporters kept streaming.', show: [], focus: [400, 215, 1.3] },
   { cols: ['龍仔同小美', '趕到車站', '守住乘客'], en: 'Dragon and Amy reached the station to shield the passengers.', show: ['lungjai', 'siumei'], focus: [400, 215, 1.6] },
 ];
-export const STAMP = { small: '第三章', big: '元朗', seal: '守望', en: 'CHAPTER III · YUEN LONG · 21 JULY 2019' };
+export const STAMP = { small: '第四章', big: '元朗', seal: '守望', en: 'CHAPTER IV · YUEN LONG · 21 JULY 2019' };
 // Result-screen epilogue: the Phaser game's STORY[2] (src/data/story.js), verbatim
 export const EPILOGUE = {
   zh: ['2019年7月21日晚，一批白衣人在元朗港鐵站內無差別襲擊市民——乘客、記者、旁觀者無一倖免。警方回應遲緩。事後證實，襲擊者與本地黑社會有關聯。香港人在震驚中目睹一切。',

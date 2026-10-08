@@ -102,7 +102,7 @@ export const PROLOGUE = [
   { cols: ['立法會外', '一幅玻璃牆', '擋住所有聲音'], en: 'Outside the Legislative Council, a wall of glass that kept every voice out.', show: ['legco'], focus: [865, 620, 1.5] },
   { cols: ['比卡超守大堂', '一齊嚟', '就一齊走'], en: 'The Shocker holds the lobby. We came in together; we leave together.', show: ['storm', 'shocker', 'siumei'], focus: [865, 620, 1.6] },
 ];
-export const STAMP = { small: '第二章', big: '立法會', seal: '一齊走', en: 'CHAPTER II · LEGCO · 1 JULY 2019' };
+export const STAMP = { small: '第三章', big: '立法會', seal: '一齊走', en: 'CHAPTER III · LEGCO · 1 JULY 2019' };
 // Result-screen epilogue: the Phaser game's STORY[1] (src/data/story.js), verbatim
 export const EPILOGUE = {
   zh: ['2019年7月1日，香港回歸22週年，示威者衝入立法會大樓。牆上噴上抗議標語，以及這句話：「是你們教我們和平遊行是沒用的。」他們在黎明前自行離去。',
