@@ -1,0 +1,97 @@
+{
+  "lang": "Hong Kong Cantonese (colloquial 廣東話, Hong Kong accent, never Mandarin)",
+  "cast": {
+    "lungjai":   { "voice": "Orus",      "style": "young man, early 20s, quiet and steady, few words" },
+    "siumei":    { "voice": "Leda",      "style": "young woman, warm, quick, protective first-aider" },
+    "sauzuk":    { "voice": "Puck",      "style": "young front-line protester shouting over chaos, urgent, out of breath" },
+    "student":   { "voice": "Zephyr",    "style": "university student on a footbridge in tear gas, bright, breathless, coughing a little" },
+    "medic":     { "voice": "Kore",      "style": "volunteer medic, a woman, firm and calm under pressure" },
+    "passenger": { "voice": "Sulafat",   "style": "frightened middle-aged woman on a train platform" },
+    "reporter":  { "voice": "Erinome",   "style": "young reporter, shaken, flat with disbelief" },
+    "raptor":    { "voice": "Iapetus",   "style": "riot officer barking one word through a visor, harsh and loud" },
+    "stamp":     { "voice": "Gacrux",    "style": "senior woman official in her 50s, arrogant, clipped and cold" },
+    "shocker":   { "voice": "Alnilam",   "style": "riot commander barking orders through a helmet" },
+    "fixer":     { "voice": "Algenib",   "style": "gravelly street-gang boss, swaggering, loud" },
+    "gascap":    { "voice": "Enceladus", "style": "riot captain behind a gas mask, breathy and muffled" },
+    "bear":      { "voice": "Charon",    "style": "masked ruler, low, slow, menacing" },
+    "narrator":  { "voice": "Leda",      "style": "warm, quiet, grateful narration at sunrise, slow and sincere" }
+  },
+  "lines": [
+    { "file": "vo_hk1_lungjai_01", "who": "lungjai", "zh": "傘擎高！企埋一齊！", "note": "short firm command" },
+    { "file": "vo_hk1_lungjai_02", "who": "lungjai", "zh": "退就冇得退喇。", "note": "low, resolute" },
+    { "file": "vo_hk2_lungjai_01", "who": "lungjai", "zh": "入去——但一個都唔可以留低。", "note": "firm, a promise" },
+    { "file": "vo_hk2_lungjai_02", "who": "lungjai", "zh": "齊人。", "note": "quiet relief" },
+    { "file": "vo_hk3_lungjai_01", "who": "lungjai", "zh": "開手電！", "note": "sharp shout in the dark" },
+    { "file": "vo_hk6_lungjai_01", "who": "lungjai", "zh": "條橋下面就係公路。守住佢！", "note": "rallying, firm" },
+    { "file": "vo_hk4_lungjai_01", "who": "lungjai", "zh": "完咗喇。我哋贏咗。", "note": "dawn after a long siege, breathless, disbelieving, then quietly overwhelmed" },
+    { "file": "vo_lungjai_musou", "who": "lungjai", "zh": "龍拳！", "note": "full-power battle shout, short and explosive" },
+
+    { "file": "vo_hk1_siumei_01", "who": "siumei", "zh": "擔架未過晒閘，你唔可以走！", "note": "urgent, shouted over noise" },
+    { "file": "vo_hk1_siumei_02", "who": "siumei", "zh": "傷者交俾我。你擋住佢哋。", "note": "arriving out of breath, urgent but in control" },
+    { "file": "vo_hk1_siumei_03", "who": "siumei", "zh": "傷者全部送走咗。", "note": "relieved, tired" },
+    { "file": "vo_hk2_siumei_01", "who": "siumei", "zh": "大堂未守穩，唔好入住！", "note": "urgent warning" },
+    { "file": "vo_hk2_siumei_02", "who": "siumei", "zh": "一齊嚟，一齊走。扒佢哋出去！", "note": "firm and emotional, alarm in the background" },
+    { "file": "vo_hk3_siumei_01", "who": "siumei", "zh": "車門未關，守住月台！", "note": "urgent command" },
+    { "file": "vo_hk4_siumei_01", "who": "siumei", "zh": "仲有人未落繩，等埋佢哋！", "note": "urgent, protective" },
+    { "file": "vo_hk4_siumei_02", "who": "siumei", "zh": "天橋下面有電單車！繩索喺呢邊！", "note": "quick, excited, pointing the way" },
+    { "file": "vo_hk6_siumei_01", "who": "siumei", "zh": "學識咗。上橋！", "note": "quick, determined" },
+    { "file": "vo_hk6_siumei_02", "who": "siumei", "zh": "撐住，再嚟一波！", "note": "rallying, tired but strong" },
+    { "file": "vo_cut2_siumei", "who": "siumei", "zh": "就快到元朗。", "note": "quiet train at night, half to herself, tired and uneasy" },
+    { "file": "vo_cut3_siumei", "who": "siumei", "zh": "今晚，一個都唔可以留低。", "note": "low and resolute, a promise" },
+    { "file": "vo_siumei_musou", "who": "siumei", "zh": "旋風腿！", "note": "fierce fast battle shout, short and bright" },
+
+    { "file": "vo_hk1_sauzuk_01", "who": "sauzuk", "zh": "龍仔！後面仲有人未走，唔好一個衝咁前！" },
+    { "file": "vo_hk1_sauzuk_02", "who": "sauzuk", "zh": "龍仔，前面有速龍！" },
+    { "file": "vo_hk2_sauzuk_01", "who": "sauzuk", "zh": "幕牆未破，唔好一個人衝！" },
+    { "file": "vo_hk2_sauzuk_02", "who": "sauzuk", "zh": "手推車推埋去！掩住我哋！" },
+    { "file": "vo_hk2_sauzuk_03", "who": "sauzuk", "zh": "上面有便衣！" },
+    { "file": "vo_hk2_sauzuk_04", "who": "sauzuk", "zh": "有四個唔肯走！" },
+    { "file": "vo_hk4_sauzuk_01", "who": "sauzuk", "zh": "平台未守穩，唔好衝出去！" },
+    { "file": "vo_hk4_sauzuk_02", "who": "sauzuk", "zh": "藍色水！避開！" },
+
+    { "file": "vo_hk6_student_01", "who": "student", "zh": "雪糕筒冚住佢，再倒水！" },
+    { "file": "vo_hk6_student_02", "who": "student", "zh": "佢哋由公路嗰邊上嚟！" },
+    { "file": "vo_hk6_student_03", "who": "student", "zh": "垃圾桶、磚頭，快啲疊返佢！" },
+    { "file": "vo_hk6_student_nag", "who": "student", "zh": "橋頭仲未守穩，唔好衝咁前！" },
+    { "file": "vo_hk6_student_nagbar", "who": "student", "zh": "路障未疊好，頂多陣！" },
+
+    { "file": "vo_hk1_medic_01", "who": "medic", "zh": "擔架過緊，睇住兩邊！" },
+    { "file": "vo_hk3_passenger_01", "who": "passenger", "zh": "唔好行咁快，我哋跟唔到！", "note": "pleading" },
+    { "file": "vo_hk3_passenger_02", "who": "passenger", "zh": "救命呀！", "note": "a scream for help" },
+    { "file": "vo_hk1_raptor_01", "who": "raptor", "zh": "退後！" },
+    { "file": "vo_hk6_raptor_01", "who": "raptor", "zh": "清橋！" },
+
+    { "file": "vo_777_intro", "who": "stamp", "zh": "我係好打得！", "note": "a boast while slamming a giant stamp, shouted" },
+    { "file": "vo_777_rage", "who": "stamp", "zh": "依法辦事！！", "note": "enraged, shrill and rigid, bureaucratic fury" },
+    { "file": "vo_777_ko", "who": "stamp", "zh": "我只係奉命行事！", "note": "defeated on her knees, defensive, voice cracking" },
+    { "file": "vo_shocker_intro", "who": "shocker", "zh": "全部拉晒佢！", "note": "aggressive order" },
+    { "file": "vo_shocker_call", "who": "shocker", "zh": "速龍小隊，出動！！", "note": "loud call for reinforcements" },
+    { "file": "vo_shocker_ko", "who": "shocker", "zh": "唔係我話事！", "note": "beaten, panicking, passing the blame" },
+    { "file": "vo_fixer_intro", "who": "fixer", "zh": "呢度係元朗！", "note": "threatening shout" },
+    { "file": "vo_fixer_call", "who": "fixer", "zh": "兄弟們，上呀！！", "note": "rallying his gang, loud and rough" },
+    { "file": "vo_fixer_ko", "who": "fixer", "zh": "香港係我地㗎！", "note": "beaten, still defiant, spitting the words" },
+    { "file": "vo_gascap_intro", "who": "gascap", "zh": "放煙！全部放煙！", "note": "ordering a gas barrage, loud" },
+    { "file": "vo_gascap_call", "who": "gascap", "zh": "速龍小隊，上！", "note": "calling in squads" },
+    { "file": "vo_gascap_ko", "who": "gascap", "zh": "收隊⋯⋯", "note": "beaten, muttered retreat" },
+    { "file": "vo_bear_intro", "who": "bear", "zh": "唔准提小熊維尼！", "note": "muffled behind a mask, angry warning" },
+    { "file": "vo_bear_dark", "who": "bear", "zh": "黑暗就係我嘅武器。", "note": "whispered and cold as the lights go out" },
+    { "file": "vo_bear_maskoff", "who": "bear", "zh": "⋯⋯朕要親自出手。", "note": "mask off, imperial and furious, a long pause before speaking" },
+    { "file": "vo_bear_ko", "who": "bear", "zh": "歷史會還我清白！", "note": "defeated, still proud, bitter and hollow" },
+
+    { "file": "vo_ending_thanks", "who": "narrator", "zh": "多謝你企出嚟。", "optional": true }
+  ],
+  "dialogs": [
+    { "file": "vo_cut1_dialog", "turns": [
+      { "who": "siumei", "zh": "聽日仲去唔去？", "note": "late night under a footbridge, rain, exhausted; asks softly while bandaging his arm" },
+      { "who": "lungjai", "zh": "去。", "note": "after a beat, one word, certain" } ] },
+    { "file": "vo_hk3_reporter_amy", "turns": [
+      { "who": "reporter", "zh": "打咗九九九⋯⋯冇人嚟。" },
+      { "who": "siumei", "zh": "咪我哋囉。", "note": "straight away, quiet and certain" } ] },
+    { "file": "vo_hk3_fixer_amy", "turns": [
+      { "who": "fixer", "zh": "香港係我地㗎！", "note": "beaten, still defiant, spitting the words" },
+      { "who": "siumei", "zh": "香港係每一個人嘅。", "note": "calm, firm, not angry" } ] },
+    { "file": "vo_hk6_end_dialog", "turns": [
+      { "who": "gascap", "zh": "收隊⋯⋯", "note": "beaten, muttered retreat" },
+      { "who": "siumei", "zh": "天光喇。大家都喺度。", "note": "dawn after a night of tear gas, exhausted, quietly moved" } ] }
+  ]
+}
