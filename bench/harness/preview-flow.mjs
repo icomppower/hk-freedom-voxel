@@ -6,7 +6,7 @@ const g = await openGame({ query: '?preview', args: ['--autoplay-policy=no-user-
 const until = (fn, arg, ms = 40000) => P.waitForFunction(fn, arg, { timeout: ms, polling: 100 }).then(() => true, () => false);
 await until(() => __vm.state === 'title', null, 60000); await wait(1200);
 ok('panel on the title', await P.evaluate(() => !document.getElementById('preview').hidden));
-const plan = { hk1: 'prologue', between1: 'cutscene', hk2: 'prologue', between2: 'cutscene', hk3: 'prologue', hk6: 'prologue', between3: 'cutscene', hk4: 'prologue', ending: 'cutscene', endscroll: 'ending' };
+const plan = { hk1: 'prologue', between1: 'cutscene', hk2: 'prologue', between2: 'cutscene', hk3: 'prologue', hk6: 'prologue', hk7: 'prologue', between3: 'cutscene', hk4: 'prologue', ending: 'cutscene', endscroll: 'ending' };
 let battles = 0; await P.exposeFunction('__b', () => battles++);
 await P.evaluate(() => addEventListener('flowprobe', () => {}));
 for (const [id, st] of Object.entries(plan)) {

@@ -27,4 +27,5 @@ const bad = scale.filter((s) => !s.ok);
 console.log(`${g.end ? (g.end.win ? 'WIN' : 'LOSS') : 'TIMEOUT'} ${chapter} 2P bots seed ${seed}: ${mmss(G.frame)} sim (${((performance.now() - t0) / 1000).toFixed(1)} s wall) · KOs ${G.heroes.map((h) => h.kos).join(' + ')} · hp ${G.heroes.map((h) => Math.round(h.hp)).join(' / ')} · events ${JSON.stringify(ev)} · final ${g.hash()}`);
 console.log(`team musou: ${JSON.stringify(G.coop.team.log)}`);
 console.log(`scaling ${scale.length - bad.length}/${scale.length} ok: ${scale.map((s) => `${s.name}${s.boss ? '(boss)' : ''} ${s.hpMax}`).join(', ')}`);
-process.exit(g.end?.win && !bad.length && scale.some((s) => s.boss) ? 0 : 1);
+const needBoss = Object.values(OFF).some((o) => o.boss);            // 銅鑼灣 hk7 has no boss (a march)
+process.exit(g.end?.win && !bad.length && (!needBoss || scale.some((s) => s.boss)) ? 0 : 1);

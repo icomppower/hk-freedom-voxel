@@ -21,6 +21,7 @@ import * as hk2 from './hk2.js';
 import * as hk3 from './hk3.js';
 import * as hk4 from './hk4.js';
 import * as hk6 from './hk6.js';
+import * as hk7 from './hk7.js';
 import { DEV } from '../chars/index.js';
 
 const LIST = [
@@ -37,6 +38,14 @@ const LIST = [
     skin: { foe: 'riot', ally: 'blackbloc' },
     // the umbrella line: 手足 either side of the carriageway ahead of the start
     allies: [-1, 1].map((sx) => ({ x: sx * 6, z: -130, n: 12, cols: 4, hold: true })),
+  },
+  {
+    // 6·16 銅鑼灣 (brief: CLI Brief — 銅鑼灣 6·16): preview until the owner approves it; then it moves after hk1
+    ...hk7, id: 'hk7', preview: true, map: 'causeway', cast: ['lungjai', 'siumei'],
+    title: { small: '第二章', zh: '銅鑼灣', en: 'CHAPTER II · CAUSEWAY BAY' },
+    sides: { us: '港', them: '警', names: { us: { zh: '遊行人士', en: 'Marchers' }, them: { zh: '防暴警', en: 'Riot police' } } },
+    skin: { foe: 'riot', ally: 'blackbloc' },
+    allies: [-1, 1].map((sx) => ({ x: sx * 8, z: -150, n: 12, cols: 6, hold: true })),   // marchers on the park's pitches
   },
   {
     ...hk2, id: 'hk2', after: 'between2', map: 'legco', cast: ['lungjai', 'siumei'],

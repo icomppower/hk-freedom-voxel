@@ -14,7 +14,8 @@ import { buildLegco } from './maps/legco/world.js';
 import { buildYuenlong } from './maps/yuenlong/world.js';
 import { buildPolyu } from './maps/polyu/world.js';
 import { buildCuhk } from './maps/cuhk/world.js';
-export const WORLDS = { dingjun: buildDingjun, admiralty: buildAdmiralty, legco: buildLegco, yuenlong: buildYuenlong, polyu: buildPolyu, cuhk: buildCuhk };
+import { buildCauseway } from './maps/causeway/world.js';
+export const WORLDS = { dingjun: buildDingjun, admiralty: buildAdmiralty, legco: buildLegco, yuenlong: buildYuenlong, polyu: buildPolyu, cuhk: buildCuhk, causeway: buildCauseway };
 
 installHaze();
 // the sun's shadow fades out over the outer 20 % of its box instead of cutting off: soldiers and props at the box edge
