@@ -1,5 +1,5 @@
 // 銅鑼灣 Causeway Bay, 16 June 2019 — chapter data (format: ./ch1.js header; registry: ./chapters.js). Chapter id hk7,
-// map `causeway`. A `preview` chapter until the owner approves it (chapters.js): ?go=story&ch=hk7 or the ?preview gallery.
+// map `causeway`. Campaign: 金鐘 hk1 → 雨後 between1 → this → (chain) 立法會 hk2.
 // Story: the march from Victoria Park along Hennessy Road to Admiralty. 龍仔 and 小美 walk with it: riot squads try to cut
 // the column at the side streets (game fiction — the day itself was peaceful), a police line closes the Wan Chai
 // junction, and on Harcourt Road a siren: the crowd has to part for an ambulance — the stage's non-combat centrepiece,

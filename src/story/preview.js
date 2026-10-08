@@ -6,9 +6,9 @@ import { inkWipe, wiping, afterWipe } from '../ui/menu.js';
 
 const ITEMS = [
   ['hk1', '序 · 金鐘', 'Prologue 1'], ['between1', '雨後', 'Cutscene 1'],
-  ['hk2', '序 · 立法會', 'Prologue 2'], ['between2', '尾班車', 'Cutscene 2'],
+  ['hk7', '序 · 銅鑼灣', 'Prologue · Causeway Bay'], ['hk2', '序 · 立法會', 'Prologue 2'], ['between2', '尾班車', 'Cutscene 2'],
   ['hk3', '序 · 元朗', 'Prologue 3'], ['between3', '竹枝', 'Cutscene 3'],
-  ['hk6', '序 · 中大', 'Prologue · Bridge No. 2'], ['hk7', '序 · 銅鑼灣（試玩）', 'Prologue · Causeway Bay (preview)'], ['hk4', '序 · 理大', 'Prologue 5'], ['endscroll', '結局卷軸', 'Ending scroll → scene → tribute'],
+  ['hk6', '序 · 中大', 'Prologue · Bridge No. 2'], ['hk4', '序 · 理大', 'Prologue 5'], ['endscroll', '結局卷軸', 'Ending scroll → scene → tribute'],
   ['ending', '天光', 'End scene only'],
 ];
 

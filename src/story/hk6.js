@@ -136,7 +136,7 @@ export const PROLOGUE = [
   { cols: ['雪糕筒冚住', '再倒水', '一個一個撲熄'], en: 'A cone over each canister, then water. One by one.', show: ['hold'], focus: [930, 280, 1.3] },
   { cols: ['龍仔同小美', '同同學一齊', '守住條橋'], en: 'Dragon and Amy hold the bridge with the students.', show: ['lungjai', 'siumei', 'cuhk'], focus: [880, 400, 0.9] },
 ];
-export const STAMP = { small: '第四章', big: '中大二號橋', seal: '守橋', en: 'CHAPTER IV · BRIDGE NO. 2 · 12 NOVEMBER 2019' };
+export const STAMP = { small: '第五章', big: '中大二號橋', seal: '守橋', en: 'CHAPTER V · BRIDGE NO. 2 · 12 NOVEMBER 2019' };
 // Result-screen epilogue: the Phaser game has no CUHK chapter, so this text is new — plainly worded, dated, sourced
 // (header). Closing line in italics, as the other chapters.
 export const EPILOGUE = {

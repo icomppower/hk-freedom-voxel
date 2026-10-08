@@ -3,7 +3,7 @@
 //   menu    Quick Match · Create Room · Join (4-letter code) · your name · Back
 //   queue   searching (n waiting) · Cancel
 //   room    code + Copy Link · both players (name, 龍仔 / 小美 — one each, ⇄ swaps) · chapter (room creator picks, hk1 …
-//           hk4 in campaign order: hk1 hk2 hk3 hk6 hk4) · live ping · Ready × 2 → the room starts (seed, chapter, slots) · Leave
+//           hk4 in campaign order: hk1 hk7 hk2 hk3 hk6 hk4) · live ping · Ready × 2 → the room starts (seed, chapter, slots) · Leave
 // Errors: room full · no such room · server busy, try later (create refused, socket refused: the Free plan's daily quota).
 // Overlay: the partner's name + HP (down: 30 s count, reviving: ring), banners (waiting for partner, partner reconnecting /
 // on autoplay / paused, desync at tick N, re-simulating), the 救 revive button (hold, or F), ?coopdebug readout.
