@@ -25,11 +25,12 @@ import ADMIRALTY from './maps/admiralty/map.js';
 import LEGCO from './maps/legco/map.js';
 import YUENLONG from './maps/yuenlong/map.js';
 import POLYU from './maps/polyu/map.js';
+import CUHK from './maps/cuhk/map.js';
 
 export { noise2, smooth };
 
 /** Every battlefield by id. New maps register with one import + one entry. */
-export const MAPS = { dingjun: DINGJUN, admiralty: ADMIRALTY, legco: LEGCO, yuenlong: YUENLONG, polyu: POLYU };
+export const MAPS = { dingjun: DINGJUN, admiralty: ADMIRALTY, legco: LEGCO, yuenlong: YUENLONG, polyu: POLYU, cuhk: CUHK };
 export const DEFAULT_MAP = 'admiralty';              // boot / title field: 金鐘 (定軍山 stays a ?dev chapter)
 
 // ---- live bindings onto the active map (setMap)

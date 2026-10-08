@@ -1,5 +1,6 @@
 // Officer + boss models of 香港自由戰士 (crowd view officer-model hook; Contracts ids): officers `raptor` 速龍 · `plain` 便衣,
-// bosses `stamp` 777 · `shocker` 比卡超 · `fixer` 強哥 · `bear` 維尼熊 (+ `bear_unmasked`, his phase-4 swap) · `clone` 分身.
+// bosses `stamp` 777 · `shocker` 比卡超 · `fixer` 強哥 · `bear` 維尼熊 (+ `bear_unmasked`, his phase-4 swap) · `clone` 分身 ·
+// `gascap` 煙霧隊長 (中大二號橋 hk6).
 // Character Sheets 角色設定 (Notion). Scale: the crowd officer is 1.22 (grey-kit sergeant in sheep-village) ≈ 1.06 × hero,
 // so hero × k ≈ 1.15 k. Every boss is an original archetype: no real person's likeness. 比卡超 has no yellow body, red
 // cheeks, pointed black-tipped ears or lightning tail; 維尼熊 has no yellow-gold fur, red shirt, honey pot or round
@@ -95,3 +96,18 @@ export const CLONE = {
   weapon: [box([0.05, 0.05, 1.5], [0, 0, 0.4], 0x201e2a), ...sceptreBlade(1.2).map((q) => ({ ...q, c: shade(0x6a6488, 1) }))],
   scale: 1.04, tip: 1.75, voxel: 0.03, kneel: false,
 };
+
+// ---------------------------------------------------------------- 煙霧隊長 The Gas Captain (中大二號橋 boss): 1.13×, the plain
+// dark-blue riot kit (blank patch), a full gas-mask helmet with its filter snout, a bandolier of grey canisters across the
+// chest and a stubby wide-barrel launcher. Original archetype; no badge, rank mark, number or insignia.
+const GAS = { ...SKIN, shirt: hex('#1c2a44'), pants: hex('#1c2a44'), boot: 0x0a0a0a, glove: 0x101010, belt: 0x0c0c0c };
+export const GASCAP = {
+  parts: { ...humanBody(GAS, { bulk: 1.14, vest: 0x24324e, patch: true, pads: 0x24324e }),
+    head: humanHead(GAS, { helmet: { c: 0x141a26, visor: 0x9ab0c0, snout: true } }) },
+  // launcher on the bow joint: stock, body, a wide short barrel with a drum (held like the 便衣 launcher)
+  weapon: [box([0.07, 0.11, 0.32], [0, 0, 0.05], 0x1e2228), box([0.1, 0.14, 0.24], [0, 0.02, 0.3], 0x2a3038),
+    box([0.16, 0.16, 0.14], [0, 0.0, 0.46], 0x3a4048), box([0.12, 0.12, 0.34], [0, 0.03, 0.66], 0x161a1e)],
+  scale: 1.3, tip: 0.85, voxel: 0.028, kneel: true,
+};
+GASCAP.parts.torso = [...GASCAP.parts.torso, b([-0.25, 0.46, 0.15], [0.25, 0.54, 0.2], 0x2a2a2a),
+  ...[-0.12, -0.04, 0.04, 0.12].map((x, k) => b([x - 0.03, 0.43, 0.19], [x + 0.03, 0.57, 0.25], k & 1 ? 0x8a9098 : 0x7a8088))];   // bandolier (min / max corners)

@@ -9,6 +9,7 @@
 //   story.chapter                          the active chapter (story/chapters.js), set by reset
 //   story.modelOf(i)                       officer model key of crowd slot i (its OFF entry's `model`), or null (crowd view)
 //   story.fx                               the chapter script's render state (searchlights, lanterns…), or null
+//   story.cue(name)                        (bench) the chapter script's cue(name), as a beat's `cue` would
 // Chapter scripts (hook): a chapter may give `script(game, api)` → { step(), cue?(name), fx? } — created at reset, stepped
 // once per story step after the beats (sim, deterministic), for set pieces the beat list can't express (boss phases,
 // searchlights, escorts). api: t(), frac(key) officer HP fraction, officer(key) crowd slot, dead(key), pos(P) → [x, z],
@@ -60,6 +61,7 @@ export function createStory(game) {
   const DLG_GAP = 12;                            // sim frames between two queued lines
 
   st.modelOf = (i) => S.slotModel[i] || null;
+  st.cue = (name) => S.script?.cue?.(name);       // test hook (bench): run a chapter-script cue without its beat
 
   st.stats = () => {
     const h = game.hero, time = Math.round(S.t / 60);
