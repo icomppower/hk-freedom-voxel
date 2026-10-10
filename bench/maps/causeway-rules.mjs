@@ -1,5 +1,5 @@
 // 銅鑼灣 rules gate (Node, numeric): the hk7 script's set pieces on an emptied field, the hero placed by hand.
-//   column    after the cue the head walks exactly 1.5 m/s; a riot officer pressed against its front (≤ 3 m) stalls it while no
+//   column    after the cue the head walks exactly 3.0 m/s; a riot officer pressed against its front (≤ 3 m) stalls it while no
 //             hero is within 8 m of the head, and it never moves while stalled; a hero at its front gets it walking again
 //             with the officer still there; once he is gone it walks on; at the junction it raises columnAtJunction
 //   squads    a squad cuts in from each side street as the head comes level (once each)
@@ -25,7 +25,7 @@ const fx = () => G.story.fx;
 fresh(); at = [25, -150]; step(1);                                   // the hero off to the side (never in front of it)
 G.story.cue('march');
 const h0 = fx().column.head; step(60); clear();
-ok('after the cue the head walks 1.5 m/s', Math.abs(fx().column.head - h0 - 1.5) < 1e-9, `${(fx().column.head - h0).toFixed(4)} m in 60 steps`);
+ok('after the cue the head walks 3.0 m/s', Math.abs(fx().column.head - h0 - 3.0) < 1e-9, `${(fx().column.head - h0).toFixed(4)} m in 60 steps`);
 const c = G.crowd, cop = 0;                                           // one riot officer pressed against its front
 c.st[cop] = ST.IDLE; c.x[cop] = 0; c.z[cop] = fx().column.head + 2; c.hp[cop] = c.hpMax[cop] = 999;
 const hs = fx().column.head, s0 = fx().column.stallT;

@@ -4,11 +4,11 @@
 // the column at the side streets (game fiction — the day itself was peaceful), a police line closes the Wan Chai
 // junction, and on Harcourt Road a siren: the crowd has to part for an ambulance — the stage's non-combat centrepiece,
 // from the real moment. A last 速龍 squad at the footbridge, then the march fills Harcourt Road at dusk.
-// Script (story hook): the column (fx.column { head z, stalled, stallT, moving }): its head walks 1.5 m/s from the park
+// Script (story hook): the column (fx.column { head z, stalled, stallT, moving }): its head walks 3.0 m/s (a brisk march) from the park
 // toward the junction. It stalls (it never takes damage) only while a riot officer is pressed against its front (|x| < 7,
 // head − 1 … head + 3 m) AND no hero is within 8 m of the head: a hero at the front clears the way, so walking with the march
 // keeps it moving even with the waves ringed round him (they used to stall it for good). Squads cut in from the side streets
-// as it passes them and every 15 s ahead of it (charging the heroes); the objective shows how far along the road it is. The ambulance lane
+// as it passes them and every 7 s ahead of it (charging the heroes); the objective shows how far along the road it is. The ambulance lane
 // (fx.lane [{ x, z, side, k, parted }], fx.amb { z, on }): a marcher block steps aside once a hero has stood within 2.5 m of
 // it for 40 steps (the open-a-lane signal; "stand by it", as hk6); the ambulance drives in from the Admiralty end at 5 m/s
 // toward the casualty at the junction and stops 7 m short of the next block still in its path (so the lane opens from the
@@ -131,7 +131,7 @@ export const EPILOGUE = {
 export const DEFEAT = { zh: '{name}倒下了⋯⋯隊伍仲喺後面。', en: '{name} goes down... the march is still behind.' };
 
 // ---- script: the column, the side-street squads, the ambulance lane
-const SPEED = 1.5 / 60, LEAD_R = 8, BLOCK_AHEAD = 3, PART_R = 2.5, PART_N = 40, AMB_V = 5 / 60, AMB_GAP = 7;
+const SPEED = 3.0 / 60, LEAD_R = 8, BLOCK_AHEAD = 3, PART_R = 2.5, PART_N = 40, AMB_V = 5 / 60, AMB_GAP = 7;
 export function script(game, api) {
   const M = MAPS.causeway, c = game.crowd;
   const fx = { column: { head: M.COLUMN_START, stalled: false, stallT: 0, moving: false }, lane: [], amb: { z: M.AMB.z0, on: false, siren: false }, parted: 0 };
@@ -160,8 +160,8 @@ export function script(game, api) {
         M.SIDE_STREETS.forEach(([x, z], k) => {                     // the side streets: a squad cuts in as the head comes level
           if (!cut[k] && col.head > z - 14) { cut[k] = true; api.squad({ at: [x, z], n: 14, charge: true }); api.say({ who: 'marshal', zh: '橫街有人衝出嚟！', en: 'They\'re coming out of the side street!' }); }
         });
-        if (t - lastSquad >= 15 * 60 && col.head < M.COLUMN_END - 10) {   // and every 15 s, a squad charging in across the road ahead of it
-          lastSquad = t; api.squad({ at: [((t / 900) & 1 ? 5 : -5), Math.min(M.COLUMN_END, col.head + 14)], n: 10, charge: true });
+        if (t - lastSquad >= 7 * 60 && col.head < M.COLUMN_END - 10) {    // and every 7 s, a squad charging in across the road ahead of it
+          lastSquad = t; api.squad({ at: [((t / 420) & 1 ? 5 : -5), Math.min(M.COLUMN_END, col.head + 18)], n: 10, charge: true });
         }
         if (col.head >= M.COLUMN_END) api.flag('columnAtJunction', true);
         else if (t % 30 === 0) {
