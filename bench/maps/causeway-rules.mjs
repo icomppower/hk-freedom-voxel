@@ -1,6 +1,7 @@
 // 銅鑼灣 rules gate (Node, numeric): the hk7 script's set pieces on an emptied field, the hero placed by hand.
-//   column    after the cue the head walks exactly 1.0 m/s; a riot officer pressed against its front (≤ 3 m) stalls it and
-//             it never moves while stalled; once he is gone it walks on; at the junction it raises columnAtJunction
+//   column    after the cue the head walks exactly 1.5 m/s; a riot officer pressed against its front (≤ 3 m) stalls it while no
+//             hero is within 8 m of the head, and it never moves while stalled; a hero at its front gets it walking again
+//             with the officer still there; once he is gone it walks on; at the junction it raises columnAtJunction
 //   squads    a squad cuts in from each side street as the head comes level (once each)
 //   lane      a marcher block steps aside after a hero stands within 2.5 m of it for 40 steps (not at 3 m); the ambulance
 //             (driving in from the Admiralty end) stops 7 m short of the next block still in its path, drives on once it
@@ -24,13 +25,19 @@ const fx = () => G.story.fx;
 fresh(); at = [25, -150]; step(1);                                   // the hero off to the side (never in front of it)
 G.story.cue('march');
 const h0 = fx().column.head; step(60); clear();
-ok('after the cue the head walks 1.0 m/s', Math.abs(fx().column.head - h0 - 1.0) < 1e-9, `${(fx().column.head - h0).toFixed(4)} m in 60 steps`);
+ok('after the cue the head walks 1.5 m/s', Math.abs(fx().column.head - h0 - 1.5) < 1e-9, `${(fx().column.head - h0).toFixed(4)} m in 60 steps`);
 const c = G.crowd, cop = 0;                                           // one riot officer pressed against its front
 c.st[cop] = ST.IDLE; c.x[cop] = 0; c.z[cop] = fx().column.head + 2; c.hp[cop] = c.hpMax[cop] = 999;
 const hs = fx().column.head, s0 = fx().column.stallT;
 for (let k = 0; k < 120; k++) { step(1); c.st[cop] = ST.IDLE; c.x[cop] = 0; c.z[cop] = hs + 2; c.vx[cop] = c.vz[cop] = 0; }
 ok('a riot officer 2 m in front: stalled, never moves', fx().column.head === hs && fx().column.stalled && fx().column.stallT - s0 === 120, `head ${hs.toFixed(2)} → ${fx().column.head.toFixed(2)}, stallT +${fx().column.stallT - s0}`);
-c.z[cop] = hs + 4.5; step(1); c.z[cop] = hs + 4.5;
+const pin = (z) => { c.st[cop] = ST.IDLE; c.x[cop] = 0; c.z[cop] = z; c.vx[cop] = c.vz[cop] = 0; };   // the hero is placed after each step
+at = [3, hs + 4]; for (let k = 0; k < 2; k++) { step(1); pin(fx().column.head + 2); }
+ok('a hero at the front (5 m off the head): it walks on past the officer', fx().column.head > hs && !fx().column.stalled, `head ${fx().column.head.toFixed(3)}`);
+at = [25, -150]; for (let k = 0; k < 2; k++) { step(1); pin(fx().column.head + 2); }
+const hs2 = fx().column.head; step(1); pin(hs2 + 2);
+ok('the hero gone again: stalled', fx().column.stalled && fx().column.head === hs2, `head ${hs2.toFixed(3)} → ${fx().column.head.toFixed(3)}`);
+c.z[cop] = hs2 + 4.5; step(1); c.z[cop] = hs2 + 4.5;
 const moved = fx().column.head > hs;
 c.st[cop] = 0;
 ok('4.5 m in front: not pressed against it, it walks', moved && !fx().column.stalled, `head ${fx().column.head.toFixed(3)}`);
